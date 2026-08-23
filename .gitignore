@@ -1,0 +1,10 @@
+/bin/
+/dist/
+/data/
+*.parquet
+*.test
+*.prof
+.DS_Store
+*.tgz
+/_to_delete/
+.fuse_hidden*

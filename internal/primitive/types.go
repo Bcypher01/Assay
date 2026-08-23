@@ -27,8 +27,16 @@ const (
 	KindState
 )
 
-// Zone is an inclusive price interval.
-type Zone struct{ Low, High core.Price }
+// Zone is an inclusive price interval. The lifecycle fields let zone-producing
+// primitives report when an area was created, expired, or mitigated without
+// requiring consumers to infer that state from an overlay.
+type Zone struct {
+	Low, High   core.Price
+	From, To    core.Time
+	Side        core.Side
+	Mitigated   bool
+	MitigatedAt core.Time
+}
 
 // Value is a whole-series primitive output. Only the member matching Kind is
 // populated. Valid, when non-nil, marks bars for which the output is usable.

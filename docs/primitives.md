@@ -35,3 +35,18 @@ midnight. `day_of_week` uses UTC weekdays. `bar_of_session` emits the one-based
 bar index within the configured session and zero outside it. Named exchange
 sessions are intentionally deferred until `primitive.EvalCtx` carries the
 instrument calendar, so the package never silently hardcodes DST behaviour.
+
+## SMC pack
+
+The SMC pack follows a parameterised price-action interpretation: its labels
+are not presented as a canonical trading school. `market_structure` confirms a
+break of the latest symmetric swing by close or wick. `displacement` exposes a
+body/range threshold, consecutive-bar count, and optional gap. `fair_value_gap`
+uses the three-candle imbalance with an explicit tick minimum, mitigation rule,
+expiry, and optional inverted gaps.
+
+`liquidity_pool` detects repeated highs or lows within a tick tolerance and age
+window. `liquidity_sweep` detects a wick through the preceding extreme followed
+by a close back inside the requested window. `premium_discount` returns an OTE
+band inside a rolling dealing range. All SMC decisions use fixed-point ticks or
+thousandths.

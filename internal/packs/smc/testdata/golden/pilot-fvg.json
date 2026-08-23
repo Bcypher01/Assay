@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "window_id": "pilot-001",
+  "annotator": "example-annotator",
+  "instrument": "X",
+  "timeframe": 2,
+  "primitive": "fair_value_gap",
+  "params": {"minSizeTicks": "2", "mitigationRule": "MITIGATION_RULE_FULL_FILL", "expiryBars": "2"},
+  "bars": [
+    {"time": 0, "open": 10, "high": 10, "low": 8, "close": 9, "volume": 1},
+    {"time": 60000, "open": 9, "high": 12, "low": 9, "close": 11, "volume": 1},
+    {"time": 120000, "open": 13, "high": 15, "low": 13, "close": 14, "volume": 1}
+  ],
+  "objects": [{"type": "zone", "bar": 2, "low": 10, "high": 13, "side": 1}]
+}

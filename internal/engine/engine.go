@@ -9,12 +9,13 @@ import (
 	"github.com/Bcypher01/Assay/internal/ir"
 	_ "github.com/Bcypher01/Assay/internal/packs/indicator"
 	_ "github.com/Bcypher01/Assay/internal/packs/priceaction"
+	_ "github.com/Bcypher01/Assay/internal/packs/smc"
 	_ "github.com/Bcypher01/Assay/internal/packs/timeofday"
 	"github.com/Bcypher01/Assay/internal/primitive"
 	"github.com/Bcypher01/Assay/internal/sim"
+	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/dynamicpb"
 )
 
 type Data struct {
@@ -116,7 +117,10 @@ func Run(ctx context.Context, strategy *ir.Strategy, data Data) (sim.RunResult, 
 	return result, miss, nil
 }
 func decodeParams(p primitive.Primitive, raw json.RawMessage) (proto.Message, error) {
-	m := dynamicpb.NewMessage(p.Spec().Params)
+	m, err := parameterMessage(string(p.Spec().Params.FullName()))
+	if err != nil {
+		return nil, err
+	}
 	if len(raw) == 0 || string(raw) == "null" {
 		return m, nil
 	}
@@ -124,6 +128,72 @@ func decodeParams(p primitive.Primitive, raw json.RawMessage) (proto.Message, er
 		return nil, err
 	}
 	return m, nil
+}
+func parameterMessage(name string) (proto.Message, error) {
+	switch name {
+	case "assay.v1.SampleParams":
+		return &assayv1.SampleParams{}, nil
+	case "assay.v1.MovingAverageParams":
+		return &assayv1.MovingAverageParams{}, nil
+	case "assay.v1.RsiParams":
+		return &assayv1.RsiParams{}, nil
+	case "assay.v1.AtrParams":
+		return &assayv1.AtrParams{}, nil
+	case "assay.v1.PeriodParams":
+		return &assayv1.PeriodParams{}, nil
+	case "assay.v1.SlopeParams":
+		return &assayv1.SlopeParams{}, nil
+	case "assay.v1.MovingAverageTouchParams":
+		return &assayv1.MovingAverageTouchParams{}, nil
+	case "assay.v1.MovingAverageCrossParams":
+		return &assayv1.MovingAverageCrossParams{}, nil
+	case "assay.v1.MacdParams":
+		return &assayv1.MacdParams{}, nil
+	case "assay.v1.BollingerBandsParams":
+		return &assayv1.BollingerBandsParams{}, nil
+	case "assay.v1.AdxParams":
+		return &assayv1.AdxParams{}, nil
+	case "assay.v1.StochasticParams":
+		return &assayv1.StochasticParams{}, nil
+	case "assay.v1.SwingParams":
+		return &assayv1.SwingParams{}, nil
+	case "assay.v1.ClusterParams":
+		return &assayv1.ClusterParams{}, nil
+	case "assay.v1.PinBarParams":
+		return &assayv1.PinBarParams{}, nil
+	case "assay.v1.DojiParams":
+		return &assayv1.DojiParams{}, nil
+	case "assay.v1.RangeParams":
+		return &assayv1.RangeParams{}, nil
+	case "assay.v1.MeasuredMoveParams":
+		return &assayv1.MeasuredMoveParams{}, nil
+	case "assay.v1.SessionParams":
+		return &assayv1.SessionParams{}, nil
+	case "assay.v1.DayOfWeekParams":
+		return &assayv1.DayOfWeekParams{}, nil
+	case "assay.v1.TimeOfDayRangeParams":
+		return &assayv1.TimeOfDayRangeParams{}, nil
+	case "assay.v1.BarOfSessionParams":
+		return &assayv1.BarOfSessionParams{}, nil
+	case "assay.v1.MarketStructureParams":
+		return &assayv1.MarketStructureParams{}, nil
+	case "assay.v1.DisplacementParams":
+		return &assayv1.DisplacementParams{}, nil
+	case "assay.v1.FairValueGapParams":
+		return &assayv1.FairValueGapParams{}, nil
+	case "assay.v1.OrderBlockParams":
+		return &assayv1.OrderBlockParams{}, nil
+	case "assay.v1.BreakerParams":
+		return &assayv1.BreakerParams{}, nil
+	case "assay.v1.LiquidityPoolParams":
+		return &assayv1.LiquidityPoolParams{}, nil
+	case "assay.v1.SweepParams":
+		return &assayv1.SweepParams{}, nil
+	case "assay.v1.PremiumDiscountParams":
+		return &assayv1.PremiumDiscountParams{}, nil
+	default:
+		return nil, fmt.Errorf("engine: unsupported parameter schema %q", name)
+	}
 }
 func holds(slot ir.SlotSpec, vals map[string]primitive.Value, bar int) bool {
 	for _, id := range slot.All {

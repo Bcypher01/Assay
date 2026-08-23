@@ -101,3 +101,15 @@ particular SMC methodology is correct — the pack is a library, not an opinion.
 ## Decision log
 
 _Record the annotators, the agreement metric and threshold, and each default with its rationale._
+
+**Recommended defaults.** The initial UI/configuration default should use symmetric swing lookback,
+close confirmation, a 70% displacement body/range threshold, and a three-candle
+FVG with a two-tick minimum, first-touch mitigation, and a 100-bar expiry.
+These are product defaults rather than methodological claims; each is exposed
+as a protobuf parameter. Local deterministic fixtures exercise mitigation and
+expiry.
+
+**External validation pending.** The required 200-window, multi-annotator
+golden set and its agreement threshold cannot be fabricated from synthetic test
+data. It remains a release gate until annotations and their provenance are
+supplied.

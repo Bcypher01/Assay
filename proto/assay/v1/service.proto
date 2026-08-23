@@ -20,7 +20,12 @@ service PrimitiveService { rpc ListPrimitives(Empty) returns (ListPrimitivesResp
 message ValidateRequest { bytes strategy_json = 1; }
 message FieldError { string path = 1; string message = 2; }
 message ValidateResponse { repeated FieldError errors = 1; string hash = 2; }
-message RunRequest { bytes strategy_json = 1; string snapshot = 2; }
+message RunRequest {
+  bytes strategy_json = 1;
+  string snapshot = 2;
+  sint64 from_ms = 3;
+  sint64 to_ms = 4;
+}
 message EquityChunk { repeated sint64 values = 1; }
 message TradeChunk { uint32 count = 1; }
 message RunSummary { uint32 trades = 1; uint32 unresolved = 2; string error = 3; }

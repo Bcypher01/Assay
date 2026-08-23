@@ -32,3 +32,15 @@ message SessionParams { uint32 start_minute_utc = 1; uint32 end_minute_utc = 2; 
 message DayOfWeekParams { repeated uint32 days = 1; }
 message TimeOfDayRangeParams { uint32 start_minute_utc = 1; uint32 end_minute_utc = 2; }
 message BarOfSessionParams { uint32 start_minute_utc = 1; uint32 end_minute_utc = 2; }
+
+// Smart-money concepts deliberately expose the choices that differ among
+// trading schools. All sizes are integer ticks or thousandths, never floats.
+message MarketStructureParams { uint32 swing_lookback = 1; bool confirm_by_close = 2; uint32 equal_level_tolerance_ticks = 3; bool track_internal = 4; }
+message DisplacementParams { uint32 min_body_ratio_milli = 1; uint32 min_consecutive_bars = 2; bool require_gap = 3; }
+enum MitigationRule { MITIGATION_RULE_UNSPECIFIED = 0; MITIGATION_RULE_FIRST_TOUCH = 1; MITIGATION_RULE_HALF_FILL = 2; MITIGATION_RULE_FULL_FILL = 3; }
+message FairValueGapParams { uint32 min_size_ticks = 1; MitigationRule mitigation_rule = 2; uint32 expiry_bars = 3; bool track_inverted = 4; }
+message OrderBlockParams { uint32 cluster_bars = 1; bool use_body = 2; bool must_be_unmitigated = 3; uint32 displacement_within_bars = 4; uint32 min_body_ratio_milli = 5; }
+message BreakerParams { uint32 invalidating_touches = 1; bool flip_on_close = 2; }
+message LiquidityPoolParams { uint32 equal_level_tolerance_ticks = 1; uint32 min_touches = 2; uint32 age_bars = 3; }
+message SweepParams { uint32 wick_through_ticks = 1; uint32 close_back_bars = 2; bool require_structure_shift = 3; }
+message PremiumDiscountParams { uint32 dealing_range_bars = 1; uint32 ote_lower_milli = 2; uint32 ote_upper_milli = 3; }

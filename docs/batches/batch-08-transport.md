@@ -94,3 +94,11 @@ in v0. Hosted deployment.
 ## Decision log
 
 _Record the buf configuration, proto package versioning policy, and the downsampling algorithm._
+
+**Implemented decisions.** `buf.yaml` uses the `buf.build/assay/assay` module
+and `buf.gen.yaml` generates source-relative Go output; the generated Connect
+service is checked in beside the protobuf Go model. New wire fields are added
+only to `assay.v1`; incompatible changes require a new versioned package.
+Viewport responses use chronological min/max bucket sampling: retain the first
+and last bar, then retain the low and high extrema from each interior bucket.
+This bounds payload size while preserving visible spikes.

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/olumide/assay/internal/core"
-	"github.com/olumide/assay/internal/store"
-	"github.com/olumide/assay/internal/venue"
+	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/Bcypher01/Assay/internal/store"
+	"github.com/Bcypher01/Assay/internal/venue"
 )
 
 // Job is one pipeline build request.

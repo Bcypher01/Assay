@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/olumide/assay/internal/core"
-	"github.com/olumide/assay/internal/store"
+	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/Bcypher01/Assay/internal/store"
 )
 
 // Publisher writes immutable bar-library objects and reads their manifests.

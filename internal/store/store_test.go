@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/olumide/assay/internal/core"
+	"github.com/Bcypher01/Assay/internal/core"
 )
 
 // buildMonth builds n valid, aligned bars for tf starting at the first instant

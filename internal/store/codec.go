@@ -9,7 +9,7 @@ import (
 
 	"github.com/parquet-go/parquet-go"
 
-	"github.com/olumide/assay/internal/core"
+	"github.com/Bcypher01/Assay/internal/core"
 )
 
 // SchemaVersion is the version of the on-disk bar format. It is recorded in

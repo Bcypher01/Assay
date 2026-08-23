@@ -3,7 +3,7 @@ package instrument
 import (
 	"time"
 
-	"github.com/olumide/assay/internal/core"
+	"github.com/Bcypher01/Assay/internal/core"
 )
 
 // Window is a trading window on a given weekday, expressed in minutes from

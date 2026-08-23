@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/olumide/assay/internal/core"
-	"github.com/olumide/assay/internal/store"
+	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/Bcypher01/Assay/internal/store"
 )
 
 func TestRunnerPublishesAndSecondRunIsNoop(t *testing.T) {

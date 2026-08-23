@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/olumide/assay/internal/core"
+	"github.com/Bcypher01/Assay/internal/core"
 )
 
 func TestParseDecimal(t *testing.T) {

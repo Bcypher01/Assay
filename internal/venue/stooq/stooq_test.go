@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/olumide/assay/internal/core"
-	"github.com/olumide/assay/internal/instrument"
+	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/Bcypher01/Assay/internal/instrument"
 )
 
 func TestFetchDailyFXNormalisesToTicks(t *testing.T) {

@@ -1,6 +1,6 @@
 package instrument
 
-import "github.com/olumide/assay/internal/core"
+import "github.com/Bcypher01/Assay/internal/core"
 
 // SpreadMode selects how spread is applied.
 type SpreadMode uint8

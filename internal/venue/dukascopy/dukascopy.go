@@ -8,8 +8,8 @@ package dukascopy
 import (
 	"context"
 
-	"github.com/olumide/assay/internal/core"
-	"github.com/olumide/assay/internal/venue"
+	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/Bcypher01/Assay/internal/venue"
 )
 
 // Client is a disabled pipeline fetcher for Dukascopy public data.

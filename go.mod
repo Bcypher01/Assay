@@ -1,4 +1,4 @@
-module github.com/olumide/assay
+module github.com/Bcypher01/Assay
 
 go 1.24
 

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/olumide/assay/internal/core"
-	"github.com/olumide/assay/internal/pipeline"
-	"github.com/olumide/assay/internal/store"
+	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/Bcypher01/Assay/internal/pipeline"
+	"github.com/Bcypher01/Assay/internal/store"
 )
 
 func TestDeriveRequestRejectsUnsupportedResolution(t *testing.T) {

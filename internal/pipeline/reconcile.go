@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/olumide/assay/internal/core"
-	"github.com/olumide/assay/internal/store"
-	"github.com/olumide/assay/internal/venue"
+	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/Bcypher01/Assay/internal/store"
+	"github.com/Bcypher01/Assay/internal/venue"
 )
 
 // Reconcile fetches venue-native bars and compares them with the published

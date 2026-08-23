@@ -2,9 +2,9 @@ package priceaction
 
 import (
 	"fmt"
-	"github.com/olumide/assay/internal/core"
-	"github.com/olumide/assay/internal/primitive"
-	assayv1 "github.com/olumide/assay/proto/assay/v1"
+	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/Bcypher01/Assay/internal/primitive"
+	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
 	"google.golang.org/protobuf/proto"
 )
 

@@ -3,7 +3,7 @@ package instrument
 import (
 	"fmt"
 
-	"github.com/olumide/assay/internal/core"
+	"github.com/Bcypher01/Assay/internal/core"
 )
 
 // AssetClass groups instruments by the conventions they follow.

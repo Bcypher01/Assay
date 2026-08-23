@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/olumide/assay/internal/core"
+	"github.com/Bcypher01/Assay/internal/core"
 )
 
 // Reader loads bars for a symbol, timeframe and time window, returning the

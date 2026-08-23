@@ -6,8 +6,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/olumide/assay/internal/core"
-	assayv1 "github.com/olumide/assay/proto/assay/v1"
+	"github.com/Bcypher01/Assay/internal/core"
+	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
 	"google.golang.org/protobuf/proto"
 )
 

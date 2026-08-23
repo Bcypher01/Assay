@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/olumide/assay/internal/core"
+	"github.com/Bcypher01/Assay/internal/core"
 )
 
 // Manifest describes one Parquet bar file: what it holds, where it came from,

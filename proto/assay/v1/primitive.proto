@@ -10,3 +10,25 @@ message SampleParams {
   uint32 period = 1;
   bool enabled = 2;
 }
+
+message MovingAverageParams { uint32 period = 1; }
+message RsiParams { uint32 period = 1; }
+message AtrParams { uint32 period = 1; }
+message PeriodParams { uint32 period = 1; }
+message SlopeParams { uint32 period = 1; }
+message MovingAverageTouchParams { uint32 period = 1; uint32 tolerance_ticks = 2; }
+message MovingAverageCrossParams { uint32 fast_period = 1; uint32 slow_period = 2; }
+message MacdParams { uint32 fast_period = 1; uint32 slow_period = 2; uint32 signal_period = 3; }
+message BollingerBandsParams { uint32 period = 1; uint32 width_milli = 2; }
+message AdxParams { uint32 period = 1; }
+message StochasticParams { uint32 period = 1; }
+message SwingParams { uint32 left = 1; uint32 right = 2; }
+message ClusterParams { uint32 lookback = 1; uint32 tolerance_ticks = 2; }
+message PinBarParams { uint32 body_ratio_milli = 1; uint32 wick_ratio_milli = 2; }
+message DojiParams { uint32 body_ratio_milli = 1; }
+message RangeParams { uint32 period = 1; uint32 max_width_ticks = 2; }
+message MeasuredMoveParams { uint32 period = 1; }
+message SessionParams { uint32 start_minute_utc = 1; uint32 end_minute_utc = 2; }
+message DayOfWeekParams { repeated uint32 days = 1; }
+message TimeOfDayRangeParams { uint32 start_minute_utc = 1; uint32 end_minute_utc = 2; }
+message BarOfSessionParams { uint32 start_minute_utc = 1; uint32 end_minute_utc = 2; }

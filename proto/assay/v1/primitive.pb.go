@@ -77,6 +77,1089 @@ func (x *SampleParams) GetEnabled() bool {
 	return false
 }
 
+type MovingAverageParams struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Period uint32 `protobuf:"varint,1,opt,name=period,proto3" json:"period,omitempty"`
+}
+
+func (x *MovingAverageParams) Reset() {
+	*x = MovingAverageParams{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_assay_v1_primitive_proto_msgTypes[1]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MovingAverageParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MovingAverageParams) ProtoMessage() {}
+
+func (x *MovingAverageParams) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_assay_v1_primitive_proto_msgTypes[1]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MovingAverageParams.ProtoReflect.Descriptor instead.
+func (*MovingAverageParams) Descriptor() ([]byte, []int) {
+	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *MovingAverageParams) GetPeriod() uint32 {
+	if x != nil {
+		return x.Period
+	}
+	return 0
+}
+
+type RsiParams struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Period uint32 `protobuf:"varint,1,opt,name=period,proto3" json:"period,omitempty"`
+}
+
+func (x *RsiParams) Reset() {
+	*x = RsiParams{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_assay_v1_primitive_proto_msgTypes[2]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *RsiParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RsiParams) ProtoMessage() {}
+
+func (x *RsiParams) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_assay_v1_primitive_proto_msgTypes[2]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RsiParams.ProtoReflect.Descriptor instead.
+func (*RsiParams) Descriptor() ([]byte, []int) {
+	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *RsiParams) GetPeriod() uint32 {
+	if x != nil {
+		return x.Period
+	}
+	return 0
+}
+
+type AtrParams struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Period uint32 `protobuf:"varint,1,opt,name=period,proto3" json:"period,omitempty"`
+}
+
+func (x *AtrParams) Reset() {
+	*x = AtrParams{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_assay_v1_primitive_proto_msgTypes[3]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *AtrParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AtrParams) ProtoMessage() {}
+
+func (x *AtrParams) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_assay_v1_primitive_proto_msgTypes[3]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AtrParams.ProtoReflect.Descriptor instead.
+func (*AtrParams) Descriptor() ([]byte, []int) {
+	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *AtrParams) GetPeriod() uint32 {
+	if x != nil {
+		return x.Period
+	}
+	return 0
+}
+
+type PeriodParams struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Period uint32 `protobuf:"varint,1,opt,name=period,proto3" json:"period,omitempty"`
+}
+
+func (x *PeriodParams) Reset() {
+	*x = PeriodParams{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_assay_v1_primitive_proto_msgTypes[4]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *PeriodParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PeriodParams) ProtoMessage() {}
+
+func (x *PeriodParams) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_assay_v1_primitive_proto_msgTypes[4]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PeriodParams.ProtoReflect.Descriptor instead.
+func (*PeriodParams) Descriptor() ([]byte, []int) {
+	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *PeriodParams) GetPeriod() uint32 {
+	if x != nil {
+		return x.Period
+	}
+	return 0
+}
+
+type SlopeParams struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Period uint32 `protobuf:"varint,1,opt,name=period,proto3" json:"period,omitempty"`
+}
+
+func (x *SlopeParams) Reset() {
+	*x = SlopeParams{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_assay_v1_primitive_proto_msgTypes[5]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SlopeParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SlopeParams) ProtoMessage() {}
+
+func (x *SlopeParams) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_assay_v1_primitive_proto_msgTypes[5]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SlopeParams.ProtoReflect.Descriptor instead.
+func (*SlopeParams) Descriptor() ([]byte, []int) {
+	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *SlopeParams) GetPeriod() uint32 {
+	if x != nil {
+		return x.Period
+	}
+	return 0
+}
+
+type MovingAverageTouchParams struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Period         uint32 `protobuf:"varint,1,opt,name=period,proto3" json:"period,omitempty"`
+	ToleranceTicks uint32 `protobuf:"varint,2,opt,name=tolerance_ticks,json=toleranceTicks,proto3" json:"tolerance_ticks,omitempty"`
+}
+
+func (x *MovingAverageTouchParams) Reset() {
+	*x = MovingAverageTouchParams{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_assay_v1_primitive_proto_msgTypes[6]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MovingAverageTouchParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MovingAverageTouchParams) ProtoMessage() {}
+
+func (x *MovingAverageTouchParams) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_assay_v1_primitive_proto_msgTypes[6]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MovingAverageTouchParams.ProtoReflect.Descriptor instead.
+func (*MovingAverageTouchParams) Descriptor() ([]byte, []int) {
+	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *MovingAverageTouchParams) GetPeriod() uint32 {
+	if x != nil {
+		return x.Period
+	}
+	return 0
+}
+
+func (x *MovingAverageTouchParams) GetToleranceTicks() uint32 {
+	if x != nil {
+		return x.ToleranceTicks
+	}
+	return 0
+}
+
+type MovingAverageCrossParams struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	FastPeriod uint32 `protobuf:"varint,1,opt,name=fast_period,json=fastPeriod,proto3" json:"fast_period,omitempty"`
+	SlowPeriod uint32 `protobuf:"varint,2,opt,name=slow_period,json=slowPeriod,proto3" json:"slow_period,omitempty"`
+}
+
+func (x *MovingAverageCrossParams) Reset() {
+	*x = MovingAverageCrossParams{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_assay_v1_primitive_proto_msgTypes[7]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MovingAverageCrossParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MovingAverageCrossParams) ProtoMessage() {}
+
+func (x *MovingAverageCrossParams) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_assay_v1_primitive_proto_msgTypes[7]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MovingAverageCrossParams.ProtoReflect.Descriptor instead.
+func (*MovingAverageCrossParams) Descriptor() ([]byte, []int) {
+	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *MovingAverageCrossParams) GetFastPeriod() uint32 {
+	if x != nil {
+		return x.FastPeriod
+	}
+	return 0
+}
+
+func (x *MovingAverageCrossParams) GetSlowPeriod() uint32 {
+	if x != nil {
+		return x.SlowPeriod
+	}
+	return 0
+}
+
+type MacdParams struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	FastPeriod   uint32 `protobuf:"varint,1,opt,name=fast_period,json=fastPeriod,proto3" json:"fast_period,omitempty"`
+	SlowPeriod   uint32 `protobuf:"varint,2,opt,name=slow_period,json=slowPeriod,proto3" json:"slow_period,omitempty"`
+	SignalPeriod uint32 `protobuf:"varint,3,opt,name=signal_period,json=signalPeriod,proto3" json:"signal_period,omitempty"`
+}
+
+func (x *MacdParams) Reset() {
+	*x = MacdParams{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_assay_v1_primitive_proto_msgTypes[8]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MacdParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MacdParams) ProtoMessage() {}
+
+func (x *MacdParams) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_assay_v1_primitive_proto_msgTypes[8]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MacdParams.ProtoReflect.Descriptor instead.
+func (*MacdParams) Descriptor() ([]byte, []int) {
+	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *MacdParams) GetFastPeriod() uint32 {
+	if x != nil {
+		return x.FastPeriod
+	}
+	return 0
+}
+
+func (x *MacdParams) GetSlowPeriod() uint32 {
+	if x != nil {
+		return x.SlowPeriod
+	}
+	return 0
+}
+
+func (x *MacdParams) GetSignalPeriod() uint32 {
+	if x != nil {
+		return x.SignalPeriod
+	}
+	return 0
+}
+
+type BollingerBandsParams struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Period     uint32 `protobuf:"varint,1,opt,name=period,proto3" json:"period,omitempty"`
+	WidthMilli uint32 `protobuf:"varint,2,opt,name=width_milli,json=widthMilli,proto3" json:"width_milli,omitempty"`
+}
+
+func (x *BollingerBandsParams) Reset() {
+	*x = BollingerBandsParams{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_assay_v1_primitive_proto_msgTypes[9]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *BollingerBandsParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BollingerBandsParams) ProtoMessage() {}
+
+func (x *BollingerBandsParams) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_assay_v1_primitive_proto_msgTypes[9]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BollingerBandsParams.ProtoReflect.Descriptor instead.
+func (*BollingerBandsParams) Descriptor() ([]byte, []int) {
+	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *BollingerBandsParams) GetPeriod() uint32 {
+	if x != nil {
+		return x.Period
+	}
+	return 0
+}
+
+func (x *BollingerBandsParams) GetWidthMilli() uint32 {
+	if x != nil {
+		return x.WidthMilli
+	}
+	return 0
+}
+
+type AdxParams struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Period uint32 `protobuf:"varint,1,opt,name=period,proto3" json:"period,omitempty"`
+}
+
+func (x *AdxParams) Reset() {
+	*x = AdxParams{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_assay_v1_primitive_proto_msgTypes[10]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *AdxParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdxParams) ProtoMessage() {}
+
+func (x *AdxParams) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_assay_v1_primitive_proto_msgTypes[10]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdxParams.ProtoReflect.Descriptor instead.
+func (*AdxParams) Descriptor() ([]byte, []int) {
+	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *AdxParams) GetPeriod() uint32 {
+	if x != nil {
+		return x.Period
+	}
+	return 0
+}
+
+type StochasticParams struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Period uint32 `protobuf:"varint,1,opt,name=period,proto3" json:"period,omitempty"`
+}
+
+func (x *StochasticParams) Reset() {
+	*x = StochasticParams{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_assay_v1_primitive_proto_msgTypes[11]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *StochasticParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StochasticParams) ProtoMessage() {}
+
+func (x *StochasticParams) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_assay_v1_primitive_proto_msgTypes[11]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StochasticParams.ProtoReflect.Descriptor instead.
+func (*StochasticParams) Descriptor() ([]byte, []int) {
+	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *StochasticParams) GetPeriod() uint32 {
+	if x != nil {
+		return x.Period
+	}
+	return 0
+}
+
+type SwingParams struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Left  uint32 `protobuf:"varint,1,opt,name=left,proto3" json:"left,omitempty"`
+	Right uint32 `protobuf:"varint,2,opt,name=right,proto3" json:"right,omitempty"`
+}
+
+func (x *SwingParams) Reset() {
+	*x = SwingParams{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_assay_v1_primitive_proto_msgTypes[12]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SwingParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SwingParams) ProtoMessage() {}
+
+func (x *SwingParams) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_assay_v1_primitive_proto_msgTypes[12]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SwingParams.ProtoReflect.Descriptor instead.
+func (*SwingParams) Descriptor() ([]byte, []int) {
+	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *SwingParams) GetLeft() uint32 {
+	if x != nil {
+		return x.Left
+	}
+	return 0
+}
+
+func (x *SwingParams) GetRight() uint32 {
+	if x != nil {
+		return x.Right
+	}
+	return 0
+}
+
+type ClusterParams struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Lookback       uint32 `protobuf:"varint,1,opt,name=lookback,proto3" json:"lookback,omitempty"`
+	ToleranceTicks uint32 `protobuf:"varint,2,opt,name=tolerance_ticks,json=toleranceTicks,proto3" json:"tolerance_ticks,omitempty"`
+}
+
+func (x *ClusterParams) Reset() {
+	*x = ClusterParams{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_assay_v1_primitive_proto_msgTypes[13]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ClusterParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClusterParams) ProtoMessage() {}
+
+func (x *ClusterParams) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_assay_v1_primitive_proto_msgTypes[13]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClusterParams.ProtoReflect.Descriptor instead.
+func (*ClusterParams) Descriptor() ([]byte, []int) {
+	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ClusterParams) GetLookback() uint32 {
+	if x != nil {
+		return x.Lookback
+	}
+	return 0
+}
+
+func (x *ClusterParams) GetToleranceTicks() uint32 {
+	if x != nil {
+		return x.ToleranceTicks
+	}
+	return 0
+}
+
+type PinBarParams struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	BodyRatioMilli uint32 `protobuf:"varint,1,opt,name=body_ratio_milli,json=bodyRatioMilli,proto3" json:"body_ratio_milli,omitempty"`
+	WickRatioMilli uint32 `protobuf:"varint,2,opt,name=wick_ratio_milli,json=wickRatioMilli,proto3" json:"wick_ratio_milli,omitempty"`
+}
+
+func (x *PinBarParams) Reset() {
+	*x = PinBarParams{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_assay_v1_primitive_proto_msgTypes[14]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *PinBarParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PinBarParams) ProtoMessage() {}
+
+func (x *PinBarParams) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_assay_v1_primitive_proto_msgTypes[14]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PinBarParams.ProtoReflect.Descriptor instead.
+func (*PinBarParams) Descriptor() ([]byte, []int) {
+	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *PinBarParams) GetBodyRatioMilli() uint32 {
+	if x != nil {
+		return x.BodyRatioMilli
+	}
+	return 0
+}
+
+func (x *PinBarParams) GetWickRatioMilli() uint32 {
+	if x != nil {
+		return x.WickRatioMilli
+	}
+	return 0
+}
+
+type DojiParams struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	BodyRatioMilli uint32 `protobuf:"varint,1,opt,name=body_ratio_milli,json=bodyRatioMilli,proto3" json:"body_ratio_milli,omitempty"`
+}
+
+func (x *DojiParams) Reset() {
+	*x = DojiParams{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_assay_v1_primitive_proto_msgTypes[15]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *DojiParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DojiParams) ProtoMessage() {}
+
+func (x *DojiParams) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_assay_v1_primitive_proto_msgTypes[15]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DojiParams.ProtoReflect.Descriptor instead.
+func (*DojiParams) Descriptor() ([]byte, []int) {
+	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *DojiParams) GetBodyRatioMilli() uint32 {
+	if x != nil {
+		return x.BodyRatioMilli
+	}
+	return 0
+}
+
+type RangeParams struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Period        uint32 `protobuf:"varint,1,opt,name=period,proto3" json:"period,omitempty"`
+	MaxWidthTicks uint32 `protobuf:"varint,2,opt,name=max_width_ticks,json=maxWidthTicks,proto3" json:"max_width_ticks,omitempty"`
+}
+
+func (x *RangeParams) Reset() {
+	*x = RangeParams{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_assay_v1_primitive_proto_msgTypes[16]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *RangeParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RangeParams) ProtoMessage() {}
+
+func (x *RangeParams) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_assay_v1_primitive_proto_msgTypes[16]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RangeParams.ProtoReflect.Descriptor instead.
+func (*RangeParams) Descriptor() ([]byte, []int) {
+	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *RangeParams) GetPeriod() uint32 {
+	if x != nil {
+		return x.Period
+	}
+	return 0
+}
+
+func (x *RangeParams) GetMaxWidthTicks() uint32 {
+	if x != nil {
+		return x.MaxWidthTicks
+	}
+	return 0
+}
+
+type MeasuredMoveParams struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Period uint32 `protobuf:"varint,1,opt,name=period,proto3" json:"period,omitempty"`
+}
+
+func (x *MeasuredMoveParams) Reset() {
+	*x = MeasuredMoveParams{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_assay_v1_primitive_proto_msgTypes[17]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MeasuredMoveParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MeasuredMoveParams) ProtoMessage() {}
+
+func (x *MeasuredMoveParams) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_assay_v1_primitive_proto_msgTypes[17]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MeasuredMoveParams.ProtoReflect.Descriptor instead.
+func (*MeasuredMoveParams) Descriptor() ([]byte, []int) {
+	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *MeasuredMoveParams) GetPeriod() uint32 {
+	if x != nil {
+		return x.Period
+	}
+	return 0
+}
+
+type SessionParams struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	StartMinuteUtc uint32 `protobuf:"varint,1,opt,name=start_minute_utc,json=startMinuteUtc,proto3" json:"start_minute_utc,omitempty"`
+	EndMinuteUtc   uint32 `protobuf:"varint,2,opt,name=end_minute_utc,json=endMinuteUtc,proto3" json:"end_minute_utc,omitempty"`
+}
+
+func (x *SessionParams) Reset() {
+	*x = SessionParams{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_assay_v1_primitive_proto_msgTypes[18]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SessionParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SessionParams) ProtoMessage() {}
+
+func (x *SessionParams) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_assay_v1_primitive_proto_msgTypes[18]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SessionParams.ProtoReflect.Descriptor instead.
+func (*SessionParams) Descriptor() ([]byte, []int) {
+	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *SessionParams) GetStartMinuteUtc() uint32 {
+	if x != nil {
+		return x.StartMinuteUtc
+	}
+	return 0
+}
+
+func (x *SessionParams) GetEndMinuteUtc() uint32 {
+	if x != nil {
+		return x.EndMinuteUtc
+	}
+	return 0
+}
+
+type DayOfWeekParams struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Days []uint32 `protobuf:"varint,1,rep,packed,name=days,proto3" json:"days,omitempty"`
+}
+
+func (x *DayOfWeekParams) Reset() {
+	*x = DayOfWeekParams{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_assay_v1_primitive_proto_msgTypes[19]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *DayOfWeekParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DayOfWeekParams) ProtoMessage() {}
+
+func (x *DayOfWeekParams) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_assay_v1_primitive_proto_msgTypes[19]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DayOfWeekParams.ProtoReflect.Descriptor instead.
+func (*DayOfWeekParams) Descriptor() ([]byte, []int) {
+	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *DayOfWeekParams) GetDays() []uint32 {
+	if x != nil {
+		return x.Days
+	}
+	return nil
+}
+
+type TimeOfDayRangeParams struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	StartMinuteUtc uint32 `protobuf:"varint,1,opt,name=start_minute_utc,json=startMinuteUtc,proto3" json:"start_minute_utc,omitempty"`
+	EndMinuteUtc   uint32 `protobuf:"varint,2,opt,name=end_minute_utc,json=endMinuteUtc,proto3" json:"end_minute_utc,omitempty"`
+}
+
+func (x *TimeOfDayRangeParams) Reset() {
+	*x = TimeOfDayRangeParams{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_assay_v1_primitive_proto_msgTypes[20]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *TimeOfDayRangeParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TimeOfDayRangeParams) ProtoMessage() {}
+
+func (x *TimeOfDayRangeParams) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_assay_v1_primitive_proto_msgTypes[20]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TimeOfDayRangeParams.ProtoReflect.Descriptor instead.
+func (*TimeOfDayRangeParams) Descriptor() ([]byte, []int) {
+	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *TimeOfDayRangeParams) GetStartMinuteUtc() uint32 {
+	if x != nil {
+		return x.StartMinuteUtc
+	}
+	return 0
+}
+
+func (x *TimeOfDayRangeParams) GetEndMinuteUtc() uint32 {
+	if x != nil {
+		return x.EndMinuteUtc
+	}
+	return 0
+}
+
+type BarOfSessionParams struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	StartMinuteUtc uint32 `protobuf:"varint,1,opt,name=start_minute_utc,json=startMinuteUtc,proto3" json:"start_minute_utc,omitempty"`
+	EndMinuteUtc   uint32 `protobuf:"varint,2,opt,name=end_minute_utc,json=endMinuteUtc,proto3" json:"end_minute_utc,omitempty"`
+}
+
+func (x *BarOfSessionParams) Reset() {
+	*x = BarOfSessionParams{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_assay_v1_primitive_proto_msgTypes[21]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *BarOfSessionParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BarOfSessionParams) ProtoMessage() {}
+
+func (x *BarOfSessionParams) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_assay_v1_primitive_proto_msgTypes[21]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BarOfSessionParams.ProtoReflect.Descriptor instead.
+func (*BarOfSessionParams) Descriptor() ([]byte, []int) {
+	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *BarOfSessionParams) GetStartMinuteUtc() uint32 {
+	if x != nil {
+		return x.StartMinuteUtc
+	}
+	return 0
+}
+
+func (x *BarOfSessionParams) GetEndMinuteUtc() uint32 {
+	if x != nil {
+		return x.EndMinuteUtc
+	}
+	return 0
+}
+
 var File_proto_assay_v1_primitive_proto protoreflect.FileDescriptor
 
 var file_proto_assay_v1_primitive_proto_rawDesc = []byte{
@@ -86,11 +1169,100 @@ var file_proto_assay_v1_primitive_proto_rawDesc = []byte{
 	0x6d, 0x70, 0x6c, 0x65, 0x50, 0x61, 0x72, 0x61, 0x6d, 0x73, 0x12, 0x16, 0x0a, 0x06, 0x70, 0x65,
 	0x72, 0x69, 0x6f, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x06, 0x70, 0x65, 0x72, 0x69,
 	0x6f, 0x64, 0x12, 0x18, 0x0a, 0x07, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x18, 0x02, 0x20,
-	0x01, 0x28, 0x08, 0x52, 0x07, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x42, 0x31, 0x5a, 0x2f,
-	0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x6f, 0x6c, 0x75, 0x6d, 0x69,
-	0x64, 0x65, 0x2f, 0x61, 0x73, 0x73, 0x61, 0x79, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x61,
-	0x73, 0x73, 0x61, 0x79, 0x2f, 0x76, 0x31, 0x3b, 0x61, 0x73, 0x73, 0x61, 0x79, 0x76, 0x31, 0x62,
-	0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x01, 0x28, 0x08, 0x52, 0x07, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x22, 0x2d, 0x0a, 0x13,
+	0x4d, 0x6f, 0x76, 0x69, 0x6e, 0x67, 0x41, 0x76, 0x65, 0x72, 0x61, 0x67, 0x65, 0x50, 0x61, 0x72,
+	0x61, 0x6d, 0x73, 0x12, 0x16, 0x0a, 0x06, 0x70, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x0d, 0x52, 0x06, 0x70, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x22, 0x23, 0x0a, 0x09, 0x52,
+	0x73, 0x69, 0x50, 0x61, 0x72, 0x61, 0x6d, 0x73, 0x12, 0x16, 0x0a, 0x06, 0x70, 0x65, 0x72, 0x69,
+	0x6f, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x06, 0x70, 0x65, 0x72, 0x69, 0x6f, 0x64,
+	0x22, 0x23, 0x0a, 0x09, 0x41, 0x74, 0x72, 0x50, 0x61, 0x72, 0x61, 0x6d, 0x73, 0x12, 0x16, 0x0a,
+	0x06, 0x70, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x06, 0x70,
+	0x65, 0x72, 0x69, 0x6f, 0x64, 0x22, 0x26, 0x0a, 0x0c, 0x50, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x50,
+	0x61, 0x72, 0x61, 0x6d, 0x73, 0x12, 0x16, 0x0a, 0x06, 0x70, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x18,
+	0x01, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x06, 0x70, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x22, 0x25, 0x0a,
+	0x0b, 0x53, 0x6c, 0x6f, 0x70, 0x65, 0x50, 0x61, 0x72, 0x61, 0x6d, 0x73, 0x12, 0x16, 0x0a, 0x06,
+	0x70, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x06, 0x70, 0x65,
+	0x72, 0x69, 0x6f, 0x64, 0x22, 0x5b, 0x0a, 0x18, 0x4d, 0x6f, 0x76, 0x69, 0x6e, 0x67, 0x41, 0x76,
+	0x65, 0x72, 0x61, 0x67, 0x65, 0x54, 0x6f, 0x75, 0x63, 0x68, 0x50, 0x61, 0x72, 0x61, 0x6d, 0x73,
+	0x12, 0x16, 0x0a, 0x06, 0x70, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d,
+	0x52, 0x06, 0x70, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x12, 0x27, 0x0a, 0x0f, 0x74, 0x6f, 0x6c, 0x65,
+	0x72, 0x61, 0x6e, 0x63, 0x65, 0x5f, 0x74, 0x69, 0x63, 0x6b, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28,
+	0x0d, 0x52, 0x0e, 0x74, 0x6f, 0x6c, 0x65, 0x72, 0x61, 0x6e, 0x63, 0x65, 0x54, 0x69, 0x63, 0x6b,
+	0x73, 0x22, 0x5c, 0x0a, 0x18, 0x4d, 0x6f, 0x76, 0x69, 0x6e, 0x67, 0x41, 0x76, 0x65, 0x72, 0x61,
+	0x67, 0x65, 0x43, 0x72, 0x6f, 0x73, 0x73, 0x50, 0x61, 0x72, 0x61, 0x6d, 0x73, 0x12, 0x1f, 0x0a,
+	0x0b, 0x66, 0x61, 0x73, 0x74, 0x5f, 0x70, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x0d, 0x52, 0x0a, 0x66, 0x61, 0x73, 0x74, 0x50, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x12, 0x1f,
+	0x0a, 0x0b, 0x73, 0x6c, 0x6f, 0x77, 0x5f, 0x70, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x0d, 0x52, 0x0a, 0x73, 0x6c, 0x6f, 0x77, 0x50, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x22,
+	0x73, 0x0a, 0x0a, 0x4d, 0x61, 0x63, 0x64, 0x50, 0x61, 0x72, 0x61, 0x6d, 0x73, 0x12, 0x1f, 0x0a,
+	0x0b, 0x66, 0x61, 0x73, 0x74, 0x5f, 0x70, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x0d, 0x52, 0x0a, 0x66, 0x61, 0x73, 0x74, 0x50, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x12, 0x1f,
+	0x0a, 0x0b, 0x73, 0x6c, 0x6f, 0x77, 0x5f, 0x70, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x0d, 0x52, 0x0a, 0x73, 0x6c, 0x6f, 0x77, 0x50, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x12,
+	0x23, 0x0a, 0x0d, 0x73, 0x69, 0x67, 0x6e, 0x61, 0x6c, 0x5f, 0x70, 0x65, 0x72, 0x69, 0x6f, 0x64,
+	0x18, 0x03, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0c, 0x73, 0x69, 0x67, 0x6e, 0x61, 0x6c, 0x50, 0x65,
+	0x72, 0x69, 0x6f, 0x64, 0x22, 0x4f, 0x0a, 0x14, 0x42, 0x6f, 0x6c, 0x6c, 0x69, 0x6e, 0x67, 0x65,
+	0x72, 0x42, 0x61, 0x6e, 0x64, 0x73, 0x50, 0x61, 0x72, 0x61, 0x6d, 0x73, 0x12, 0x16, 0x0a, 0x06,
+	0x70, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x06, 0x70, 0x65,
+	0x72, 0x69, 0x6f, 0x64, 0x12, 0x1f, 0x0a, 0x0b, 0x77, 0x69, 0x64, 0x74, 0x68, 0x5f, 0x6d, 0x69,
+	0x6c, 0x6c, 0x69, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0a, 0x77, 0x69, 0x64, 0x74, 0x68,
+	0x4d, 0x69, 0x6c, 0x6c, 0x69, 0x22, 0x23, 0x0a, 0x09, 0x41, 0x64, 0x78, 0x50, 0x61, 0x72, 0x61,
+	0x6d, 0x73, 0x12, 0x16, 0x0a, 0x06, 0x70, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x0d, 0x52, 0x06, 0x70, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x22, 0x2a, 0x0a, 0x10, 0x53, 0x74,
+	0x6f, 0x63, 0x68, 0x61, 0x73, 0x74, 0x69, 0x63, 0x50, 0x61, 0x72, 0x61, 0x6d, 0x73, 0x12, 0x16,
+	0x0a, 0x06, 0x70, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x06,
+	0x70, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x22, 0x37, 0x0a, 0x0b, 0x53, 0x77, 0x69, 0x6e, 0x67, 0x50,
+	0x61, 0x72, 0x61, 0x6d, 0x73, 0x12, 0x12, 0x0a, 0x04, 0x6c, 0x65, 0x66, 0x74, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x0d, 0x52, 0x04, 0x6c, 0x65, 0x66, 0x74, 0x12, 0x14, 0x0a, 0x05, 0x72, 0x69, 0x67,
+	0x68, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x05, 0x72, 0x69, 0x67, 0x68, 0x74, 0x22,
+	0x54, 0x0a, 0x0d, 0x43, 0x6c, 0x75, 0x73, 0x74, 0x65, 0x72, 0x50, 0x61, 0x72, 0x61, 0x6d, 0x73,
+	0x12, 0x1a, 0x0a, 0x08, 0x6c, 0x6f, 0x6f, 0x6b, 0x62, 0x61, 0x63, 0x6b, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x0d, 0x52, 0x08, 0x6c, 0x6f, 0x6f, 0x6b, 0x62, 0x61, 0x63, 0x6b, 0x12, 0x27, 0x0a, 0x0f,
+	0x74, 0x6f, 0x6c, 0x65, 0x72, 0x61, 0x6e, 0x63, 0x65, 0x5f, 0x74, 0x69, 0x63, 0x6b, 0x73, 0x18,
+	0x02, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0e, 0x74, 0x6f, 0x6c, 0x65, 0x72, 0x61, 0x6e, 0x63, 0x65,
+	0x54, 0x69, 0x63, 0x6b, 0x73, 0x22, 0x62, 0x0a, 0x0c, 0x50, 0x69, 0x6e, 0x42, 0x61, 0x72, 0x50,
+	0x61, 0x72, 0x61, 0x6d, 0x73, 0x12, 0x28, 0x0a, 0x10, 0x62, 0x6f, 0x64, 0x79, 0x5f, 0x72, 0x61,
+	0x74, 0x69, 0x6f, 0x5f, 0x6d, 0x69, 0x6c, 0x6c, 0x69, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d, 0x52,
+	0x0e, 0x62, 0x6f, 0x64, 0x79, 0x52, 0x61, 0x74, 0x69, 0x6f, 0x4d, 0x69, 0x6c, 0x6c, 0x69, 0x12,
+	0x28, 0x0a, 0x10, 0x77, 0x69, 0x63, 0x6b, 0x5f, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x5f, 0x6d, 0x69,
+	0x6c, 0x6c, 0x69, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0e, 0x77, 0x69, 0x63, 0x6b, 0x52,
+	0x61, 0x74, 0x69, 0x6f, 0x4d, 0x69, 0x6c, 0x6c, 0x69, 0x22, 0x36, 0x0a, 0x0a, 0x44, 0x6f, 0x6a,
+	0x69, 0x50, 0x61, 0x72, 0x61, 0x6d, 0x73, 0x12, 0x28, 0x0a, 0x10, 0x62, 0x6f, 0x64, 0x79, 0x5f,
+	0x72, 0x61, 0x74, 0x69, 0x6f, 0x5f, 0x6d, 0x69, 0x6c, 0x6c, 0x69, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x0d, 0x52, 0x0e, 0x62, 0x6f, 0x64, 0x79, 0x52, 0x61, 0x74, 0x69, 0x6f, 0x4d, 0x69, 0x6c, 0x6c,
+	0x69, 0x22, 0x4d, 0x0a, 0x0b, 0x52, 0x61, 0x6e, 0x67, 0x65, 0x50, 0x61, 0x72, 0x61, 0x6d, 0x73,
+	0x12, 0x16, 0x0a, 0x06, 0x70, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d,
+	0x52, 0x06, 0x70, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x12, 0x26, 0x0a, 0x0f, 0x6d, 0x61, 0x78, 0x5f,
+	0x77, 0x69, 0x64, 0x74, 0x68, 0x5f, 0x74, 0x69, 0x63, 0x6b, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28,
+	0x0d, 0x52, 0x0d, 0x6d, 0x61, 0x78, 0x57, 0x69, 0x64, 0x74, 0x68, 0x54, 0x69, 0x63, 0x6b, 0x73,
+	0x22, 0x2c, 0x0a, 0x12, 0x4d, 0x65, 0x61, 0x73, 0x75, 0x72, 0x65, 0x64, 0x4d, 0x6f, 0x76, 0x65,
+	0x50, 0x61, 0x72, 0x61, 0x6d, 0x73, 0x12, 0x16, 0x0a, 0x06, 0x70, 0x65, 0x72, 0x69, 0x6f, 0x64,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x06, 0x70, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x22, 0x5f,
+	0x0a, 0x0d, 0x53, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x50, 0x61, 0x72, 0x61, 0x6d, 0x73, 0x12,
+	0x28, 0x0a, 0x10, 0x73, 0x74, 0x61, 0x72, 0x74, 0x5f, 0x6d, 0x69, 0x6e, 0x75, 0x74, 0x65, 0x5f,
+	0x75, 0x74, 0x63, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0e, 0x73, 0x74, 0x61, 0x72, 0x74,
+	0x4d, 0x69, 0x6e, 0x75, 0x74, 0x65, 0x55, 0x74, 0x63, 0x12, 0x24, 0x0a, 0x0e, 0x65, 0x6e, 0x64,
+	0x5f, 0x6d, 0x69, 0x6e, 0x75, 0x74, 0x65, 0x5f, 0x75, 0x74, 0x63, 0x18, 0x02, 0x20, 0x01, 0x28,
+	0x0d, 0x52, 0x0c, 0x65, 0x6e, 0x64, 0x4d, 0x69, 0x6e, 0x75, 0x74, 0x65, 0x55, 0x74, 0x63, 0x22,
+	0x25, 0x0a, 0x0f, 0x44, 0x61, 0x79, 0x4f, 0x66, 0x57, 0x65, 0x65, 0x6b, 0x50, 0x61, 0x72, 0x61,
+	0x6d, 0x73, 0x12, 0x12, 0x0a, 0x04, 0x64, 0x61, 0x79, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0d,
+	0x52, 0x04, 0x64, 0x61, 0x79, 0x73, 0x22, 0x66, 0x0a, 0x14, 0x54, 0x69, 0x6d, 0x65, 0x4f, 0x66,
+	0x44, 0x61, 0x79, 0x52, 0x61, 0x6e, 0x67, 0x65, 0x50, 0x61, 0x72, 0x61, 0x6d, 0x73, 0x12, 0x28,
+	0x0a, 0x10, 0x73, 0x74, 0x61, 0x72, 0x74, 0x5f, 0x6d, 0x69, 0x6e, 0x75, 0x74, 0x65, 0x5f, 0x75,
+	0x74, 0x63, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0e, 0x73, 0x74, 0x61, 0x72, 0x74, 0x4d,
+	0x69, 0x6e, 0x75, 0x74, 0x65, 0x55, 0x74, 0x63, 0x12, 0x24, 0x0a, 0x0e, 0x65, 0x6e, 0x64, 0x5f,
+	0x6d, 0x69, 0x6e, 0x75, 0x74, 0x65, 0x5f, 0x75, 0x74, 0x63, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0d,
+	0x52, 0x0c, 0x65, 0x6e, 0x64, 0x4d, 0x69, 0x6e, 0x75, 0x74, 0x65, 0x55, 0x74, 0x63, 0x22, 0x64,
+	0x0a, 0x12, 0x42, 0x61, 0x72, 0x4f, 0x66, 0x53, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x50, 0x61,
+	0x72, 0x61, 0x6d, 0x73, 0x12, 0x28, 0x0a, 0x10, 0x73, 0x74, 0x61, 0x72, 0x74, 0x5f, 0x6d, 0x69,
+	0x6e, 0x75, 0x74, 0x65, 0x5f, 0x75, 0x74, 0x63, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0e,
+	0x73, 0x74, 0x61, 0x72, 0x74, 0x4d, 0x69, 0x6e, 0x75, 0x74, 0x65, 0x55, 0x74, 0x63, 0x12, 0x24,
+	0x0a, 0x0e, 0x65, 0x6e, 0x64, 0x5f, 0x6d, 0x69, 0x6e, 0x75, 0x74, 0x65, 0x5f, 0x75, 0x74, 0x63,
+	0x18, 0x02, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0c, 0x65, 0x6e, 0x64, 0x4d, 0x69, 0x6e, 0x75, 0x74,
+	0x65, 0x55, 0x74, 0x63, 0x42, 0x31, 0x5a, 0x2f, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63,
+	0x6f, 0x6d, 0x2f, 0x6f, 0x6c, 0x75, 0x6d, 0x69, 0x64, 0x65, 0x2f, 0x61, 0x73, 0x73, 0x61, 0x79,
+	0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x61, 0x73, 0x73, 0x61, 0x79, 0x2f, 0x76, 0x31, 0x3b,
+	0x61, 0x73, 0x73, 0x61, 0x79, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -105,9 +1277,30 @@ func file_proto_assay_v1_primitive_proto_rawDescGZIP() []byte {
 	return file_proto_assay_v1_primitive_proto_rawDescData
 }
 
-var file_proto_assay_v1_primitive_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_proto_assay_v1_primitive_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_proto_assay_v1_primitive_proto_goTypes = []any{
-	(*SampleParams)(nil), // 0: assay.v1.SampleParams
+	(*SampleParams)(nil),             // 0: assay.v1.SampleParams
+	(*MovingAverageParams)(nil),      // 1: assay.v1.MovingAverageParams
+	(*RsiParams)(nil),                // 2: assay.v1.RsiParams
+	(*AtrParams)(nil),                // 3: assay.v1.AtrParams
+	(*PeriodParams)(nil),             // 4: assay.v1.PeriodParams
+	(*SlopeParams)(nil),              // 5: assay.v1.SlopeParams
+	(*MovingAverageTouchParams)(nil), // 6: assay.v1.MovingAverageTouchParams
+	(*MovingAverageCrossParams)(nil), // 7: assay.v1.MovingAverageCrossParams
+	(*MacdParams)(nil),               // 8: assay.v1.MacdParams
+	(*BollingerBandsParams)(nil),     // 9: assay.v1.BollingerBandsParams
+	(*AdxParams)(nil),                // 10: assay.v1.AdxParams
+	(*StochasticParams)(nil),         // 11: assay.v1.StochasticParams
+	(*SwingParams)(nil),              // 12: assay.v1.SwingParams
+	(*ClusterParams)(nil),            // 13: assay.v1.ClusterParams
+	(*PinBarParams)(nil),             // 14: assay.v1.PinBarParams
+	(*DojiParams)(nil),               // 15: assay.v1.DojiParams
+	(*RangeParams)(nil),              // 16: assay.v1.RangeParams
+	(*MeasuredMoveParams)(nil),       // 17: assay.v1.MeasuredMoveParams
+	(*SessionParams)(nil),            // 18: assay.v1.SessionParams
+	(*DayOfWeekParams)(nil),          // 19: assay.v1.DayOfWeekParams
+	(*TimeOfDayRangeParams)(nil),     // 20: assay.v1.TimeOfDayRangeParams
+	(*BarOfSessionParams)(nil),       // 21: assay.v1.BarOfSessionParams
 }
 var file_proto_assay_v1_primitive_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -135,6 +1328,258 @@ func file_proto_assay_v1_primitive_proto_init() {
 				return nil
 			}
 		}
+		file_proto_assay_v1_primitive_proto_msgTypes[1].Exporter = func(v any, i int) any {
+			switch v := v.(*MovingAverageParams); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_assay_v1_primitive_proto_msgTypes[2].Exporter = func(v any, i int) any {
+			switch v := v.(*RsiParams); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_assay_v1_primitive_proto_msgTypes[3].Exporter = func(v any, i int) any {
+			switch v := v.(*AtrParams); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_assay_v1_primitive_proto_msgTypes[4].Exporter = func(v any, i int) any {
+			switch v := v.(*PeriodParams); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_assay_v1_primitive_proto_msgTypes[5].Exporter = func(v any, i int) any {
+			switch v := v.(*SlopeParams); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_assay_v1_primitive_proto_msgTypes[6].Exporter = func(v any, i int) any {
+			switch v := v.(*MovingAverageTouchParams); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_assay_v1_primitive_proto_msgTypes[7].Exporter = func(v any, i int) any {
+			switch v := v.(*MovingAverageCrossParams); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_assay_v1_primitive_proto_msgTypes[8].Exporter = func(v any, i int) any {
+			switch v := v.(*MacdParams); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_assay_v1_primitive_proto_msgTypes[9].Exporter = func(v any, i int) any {
+			switch v := v.(*BollingerBandsParams); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_assay_v1_primitive_proto_msgTypes[10].Exporter = func(v any, i int) any {
+			switch v := v.(*AdxParams); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_assay_v1_primitive_proto_msgTypes[11].Exporter = func(v any, i int) any {
+			switch v := v.(*StochasticParams); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_assay_v1_primitive_proto_msgTypes[12].Exporter = func(v any, i int) any {
+			switch v := v.(*SwingParams); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_assay_v1_primitive_proto_msgTypes[13].Exporter = func(v any, i int) any {
+			switch v := v.(*ClusterParams); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_assay_v1_primitive_proto_msgTypes[14].Exporter = func(v any, i int) any {
+			switch v := v.(*PinBarParams); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_assay_v1_primitive_proto_msgTypes[15].Exporter = func(v any, i int) any {
+			switch v := v.(*DojiParams); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_assay_v1_primitive_proto_msgTypes[16].Exporter = func(v any, i int) any {
+			switch v := v.(*RangeParams); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_assay_v1_primitive_proto_msgTypes[17].Exporter = func(v any, i int) any {
+			switch v := v.(*MeasuredMoveParams); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_assay_v1_primitive_proto_msgTypes[18].Exporter = func(v any, i int) any {
+			switch v := v.(*SessionParams); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_assay_v1_primitive_proto_msgTypes[19].Exporter = func(v any, i int) any {
+			switch v := v.(*DayOfWeekParams); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_assay_v1_primitive_proto_msgTypes[20].Exporter = func(v any, i int) any {
+			switch v := v.(*TimeOfDayRangeParams); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_assay_v1_primitive_proto_msgTypes[21].Exporter = func(v any, i int) any {
+			switch v := v.(*BarOfSessionParams); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -142,7 +1587,7 @@ func file_proto_assay_v1_primitive_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_proto_assay_v1_primitive_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   1,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

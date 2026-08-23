@@ -2,7 +2,10 @@ module github.com/olumide/assay
 
 go 1.24
 
-require github.com/parquet-go/parquet-go v0.25.1
+require (
+	github.com/parquet-go/parquet-go v0.25.1
+	google.golang.org/protobuf v1.34.2
+)
 
 require (
 	github.com/andybalholm/brotli v1.1.0 // indirect

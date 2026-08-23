@@ -122,6 +122,32 @@ func (s *LocalStore) Write(ctx context.Context, series *core.Series, meta Manife
 	return nil
 }
 
+// WritePublished persists already-encoded published bytes plus their manifest
+// into the local cache layout without re-encoding the Parquet payload.
+func (s *LocalStore) WritePublished(ctx context.Context, data []byte, meta Manifest) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := VerifyPublished(data, meta); err != nil {
+		return err
+	}
+	manifestBytes, err := meta.encode()
+	if err != nil {
+		return fmt.Errorf("store: encoding manifest: %w", err)
+	}
+	dir := s.dir(meta.Symbol, meta.TF)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("store: creating %s: %w", dir, err)
+	}
+	if err := writeFileAtomic(s.parquetPath(meta.Symbol, meta.TF, meta.Month), data); err != nil {
+		return err
+	}
+	if err := writeFileAtomic(s.manifestPath(meta.Symbol, meta.TF, meta.Month), manifestBytes); err != nil {
+		return err
+	}
+	return nil
+}
+
 // Load reads every stored month whose bars overlap [from, to), verifies each
 // file against its manifest, and returns the concatenated bars restricted to
 // the window together with the manifests actually touched. Months with no file

@@ -107,4 +107,9 @@ data (batch 03 supplies it).
 
 ## Decision log
 
-_Record the slippage model chosen and its default, and the trade-slice sizing heuristic._
+- The fill model uses the instrument's fixed slippage by default; it is applied
+  adversely at entry and is intentionally never inferred as zero. `Config` can
+  explicitly override it with another fixed model.
+- Trades and open-position storage start at the number of sparse entry signals.
+  `RunResult` retains its backing slices across runs, so an identical or smaller
+  subsequent run allocates no result storage.

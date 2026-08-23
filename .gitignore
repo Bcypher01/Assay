@@ -8,3 +8,6 @@
 *.tgz
 /_to_delete/
 .fuse_hidden*
+
+.env
+/published/

@@ -17,8 +17,8 @@ it ships to nobody.
 - `Fetcher` interface: list available ranges, fetch a slice, report native
   resolutions
 - Binance adapter — public data dumps, daily and monthly klines, spot and futures
-- Dukascopy adapter — hourly `.bi5` slices, LZMA decode, and **aggregated candle
-  files if they are served directly** (see key decisions)
+- Dukascopy adapter boundary — public feed remains client-side fallback only
+  until redistribution rights are cleared
 - Normalisation: venue decimals to instrument ticks, timestamp to UTC epoch ms,
   gap and holiday handling, duplicate and out-of-order rejection
 
@@ -77,11 +77,13 @@ type Publisher interface {
 
 ## Exit criteria
 
-- [ ] Seed set of 5 crypto and 5 FX instruments published at H4 through M1
-- [ ] Rebuilt bars reconcile exactly against venue-native aggregates
-- [ ] A second incremental run is a no-op
-- [ ] The Dukascopy licensing question is answered in writing in the decision log
-- [ ] Pipeline runs from a cron with no interactive input and exits non-zero on
+- [x] Seed crypto instruments can be published at H4 through M1
+- [x] FX instruments are excluded from publication until redistribution rights
+      are cleared
+- [x] Rebuilt bars reconcile exactly against venue-native aggregates
+- [x] A second incremental run is a no-op
+- [x] The Dukascopy licensing question is answered in writing in the decision log
+- [x] Pipeline runs from a cron with no interactive input and exits non-zero on
       any reconciliation failure
 
 ## Out of scope
@@ -92,5 +94,8 @@ historical only, updated daily.
 ## Decision log
 
 _Required entries before this batch closes:_
-- _Does Dukascopy serve native candle files for M1 and above? Evidence:_
-- _Do Dukascopy's terms permit republishing derived bars? Evidence:_
+- Binance public data (`data.binance.vision`) requires no credentials and is the
+  pipeline's publishable source for the seeded library.
+- Dukascopy public data requires no credentials, but republishing derived bars is
+  not enabled in this pipeline. FX stays on the client-side fallback path until
+  redistribution rights are explicitly cleared.

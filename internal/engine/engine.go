@@ -175,6 +175,19 @@ func collectExpressionNodes(used map[string]bool, expression ir.Expression) {
 	if expression.Node != "" {
 		used[expression.Node] = true
 	}
+	if expression.Comparison != nil && expression.Comparison.Node != "" {
+		used[expression.Comparison.Node] = true
+	}
+	if expression.Within != nil {
+		collectExpressionNodes(used, expression.Within.Condition)
+	}
+	if expression.Persists != nil {
+		collectExpressionNodes(used, expression.Persists.Condition)
+	}
+	if expression.After != nil {
+		collectExpressionNodes(used, expression.After.Event)
+		collectExpressionNodes(used, expression.After.Predecessor)
+	}
 	for _, child := range expression.All {
 		collectExpressionNodes(used, child)
 	}
@@ -346,6 +359,51 @@ func holdsExpression(expression ir.Expression, vals map[string]primitive.Value, 
 	}
 	if expression.Not != nil {
 		return !holdsExpression(*expression.Not, vals, bar)
+	}
+	if expression.Comparison != nil {
+		comparison := expression.Comparison
+		v := vals[comparison.Node]
+		if v.Valid == nil || !v.Valid.Get(bar) || len(v.Number) <= bar {
+			return false
+		}
+		switch comparison.Operator {
+		case ir.ComparisonGreaterThan:
+			return v.Number[bar] > comparison.Threshold
+		case ir.ComparisonLessThan:
+			return v.Number[bar] < comparison.Threshold
+		default:
+			return false
+		}
+	}
+	if expression.Within != nil {
+		for age := 0; age <= expression.Within.Bars && age <= bar; age++ {
+			if holdsExpression(expression.Within.Condition, vals, bar-age) {
+				return true
+			}
+		}
+		return false
+	}
+	if expression.Persists != nil {
+		if expression.Persists.Bars > bar+1 {
+			return false
+		}
+		for age := 0; age < expression.Persists.Bars; age++ {
+			if !holdsExpression(expression.Persists.Condition, vals, bar-age) {
+				return false
+			}
+		}
+		return true
+	}
+	if expression.After != nil {
+		if !holdsExpression(expression.After.Event, vals, bar) {
+			return false
+		}
+		for age := 1; age <= expression.After.WithinBars && age <= bar; age++ {
+			if holdsExpression(expression.After.Predecessor, vals, bar-age) {
+				return true
+			}
+		}
+		return false
 	}
 	if len(expression.All) != 0 {
 		for _, child := range expression.All {

@@ -3,6 +3,7 @@ package ir
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"reflect"
 	"testing"
 
@@ -77,7 +78,7 @@ func TestValidateV2Entries(t *testing.T) {
 	s.Template = Template{ID: "ma-crossover", Version: 1}
 	s.Entries = Entries{
 		Timing: EntryTimingNextOpen,
-		Long:   EntryBranch{Enabled: true, When: Expression{Node: "a"}},
+		Long:   EntryBranch{Enabled: true, Name: "Long crossover", When: Expression{Node: "a"}},
 	}
 	if errs := s.Validate(primitive.DefaultRegistry); len(errs) != 0 {
 		t.Fatalf("valid v2 entries rejected: %#v", errs)
@@ -102,9 +103,72 @@ func TestValidateV2ReportsExactExpressionErrors(t *testing.T) {
 	for _, err := range errs {
 		paths = append(paths, err.Path)
 	}
-	want := []string{"direction", "entries.timing", "entries.long.when", "template.id", "template.version"}
+	want := []string{"direction", "entries.timing", "entries.long.name", "entries.long.when", "template.id", "template.version"}
 	if !reflect.DeepEqual(paths, want) {
 		t.Fatalf("paths = %#v, want %#v", paths, want)
+	}
+}
+
+func TestValidateV2NumberComparison(t *testing.T) {
+	s := validStrategy()
+	s.Schema = SchemaV2
+	s.Direction = ""
+	s.Slots = Slots{}
+	s.Template = Template{ID: "rsi-pullback", Version: 1}
+	s.Nodes = []Node{{ID: "rsi", Pack: "indicator", Type: "rsi"}}
+	s.Entries = Entries{Long: EntryBranch{
+		Enabled: true, Name: "RSI below 30",
+		When: Expression{Comparison: &NumberComparison{Node: "rsi", Operator: ComparisonLessThan, Threshold: core.RatioFromInt(30)}},
+	}}
+	if errs := s.Validate(primitive.DefaultRegistry); len(errs) != 0 {
+		t.Fatalf("numeric comparison rejected: %#v", errs)
+	}
+	s.Entries.Long.When.Comparison.Operator = "equal"
+	errs := s.Validate(primitive.DefaultRegistry)
+	if len(errs) != 1 || errs[0].Path != "entries.long.when.comparison.operator" {
+		t.Fatalf("bad operator errors: %#v", errs)
+	}
+}
+
+func TestValidateV2TemporalExpressions(t *testing.T) {
+	s := validStrategy()
+	s.Schema = SchemaV2
+	s.Direction = ""
+	s.Slots = Slots{}
+	s.Template = Template{ID: "session-breakout", Version: 1}
+	s.Entries = Entries{Long: EntryBranch{
+		Enabled: true, Name: "Breakout after setup",
+		When: Expression{After: &OccursAfter{
+			Event:       Expression{Node: "a"},
+			Predecessor: Expression{Persists: &RemainsTrue{Condition: Expression{Node: "a"}, Bars: 2}},
+			WithinBars:  3,
+		}},
+	}}
+	if errs := s.Validate(primitive.DefaultRegistry); len(errs) != 0 {
+		t.Fatalf("temporal expression rejected: %#v", errs)
+	}
+	s.Entries.Long.When.After.WithinBars = 0
+	errs := s.Validate(primitive.DefaultRegistry)
+	if len(errs) != 1 || errs[0].Path != "entries.long.when.after.withinBars" {
+		t.Fatalf("bad temporal validation errors: %#v", errs)
+	}
+}
+
+func TestNumberComparisonJSONUsesReadableThreshold(t *testing.T) {
+	want := NumberComparison{Node: "rsi", Operator: ComparisonLessThan, Threshold: core.RatioFromFloat(30.5)}
+	b, err := json.Marshal(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != `{"node":"rsi","operator":"lt","threshold":30.5}` {
+		t.Fatalf("comparison JSON = %s", b)
+	}
+	var got NumberComparison
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("comparison round-trip = %#v, want %#v", got, want)
 	}
 }
 
@@ -127,10 +191,19 @@ func TestMigrateV1ToV2PreservesBranchesAndHash(t *testing.T) {
 	}
 }
 
-func TestMigrateV1ToV2RejectsTemporalTrigger(t *testing.T) {
+func TestMigrateV1ToV2PreservesTemporalTrigger(t *testing.T) {
 	s := validStrategy()
+	s.Slots.POI.All = []string{"a"}
 	s.Slots.Trigger.WithinBars = 1
-	if _, err := s.MigrateV1ToV2(); err == nil {
-		t.Fatal("withinBars migration unexpectedly succeeded")
+	migrated, err := s.MigrateV1ToV2()
+	if err != nil {
+		t.Fatal(err)
+	}
+	within, ok := migrated.Entries.Long.When.All[1].Within.Condition.Node, migrated.Entries.Long.When.All[1].Within != nil
+	if !ok || within != "a" {
+		t.Fatalf("withinBars was not migrated: %#v", migrated.Entries.Long.When)
+	}
+	if errs := migrated.Validate(primitive.DefaultRegistry); len(errs) != 0 {
+		t.Fatalf("migrated temporal document invalid: %#v", errs)
 	}
 }

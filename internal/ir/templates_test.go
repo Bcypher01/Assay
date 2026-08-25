@@ -67,3 +67,19 @@ func TestNewDonchianBreakout(t *testing.T) {
 		t.Fatalf("unexpected channel nodes: %#v", strategy.Nodes)
 	}
 }
+
+func TestNewBollingerReversion(t *testing.T) {
+	strategy := NewBollingerReversion()
+	if errs := strategy.Validate(primitive.DefaultRegistry); len(errs) != 0 {
+		t.Fatalf("template is invalid: %#v", errs)
+	}
+	if strategy.Template.ID != BollingerReversionTemplateID || strategy.Template.Version != BollingerReversionTemplateVersion {
+		t.Fatalf("template identity = %#v", strategy.Template)
+	}
+	if strategy.Entries.Long.When.All[0].Price.Source != PriceLow || strategy.Entries.Long.When.All[1].Price.Relation != PriceCrossesAbove {
+		t.Fatalf("unexpected long reversion rule: %#v", strategy.Entries.Long)
+	}
+	if strategy.Entries.Short.When.All[0].Price.Source != PriceHigh || strategy.Entries.Short.When.All[1].Price.Relation != PriceCrossesBelow {
+		t.Fatalf("unexpected short reversion rule: %#v", strategy.Entries.Short)
+	}
+}

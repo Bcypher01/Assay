@@ -13,6 +13,8 @@ const (
 	RSIPullbackTemplateVersion            = 1
 	DonchianBreakoutTemplateID            = "donchian-breakout"
 	DonchianBreakoutTemplateVersion       = 1
+	BollingerReversionTemplateID          = "bollinger-mean-reversion"
+	BollingerReversionTemplateVersion     = 1
 )
 
 // NewMovingAverageCrossover returns Assay's first editable stock template.
@@ -128,4 +130,43 @@ func NewDonchianBreakout() *Strategy {
 			{ID: "channel-low", Pack: "indicator", Type: "donchian_low", Params: json.RawMessage(`{"period":20}`), Timeframe: core.TFD1},
 		},
 	}
+}
+
+// NewBollingerReversion returns an editable mean-reversion template. A long
+// first reaches below the lower band and then closes back above it; the short
+// branch mirrors the sequence at the upper band.
+func NewBollingerReversion() *Strategy {
+	return &Strategy{
+		Schema:   SchemaV2,
+		Name:     "Bollinger-band mean reversion",
+		Universe: Universe{Symbols: []string{"EUR/USD"}},
+		Timeframes: map[string]core.TF{
+			"bias": core.TFD1, "poi": core.TFD1, "entry": core.TFD1,
+		},
+		Risk: Risk{
+			Stop:     core.Distance{Unit: core.UnitPips, Value: core.RatioFromInt(50)},
+			Target:   core.Distance{Unit: core.UnitPips, Value: core.RatioFromInt(100)},
+			PerTrade: core.RatioFromFloat(0.005),
+		},
+		Template: Template{ID: BollingerReversionTemplateID, Version: BollingerReversionTemplateVersion},
+		Entries: Entries{
+			Timing: EntryTimingNextOpen,
+			Long: EntryBranch{Enabled: true, Name: "Low reaches below then close recovers above the lower band", When: Expression{All: []Expression{
+				{Price: &PriceLevelPredicate{Node: "lower-band", Source: PriceLow, Relation: PriceBelow}},
+				{Price: &PriceLevelPredicate{Node: "lower-band", Source: PriceClose, Relation: PriceCrossesAbove}},
+			}}},
+			Short: EntryBranch{Enabled: true, Name: "High reaches above then close falls below the upper band", When: Expression{All: []Expression{
+				{Price: &PriceLevelPredicate{Node: "upper-band", Source: PriceHigh, Relation: PriceAbove}},
+				{Price: &PriceLevelPredicate{Node: "upper-band", Source: PriceClose, Relation: PriceCrossesBelow}},
+			}}},
+		},
+		Nodes: []Node{
+			{ID: "upper-band", Pack: "indicator", Type: "bollinger_upper", Params: bollingerParams(), Timeframe: core.TFD1},
+			{ID: "lower-band", Pack: "indicator", Type: "bollinger_lower", Params: bollingerParams(), Timeframe: core.TFD1},
+		},
+	}
+}
+
+func bollingerParams() json.RawMessage {
+	return json.RawMessage(`{"period":20,"widthMilli":2000}`)
 }

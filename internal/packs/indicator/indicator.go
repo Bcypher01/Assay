@@ -12,7 +12,7 @@ import (
 )
 
 func init() {
-	for _, p := range []primitive.Primitive{SMA{}, EMA{}, WMA{}, Slope{}, MATouch{}, MACross{}, MACrossBullish{}, MACrossBearish{}, DonchianHigh{}, DonchianLow{}, RSI{}, MACD{}, BollingerBands{}, ATR{}, ADX{}, Stochastic{}, Volume{}, OBV{}} {
+	for _, p := range []primitive.Primitive{SMA{}, EMA{}, WMA{}, Slope{}, MATouch{}, MACross{}, MACrossBullish{}, MACrossBearish{}, DonchianHigh{}, DonchianLow{}, RSI{}, MACD{}, BollingerBands{}, BollingerUpper{}, BollingerLower{}, ATR{}, ADX{}, Stochastic{}, Volume{}, OBV{}} {
 		primitive.MustRegister(p)
 	}
 }
@@ -353,14 +353,41 @@ func (x macd) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.Value, error
 func (macd) Overlays(core.Time, core.Time) []primitive.Overlay { return nil }
 
 type BollingerBands struct{}
+type BollingerUpper struct{}
+type BollingerLower struct{}
 
 func (BollingerBands) Spec() primitive.Spec {
 	return spec("bollinger_bands", primitive.KindZone, (*assayv1.BollingerBandsParams)(nil))
 }
+func (BollingerUpper) Spec() primitive.Spec {
+	return spec("bollinger_upper", primitive.KindLevel, (*assayv1.BollingerBandsParams)(nil))
+}
+func (BollingerLower) Spec() primitive.Spec {
+	return spec("bollinger_lower", primitive.KindLevel, (*assayv1.BollingerBandsParams)(nil))
+}
 func (BollingerBands) New(p proto.Message, _ core.TF) (primitive.Instance, error) {
+	b, err := newBands(p)
+	return b, err
+}
+func (BollingerUpper) New(p proto.Message, _ core.TF) (primitive.Instance, error) {
+	b, err := newBands(p)
+	if err != nil {
+		return nil, err
+	}
+	return bandEdge{bands: b, upper: true}, nil
+}
+func (BollingerLower) New(p proto.Message, _ core.TF) (primitive.Instance, error) {
+	b, err := newBands(p)
+	if err != nil {
+		return nil, err
+	}
+	return bandEdge{bands: b}, nil
+}
+
+func newBands(p proto.Message) (bands, error) {
 	x, ok := p.(*assayv1.BollingerBandsParams)
 	if !ok || x.Period == 0 || x.WidthMilli == 0 {
-		return nil, fmt.Errorf("indicator: invalid Bollinger parameters")
+		return bands{}, fmt.Errorf("indicator: invalid Bollinger parameters")
 	}
 	return bands{int(x.Period), int64(x.WidthMilli)}, nil
 }
@@ -391,6 +418,27 @@ func (x bands) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.Value, erro
 	return primitive.Value{Kind: primitive.KindZone, Zone: o, Valid: v}, nil
 }
 func (bands) Overlays(core.Time, core.Time) []primitive.Overlay { return nil }
+
+type bandEdge struct {
+	bands bands
+	upper bool
+}
+
+func (x bandEdge) Eval(ctx *primitive.EvalCtx, s *core.Series) (primitive.Value, error) {
+	zones, err := x.bands.Eval(ctx, s)
+	if err != nil {
+		return primitive.Value{}, err
+	}
+	levels := make([]core.Price, s.Len())
+	for i := range levels {
+		levels[i] = zones.Zone[i].Low
+		if x.upper {
+			levels[i] = zones.Zone[i].High
+		}
+	}
+	return level(levels, zones.Valid), nil
+}
+func (bandEdge) Overlays(core.Time, core.Time) []primitive.Overlay { return nil }
 
 type ATR struct{}
 

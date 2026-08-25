@@ -18,7 +18,8 @@
   in the schema for IR compatibility; signal/histogram are separate outputs in
   a later multi-value primitive revision.
 - `bollinger_bands` emits an inclusive zone around SMA using population
-  standard deviation and a width in thousandths.
+  standard deviation and a width in thousandths. `bollinger_upper` and
+  `bollinger_lower` expose the corresponding band edges as levels.
 - `atr` uses Wilder true-range smoothing and first becomes valid at `period`.
 - `adx` is a directional-strength percentage over a Wilder-style lookback and
   is valid after two periods. `stochastic` is %K over high/low/close.

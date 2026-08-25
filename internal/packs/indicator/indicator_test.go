@@ -113,3 +113,40 @@ func TestDonchianBoundsExcludeCurrentBar(t *testing.T) {
 		})
 	}
 }
+
+func TestBollingerBandEdgesMatchZone(t *testing.T) {
+	s := testSeries()
+	params := &assayv1.BollingerBandsParams{Period: 3, WidthMilli: 2000}
+	zonePrimitive, err := primitive.DefaultRegistry.Get("indicator", "bollinger_bands")
+	if err != nil {
+		t.Fatal(err)
+	}
+	zones, _, err := primitive.Evaluate(context.Background(), zonePrimitive, params, core.TFM1, s, "fixture", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		typ   string
+		upper bool
+	}{{"bollinger_upper", true}, {"bollinger_lower", false}} {
+		t.Run(tc.typ, func(t *testing.T) {
+			p, err := primitive.DefaultRegistry.Get("indicator", tc.typ)
+			if err != nil {
+				t.Fatal(err)
+			}
+			levels, _, err := primitive.Evaluate(context.Background(), p, params, core.TFM1, s, "fixture", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := 0; i < s.Len(); i++ {
+				want := zones.Zone[i].Low
+				if tc.upper {
+					want = zones.Zone[i].High
+				}
+				if levels.Level[i] != want || levels.Valid.Get(i) != zones.Valid.Get(i) {
+					t.Fatalf("bar %d = (%d, %t), want (%d, %t)", i, levels.Level[i], levels.Valid.Get(i), want, zones.Valid.Get(i))
+				}
+			}
+		})
+	}
+}

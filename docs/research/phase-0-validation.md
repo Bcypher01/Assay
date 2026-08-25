@@ -7,11 +7,11 @@ criteria.
 
 ## Prototype and golden journey
 
-Open `docs/prototypes/everyday-traders-phase-0.html` in a browser. It supports
-both required starting paths: the 20/50 EUR/USD template and a custom strategy
-description. Its figures are illustrative research stimuli, never product
-results; the prototype's hypothetical-performance treatment is itself part of
-what the sessions must validate. The golden journey is:
+Use the Phase 0 prototype supplied by the product team. It must support both
+required starting paths: the 20/50 EUR/USD template and a custom strategy
+description. Its figures must be illustrative research stimuli, never product
+results; hypothetical-performance treatment is itself part of what the sessions
+must validate. The golden journey is:
 
 1. Choose **Popular strategy** and customize the EUR/USD daily 20/50 crossover.
 2. Ask the participant to explain the long rule, short rule, order timing, and

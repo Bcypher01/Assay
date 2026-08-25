@@ -7,7 +7,9 @@
   `period - 1`.
 - `slope` is the fixed-point close-price change per bar over its period.
 - `ma_touch` marks a bar whose high-low range intersects its SMA, with an
-  optional tick tolerance; `ma_cross` marks either-direction SMA crossing.
+  optional tick tolerance. `ma_cross` marks either-direction SMA crossing;
+  `ma_cross_bullish` and `ma_cross_bearish` mark only a fast-SMA cross above or
+  below the slow SMA, respectively.
 - `rsi` uses Wilder smoothing and is first valid at `period`.
 - `macd` emits the fast EMA minus slow EMA line. The signal period is retained
   in the schema for IR compatibility; signal/histogram are separate outputs in

@@ -1,6 +1,7 @@
 package ir
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -72,14 +73,84 @@ type Template struct {
 // child. Leaves are intentionally restricted to boolean primitives; comparisons
 // will be added only with explicit input and unit semantics.
 type Expression struct {
-	Node string       `json:"node,omitempty"`
-	All  []Expression `json:"all,omitempty"`
-	Any  []Expression `json:"any,omitempty"`
-	Not  *Expression  `json:"not,omitempty"`
+	Node       string            `json:"node,omitempty"`
+	Comparison *NumberComparison `json:"comparison,omitempty"`
+	Within     *OccurredWithin   `json:"within,omitempty"`
+	Persists   *RemainsTrue      `json:"persists,omitempty"`
+	After      *OccursAfter      `json:"after,omitempty"`
+	All        []Expression      `json:"all,omitempty"`
+	Any        []Expression      `json:"any,omitempty"`
+	Not        *Expression       `json:"not,omitempty"`
+}
+
+// OccurredWithin is true when Condition held on this bar or one of the prior
+// Bars bars. It is causal: future bars are never consulted.
+type OccurredWithin struct {
+	Condition Expression `json:"condition"`
+	Bars      int        `json:"bars"`
+}
+
+// RemainsTrue is true only when Condition held on this bar and the preceding
+// Bars-1 bars.
+type RemainsTrue struct {
+	Condition Expression `json:"condition"`
+	Bars      int        `json:"bars"`
+}
+
+// OccursAfter is true when Event holds now and Predecessor held on an earlier
+// bar no more than WithinBars bars ago.
+type OccursAfter struct {
+	Event       Expression `json:"event"`
+	Predecessor Expression `json:"predecessor"`
+	WithinBars  int        `json:"withinBars"`
+}
+
+type ComparisonOp string
+
+const (
+	ComparisonGreaterThan ComparisonOp = "gt"
+	ComparisonLessThan    ComparisonOp = "lt"
+)
+
+// NumberComparison evaluates a numeric primitive against an explicit
+// fixed-point threshold. It is intentionally limited to numeric outputs;
+// price and zone predicates need instrument-aware semantics of their own.
+type NumberComparison struct {
+	Node      string       `json:"node"`
+	Operator  ComparisonOp `json:"operator"`
+	Threshold core.Ratio   `json:"threshold"`
+}
+
+func (c NumberComparison) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Node      string       `json:"node"`
+		Operator  ComparisonOp `json:"operator"`
+		Threshold float64      `json:"threshold"`
+	}{Node: c.Node, Operator: c.Operator, Threshold: c.Threshold.Float64()})
+}
+
+func (c *NumberComparison) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Node      string       `json:"node"`
+		Operator  ComparisonOp `json:"operator"`
+		Threshold json.Number  `json:"threshold"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(&raw); err != nil {
+		return fmt.Errorf("number comparison: decode: %w", err)
+	}
+	threshold, err := raw.Threshold.Float64()
+	if err != nil {
+		return fmt.Errorf("number comparison: threshold: %w", err)
+	}
+	*c = NumberComparison{Node: raw.Node, Operator: raw.Operator, Threshold: core.RatioFromFloat(threshold)}
+	return nil
 }
 
 type EntryBranch struct {
 	Enabled bool       `json:"enabled"`
+	Name    string     `json:"name,omitempty"`
 	When    Expression `json:"when"`
 }
 
@@ -292,6 +363,9 @@ func validateV2Entries(add func(string, string), entries Entries, ids map[string
 		path := "entries." + x.name
 		if x.branch.Enabled {
 			enabled++
+			if x.branch.Name == "" {
+				add(path+".name", "required")
+			}
 			validateExpression(add, path+".when", x.branch.When, ids, reg)
 		} else if !x.branch.When.empty() {
 			add(path+".when", "must be empty when the branch is disabled")
@@ -307,6 +381,18 @@ func validateExpression(add func(string, string), path string, e Expression, ids
 	if e.Node != "" {
 		forms++
 	}
+	if e.Comparison != nil {
+		forms++
+	}
+	if e.Within != nil {
+		forms++
+	}
+	if e.Persists != nil {
+		forms++
+	}
+	if e.After != nil {
+		forms++
+	}
 	if len(e.All) != 0 {
 		forms++
 	}
@@ -317,7 +403,7 @@ func validateExpression(add func(string, string), path string, e Expression, ids
 		forms++
 	}
 	if forms != 1 {
-		add(path, "must contain exactly one of node, all, any, or not")
+		add(path, "must contain exactly one of node, comparison, within, persists, after, all, any, or not")
 		return
 	}
 	if e.Node != "" {
@@ -334,6 +420,39 @@ func validateExpression(add func(string, string), path string, e Expression, ids
 		}
 		return
 	}
+	if e.Comparison != nil {
+		comparison := e.Comparison
+		if comparison.Node == "" {
+			add(path+".comparison.node", "required")
+		} else if n, ok := ids[comparison.Node]; !ok {
+			add(path+".comparison.node", "unknown node")
+		} else if reg != nil {
+			p, _ := reg.Get(n.Pack, n.Type)
+			if p != nil && p.Spec().Out != primitive.KindNumber {
+				add(path+".comparison.node", "must reference a numeric primitive")
+			}
+		}
+		if comparison.Operator != ComparisonGreaterThan && comparison.Operator != ComparisonLessThan {
+			add(path+".comparison.operator", "must be gt or lt")
+		}
+		return
+	}
+	if e.Within != nil {
+		validateTemporal(add, path+".within", e.Within.Condition, e.Within.Bars, ids, reg)
+		return
+	}
+	if e.Persists != nil {
+		validateTemporal(add, path+".persists", e.Persists.Condition, e.Persists.Bars, ids, reg)
+		return
+	}
+	if e.After != nil {
+		if e.After.WithinBars <= 0 {
+			add(path+".after.withinBars", "must be positive")
+		}
+		validateExpression(add, path+".after.event", e.After.Event, ids, reg)
+		validateExpression(add, path+".after.predecessor", e.After.Predecessor, ids, reg)
+		return
+	}
 	if e.Not != nil {
 		validateExpression(add, path+".not", *e.Not, ids, reg)
 		return
@@ -347,8 +466,15 @@ func validateExpression(add func(string, string), path string, e Expression, ids
 	}
 }
 
+func validateTemporal(add func(string, string), path string, condition Expression, bars int, ids map[string]Node, reg *primitive.Registry) {
+	if bars <= 0 {
+		add(path+".bars", "must be positive")
+	}
+	validateExpression(add, path+".condition", condition, ids, reg)
+}
+
 func (e Expression) empty() bool {
-	return e.Node == "" && len(e.All) == 0 && len(e.Any) == 0 && e.Not == nil
+	return e.Node == "" && e.Comparison == nil && e.Within == nil && e.Persists == nil && e.After == nil && len(e.All) == 0 && len(e.Any) == 0 && e.Not == nil
 }
 
 func (s Slots) empty() bool {
@@ -369,9 +495,6 @@ func (s *Strategy) MigrateV1ToV2() (*Strategy, error) {
 	if s.Schema != "" && s.Schema != SchemaV1 {
 		return nil, fmt.Errorf("strategy: can only migrate schema v1")
 	}
-	if s.Slots.Trigger.WithinBars != 0 {
-		return nil, fmt.Errorf("strategy: v1 trigger withinBars is not representable in schema v2")
-	}
 	c := *s
 	c.Schema = SchemaV2
 	c.Direction = ""
@@ -383,26 +506,48 @@ func (s *Strategy) MigrateV1ToV2() (*Strategy, error) {
 		direction = DirectionBoth
 	}
 	if direction == DirectionLong || direction == DirectionBoth {
-		c.Entries.Long = EntryBranch{Enabled: true, When: when}
+		c.Entries.Long = EntryBranch{Enabled: true, Name: "Legacy long entry", When: when}
 	}
 	if direction == DirectionShort || direction == DirectionBoth {
-		c.Entries.Short = EntryBranch{Enabled: true, When: when}
+		c.Entries.Short = EntryBranch{Enabled: true, Name: "Legacy short entry", When: when}
 	}
 	c.Slots = Slots{}
 	return &c, nil
 }
 
 func legacyExpression(slots Slots) Expression {
-	children := make([]Expression, 0, len(slots.Bias.All)+len(slots.POI.All)+len(slots.Trigger.All))
-	for _, slot := range []SlotSpec{slots.Bias, slots.POI, slots.Trigger} {
-		for _, id := range slot.All {
-			children = append(children, Expression{Node: id})
+	children := make([]Expression, 0, 3)
+	if expression := slotExpression(slots.Bias); !expression.empty() {
+		children = append(children, expression)
+	}
+	poi := slotExpression(slots.POI)
+	if !poi.empty() {
+		if slots.Trigger.WithinBars > 0 {
+			poi = Expression{Within: &OccurredWithin{Condition: poi, Bars: slots.Trigger.WithinBars}}
 		}
+		children = append(children, poi)
+	}
+	if expression := slotExpression(slots.Trigger); !expression.empty() {
+		children = append(children, expression)
 	}
 	if len(children) == 1 {
 		return children[0]
 	}
 	return Expression{All: children}
+}
+
+func slotExpression(slot SlotSpec) Expression {
+	if len(slot.All) == 1 {
+		return Expression{Node: slot.All[0]}
+	}
+	if len(slot.All) > 1 {
+		children := make([]Expression, 0, len(slot.All))
+		for _, id := range slot.All {
+			children = append(children, Expression{Node: id})
+		}
+		return Expression{All: children}
+	}
+	return Expression{}
 }
 func canonicalJSON(v any) ([]byte, error) {
 	b, e := json.Marshal(v)

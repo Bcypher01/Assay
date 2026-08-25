@@ -45,3 +45,40 @@ func TestRSIAndATRWarmup(t *testing.T) {
 		t.Fatalf("ATR error=%v value=%#v", err, v)
 	}
 }
+
+func TestMACrossDirectionalVariants(t *testing.T) {
+	s := core.NewSeries("X", core.TFM1, 9)
+	for i, p := range []core.Price{5, 4, 3, 2, 3, 4, 3, 2, 1} {
+		s.Append(core.Time(int64(i)*core.TFM1.Millis()), p, p, p, p, 0)
+	}
+	params := &assayv1.MovingAverageCrossParams{FastPeriod: 1, SlowPeriod: 3}
+	cases := []struct {
+		typ  string
+		bars []int
+	}{
+		{typ: "ma_cross", bars: []int{4, 7}},
+		{typ: "ma_cross_bullish", bars: []int{4}},
+		{typ: "ma_cross_bearish", bars: []int{7}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.typ, func(t *testing.T) {
+			p, err := primitive.DefaultRegistry.Get("indicator", tc.typ)
+			if err != nil {
+				t.Fatal(err)
+			}
+			v, _, err := primitive.Evaluate(context.Background(), p, params, core.TFM1, s, "fixture", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := 0; i < s.Len(); i++ {
+				want := false
+				for _, bar := range tc.bars {
+					want = want || i == bar
+				}
+				if got := v.Bool.Get(i); got != want {
+					t.Fatalf("bar %d = %t, want %t", i, got, want)
+				}
+			}
+		})
+	}
+}

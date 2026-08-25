@@ -12,7 +12,7 @@ import (
 )
 
 func init() {
-	for _, p := range []primitive.Primitive{SMA{}, EMA{}, WMA{}, Slope{}, MATouch{}, MACross{}, RSI{}, MACD{}, BollingerBands{}, ATR{}, ADX{}, Stochastic{}, Volume{}, OBV{}} {
+	for _, p := range []primitive.Primitive{SMA{}, EMA{}, WMA{}, Slope{}, MATouch{}, MACross{}, MACrossBullish{}, MACrossBearish{}, RSI{}, MACD{}, BollingerBands{}, ATR{}, ADX{}, Stochastic{}, Volume{}, OBV{}} {
 		primitive.MustRegister(p)
 	}
 }
@@ -137,19 +137,48 @@ func (x touch) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.Value, erro
 func (touch) Overlays(core.Time, core.Time) []primitive.Overlay { return nil }
 
 type MACross struct{}
+type MACrossBullish struct{}
+type MACrossBearish struct{}
 
 func (MACross) Spec() primitive.Spec {
 	return spec("ma_cross", primitive.KindBool, (*assayv1.MovingAverageCrossParams)(nil))
 }
+func (MACrossBullish) Spec() primitive.Spec {
+	return spec("ma_cross_bullish", primitive.KindBool, (*assayv1.MovingAverageCrossParams)(nil))
+}
+func (MACrossBearish) Spec() primitive.Spec {
+	return spec("ma_cross_bearish", primitive.KindBool, (*assayv1.MovingAverageCrossParams)(nil))
+}
 func (MACross) New(p proto.Message, _ core.TF) (primitive.Instance, error) {
+	return newCross(p, crossEither)
+}
+func (MACrossBullish) New(p proto.Message, _ core.TF) (primitive.Instance, error) {
+	return newCross(p, crossBullish)
+}
+func (MACrossBearish) New(p proto.Message, _ core.TF) (primitive.Instance, error) {
+	return newCross(p, crossBearish)
+}
+
+type crossDirection uint8
+
+const (
+	crossEither crossDirection = iota
+	crossBullish
+	crossBearish
+)
+
+func newCross(p proto.Message, direction crossDirection) (primitive.Instance, error) {
 	x, ok := p.(*assayv1.MovingAverageCrossParams)
 	if !ok || x.FastPeriod == 0 || x.SlowPeriod == 0 {
 		return nil, fmt.Errorf("indicator: MA periods must be positive")
 	}
-	return cross{int(x.FastPeriod), int(x.SlowPeriod)}, nil
+	return cross{f: int(x.FastPeriod), l: int(x.SlowPeriod), direction: direction}, nil
 }
 
-type cross struct{ f, l int }
+type cross struct {
+	f, l      int
+	direction crossDirection
+}
 
 func (x cross) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.Value, error) {
 	f, _ := moving{x.f, 0}.Eval(nil, s)
@@ -161,7 +190,11 @@ func (x cross) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.Value, erro
 	}
 	for i := start; i < s.Len(); i++ {
 		v.Set(i)
-		if (f.Level[i-1] <= l.Level[i-1] && f.Level[i] > l.Level[i]) || (f.Level[i-1] >= l.Level[i-1] && f.Level[i] < l.Level[i]) {
+		bullish := f.Level[i-1] <= l.Level[i-1] && f.Level[i] > l.Level[i]
+		bearish := f.Level[i-1] >= l.Level[i-1] && f.Level[i] < l.Level[i]
+		if (x.direction == crossEither && (bullish || bearish)) ||
+			(x.direction == crossBullish && bullish) ||
+			(x.direction == crossBearish && bearish) {
 			b.Set(i)
 		}
 	}

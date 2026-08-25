@@ -93,8 +93,8 @@ func TestRunV2UsesIndependentLongAndShortBranches(t *testing.T) {
 		Risk:       ir.Risk{Stop: core.Distance{Unit: core.UnitTicks, Value: core.RatioFromInt(1)}, Target: core.Distance{Unit: core.UnitTicks, Value: core.RatioFromInt(1)}},
 		Template:   ir.Template{ID: "ma-crossover", Version: 1},
 		Entries: ir.Entries{Timing: ir.EntryTimingNextOpen,
-			Long:  ir.EntryBranch{Enabled: true, When: ir.Expression{Node: "bullish"}},
-			Short: ir.EntryBranch{Enabled: true, When: ir.Expression{Node: "bearish"}},
+			Long:  ir.EntryBranch{Enabled: true, Name: "Bullish crossover", When: ir.Expression{Node: "bullish"}},
+			Short: ir.EntryBranch{Enabled: true, Name: "Bearish crossover", When: ir.Expression{Node: "bearish"}},
 		},
 		Nodes: []ir.Node{{ID: "bullish", Pack: "test", Type: "bullish"}, {ID: "bearish", Pack: "test", Type: "bearish"}},
 	}
@@ -104,6 +104,82 @@ func TestRunV2UsesIndependentLongAndShortBranches(t *testing.T) {
 	}
 	if len(result.Trades) != 2 || result.Trades[0].Side != core.SideLong || result.Trades[1].Side != core.SideShort {
 		t.Fatalf("v2 branches did not preserve sides: %#v", result.Trades)
+	}
+}
+
+func TestRunV2EvaluatesNumberComparison(t *testing.T) {
+	reg := scriptedRegistry(t, map[string]primitive.Value{
+		"rsi": numberValue([]core.Ratio{core.RatioFromInt(35), core.RatioFromInt(25), core.RatioFromInt(40), core.RatioFromInt(50), core.RatioFromInt(60)}),
+	})
+	strategy := &ir.Strategy{
+		Schema:     ir.SchemaV2,
+		Name:       "rsi pullback",
+		Universe:   ir.Universe{Symbols: []string{"X"}},
+		Timeframes: map[string]core.TF{"bias": core.TFM1, "poi": core.TFM1, "entry": core.TFM1},
+		Risk:       ir.Risk{Stop: core.Distance{Unit: core.UnitTicks, Value: core.RatioFromInt(1)}, Target: core.Distance{Unit: core.UnitTicks, Value: core.RatioFromInt(1)}},
+		Template:   ir.Template{ID: "rsi-pullback", Version: 1},
+		Entries: ir.Entries{Timing: ir.EntryTimingNextOpen,
+			Long: ir.EntryBranch{Enabled: true, Name: "RSI below 30", When: ir.Expression{Comparison: &ir.NumberComparison{
+				Node: "rsi", Operator: ir.ComparisonLessThan, Threshold: core.RatioFromInt(30),
+			}}},
+		},
+		Nodes: []ir.Node{{ID: "rsi", Pack: "test", Type: "rsi"}},
+	}
+	result, _, err := Run(context.Background(), strategy, Data{Series: engineSeries(), Config: engineConfig(), Registry: reg})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Trades) != 1 || result.Trades[0].EntryBar != 2 || result.Trades[0].Side != core.SideLong {
+		t.Fatalf("numeric comparison did not create its next-open long entry: %#v", result.Trades)
+	}
+}
+
+func TestRunMovingAverageCrossoverTemplate(t *testing.T) {
+	series := core.NewSeries("EUR/USD", core.TFD1, 75)
+	for i := 0; i < 75; i++ {
+		price := core.Price(100)
+		if i >= 50 {
+			price = 200
+		}
+		series.Append(core.Time(int64(i)*core.TFD1.Millis()), price, price, price, price, 0)
+	}
+	config := sim.Config{
+		Spec: instrument.Spec{Symbol: "EUR/USD", TickSize: "1", PipTicks: 1, Gap: instrument.GapFillAtOpen},
+		Risk: sim.RiskModel{InitialEquity: 1_000, FixedLots: core.One},
+	}
+	result, _, err := Run(context.Background(), ir.NewMovingAverageCrossover(), Data{Series: series, Config: config})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Trades) != 1 || result.Trades[0].Side != core.SideLong || result.Trades[0].EntryBar != 51 {
+		t.Fatalf("template did not enter on the bullish cross's next open: %#v", result.Trades)
+	}
+}
+
+func TestHoldsExpressionTemporalOperators(t *testing.T) {
+	values := map[string]primitive.Value{
+		"event":   boolValue(5, 1, 2),
+		"trigger": boolValue(5, 3),
+	}
+	event := ir.Expression{Node: "event"}
+	trigger := ir.Expression{Node: "trigger"}
+	if !holdsExpression(ir.Expression{Within: &ir.OccurredWithin{Condition: event, Bars: 1}}, values, 3) {
+		t.Fatal("event within one bar was not recognised")
+	}
+	if holdsExpression(ir.Expression{Within: &ir.OccurredWithin{Condition: event, Bars: 1}}, values, 4) {
+		t.Fatal("expired event was still within one bar")
+	}
+	if !holdsExpression(ir.Expression{Persists: &ir.RemainsTrue{Condition: event, Bars: 2}}, values, 2) {
+		t.Fatal("two-bar persistence was not recognised")
+	}
+	if holdsExpression(ir.Expression{Persists: &ir.RemainsTrue{Condition: event, Bars: 3}}, values, 2) {
+		t.Fatal("persistence ignored missing earlier bar")
+	}
+	if !holdsExpression(ir.Expression{After: &ir.OccursAfter{Event: trigger, Predecessor: event, WithinBars: 1}}, values, 3) {
+		t.Fatal("event after predecessor was not recognised")
+	}
+	if holdsExpression(ir.Expression{After: &ir.OccursAfter{Event: trigger, Predecessor: event, WithinBars: 1}}, values, 2) {
+		t.Fatal("after expression allowed the predecessor as its event")
 	}
 }
 
@@ -207,6 +283,14 @@ func levelValue(n int, level core.Price) primitive.Value {
 		valid.Set(i)
 	}
 	return primitive.Value{Kind: primitive.KindLevel, Level: values, Valid: valid}
+}
+
+func numberValue(values []core.Ratio) primitive.Value {
+	valid := core.NewBitset(len(values))
+	for i := range values {
+		valid.Set(i)
+	}
+	return primitive.Value{Kind: primitive.KindNumber, Number: values, Valid: valid}
 }
 
 func scriptedRegistry(t *testing.T, values map[string]primitive.Value) *primitive.Registry {

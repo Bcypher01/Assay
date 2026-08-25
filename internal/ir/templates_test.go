@@ -1,0 +1,33 @@
+package ir
+
+import (
+	"testing"
+
+	"github.com/Bcypher01/Assay/internal/core"
+	_ "github.com/Bcypher01/Assay/internal/packs/indicator"
+	"github.com/Bcypher01/Assay/internal/primitive"
+)
+
+func TestNewMovingAverageCrossover(t *testing.T) {
+	strategy := NewMovingAverageCrossover()
+	if errs := strategy.Validate(primitive.DefaultRegistry); len(errs) != 0 {
+		t.Fatalf("template is invalid: %#v", errs)
+	}
+	if strategy.Schema != SchemaV2 || strategy.Template.ID != MovingAverageCrossoverTemplateID || strategy.Template.Version != MovingAverageCrossoverTemplateVersion {
+		t.Fatalf("template identity = %#v", strategy)
+	}
+	if strategy.Universe.Symbols[0] != "EUR/USD" || strategy.Timeframes["entry"] != core.TFD1 {
+		t.Fatalf("unexpected default market/timeframe: %#v", strategy)
+	}
+	if strategy.Risk.Stop != (core.Distance{Unit: core.UnitPips, Value: core.RatioFromInt(50)}) ||
+		strategy.Risk.Target != (core.Distance{Unit: core.UnitPips, Value: core.RatioFromInt(100)}) ||
+		strategy.Risk.PerTrade != core.RatioFromFloat(0.005) {
+		t.Fatalf("unexpected risk defaults: %#v", strategy.Risk)
+	}
+	if len(strategy.Nodes) != 2 || strategy.Nodes[0].Type != "ma_cross_bullish" || strategy.Nodes[1].Type != "ma_cross_bearish" {
+		t.Fatalf("unexpected directional nodes: %#v", strategy.Nodes)
+	}
+	if strategy.Entries.Long.When.Node != "bullish-cross" || strategy.Entries.Short.When.Node != "bearish-cross" {
+		t.Fatalf("unexpected branch rules: %#v", strategy.Entries)
+	}
+}

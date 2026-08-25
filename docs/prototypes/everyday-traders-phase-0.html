@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Assay Phase 0 — everyday trader flow</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #101725; color: #eef3ff; }
+    body { max-width: 900px; margin: 0 auto; padding: 32px 20px 64px; }
+    header, .card { background: #192337; border: 1px solid #34445f; border-radius: 14px; padding: 22px; }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    h1, h2, h3, p { margin-top: 0; } h1 { font-size: 1.5rem; } h2 { font-size: 1.25rem; }
+    .step { color: #9db8e9; font-size: .9rem; } .muted { color: #b8c3d8; } .notice { border-left: 4px solid #eab54d; padding-left: 12px; }
+    main { margin-top: 22px; } .screen { display: none; } .screen.active { display: block; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+    .card button, .choice { width: 100%; text-align: left; }
+    button { color: inherit; background: #253a5d; border: 1px solid #5274ae; border-radius: 9px; padding: 12px 14px; cursor: pointer; font: inherit; }
+    button:hover, button.selected { background: #31588e; } .actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 22px; }
+    dl { display: grid; grid-template-columns: 180px 1fr; gap: 10px; } dt { color: #a8c7fb; } dd { margin: 0; }
+    .verdict { border: 1px solid #eab54d; background: #3b3523; border-radius: 10px; padding: 18px; }
+    .tag { display: inline-block; background: #294b77; border-radius: 99px; padding: 4px 9px; font-size: .8rem; margin: 2px; }
+  </style>
+</head>
+<body>
+  <header><div><div class="step" id="step">1 of 5</div><h1>Assay: test the plan, not a prediction</h1></div><button onclick="restart()">Restart</button></header>
+  <main>
+    <section class="screen active" data-screen="0"><h2>How would you like to start?</h2><p class="muted">Use a familiar starting point, or translate your own plan into rules you can test.</p><div class="grid"><div class="card"><h3>Popular strategy</h3><p>Start with a 20/50 moving-average crossover for EUR/USD.</p><button onclick="choose('template')">Customize and test</button></div><div class="card"><h3>My own strategy</h3><p>Turn a trading idea into explicit, testable rules.</p><button onclick="choose('custom')">Describe my rules</button></div></div></section>
+    <section class="screen" data-screen="1"><h2 id="rules-title">Your strategy rules</h2><p class="muted">Every rule below changes the test. Nothing is stored only as text.</p><div class="card"><dl id="rules"><dt>Market</dt><dd>EUR/USD daily</dd><dt>Long entry</dt><dd>20-period average crosses above 50-period average</dd><dt>Short entry</dt><dd>20-period average crosses below 50-period average</dd><dt>Order</dt><dd>Enter at the next bar open</dd><dt>Risk</dt><dd>0.5% per trade; 50-pip stop; 2R target</dd></dl></div><p class="notice">Plain-language check: this tests how these exact historical rules would have behaved. It does not predict their next result.</p><div class="actions"><button onclick="go(0)">Back</button><button onclick="go(2)">Continue to trading reality</button></div></section>
+    <section class="screen" data-screen="2"><h2>Trading reality</h2><p class="muted">Assumptions are part of the test, not hidden defaults.</p><div class="grid"><button class="choice selected" onclick="preset(this, 'Typical costs and normal slippage')"><strong>Typical</strong><br>Instrument costs + normal slippage</button><button class="choice" onclick="preset(this, 'Higher costs and conservative slippage')"><strong>Conservative</strong><br>Higher costs + conservative slippage</button></div><div class="card" style="margin-top:14px"><dl><dt>Period</dt><dd>Longest reliable EUR/USD history, with final holdout</dd><dt>Entry timing</dt><dd>Next bar open</dd><dt>Ambiguous fills</dt><dd>Show a best-to-worst outcome range</dd><dt id="preset-label">Cost setting</dt><dd id="preset">Typical costs and normal slippage</dd></dl></div><div class="actions"><button onclick="go(1)">Back</button><button onclick="go(3)">Test historical data</button></div></section>
+    <section class="screen" data-screen="3"><h2>Preparing the test</h2><p class="muted">Preparing years of EUR/USD daily history, then reserving a final unseen period.</p><div class="card"><p><span class="tag">Rules checked</span><span class="tag">Costs included</span><span class="tag">Holdout reserved</span><span class="tag">Next-open fills</span></p><p>This prototype uses a representative journey. The production run will show exact dates, candle count, data source, and runtime.</p></div><div class="actions"><button onclick="go(2)">Back</button><button onclick="go(4)">View strategy verdict</button></div></section>
+    <section class="screen" data-screen="4"><h2>Strategy verdict</h2><div class="verdict"><h3>Promising, but fragile</h3><p>The strategy was profitable under normal costs but lost money under conservative fills. It survived 7 of 10 calendar years and produced 4–6 trades per month. At 1% risk, the historical drawdown range was 18%–24% with a worst run of 11 losses.</p><p class="notice"><strong>Historical simulation only.</strong> This is not a forecast or investment recommendation.</p></div><div class="grid" style="margin-top:14px"><div class="card"><h3>Could I have lived through it?</h3><p>Maximum drawdown: 18%–24%<br>Worst losing streak: 11 trades</p></div><div class="card"><h3>What should I do next?</h3><p>Retest under higher costs and paper trade only if the result remains stable.</p></div></div><div class="actions"><button onclick="go(3)">Back</button><button onclick="restart()">Start another test</button></div></section>
+  </main>
+  <script>
+    let current = 0;
+    const labels = ['Choose a starting point', 'Define the rules', 'Set realistic assumptions', 'Test history', 'Understand the result'];
+    function go(n) { current=n; document.querySelectorAll('.screen').forEach((s,i)=>s.classList.toggle('active', i===n)); document.getElementById('step').textContent=`${n+1} of 5 · ${labels[n]}`; }
+    function choose(kind) { if (kind==='custom') { document.getElementById('rules-title').textContent='Describe your strategy rules'; document.getElementById('rules').innerHTML='<dt>Market</dt><dd>Choose a market and timeframe</dd><dt>Direction</dt><dd>State when long or short trades are allowed</dd><dt>Setup</dt><dd>Describe the condition that creates an opportunity</dd><dt>Entry</dt><dd>State the confirmation and order timing</dd><dt>Risk</dt><dd>Set a stop, target, and amount at risk</dd>'; } else { resetRules(); } go(1); }
+    function preset(el, text) { document.querySelectorAll('.choice').forEach(x=>x.classList.remove('selected')); el.classList.add('selected'); document.getElementById('preset').textContent=text; }
+    function resetRules() { document.getElementById('rules-title').textContent='Your strategy rules'; document.getElementById('rules').innerHTML='<dt>Market</dt><dd>EUR/USD daily</dd><dt>Long entry</dt><dd>20-period average crosses above 50-period average</dd><dt>Short entry</dt><dd>20-period average crosses below 50-period average</dd><dt>Order</dt><dd>Enter at the next bar open</dd><dt>Risk</dt><dd>0.5% per trade; 50-pip stop; 2R target</dd>'; }
+    function restart() { resetRules(); go(0); }
+  </script>
+</body>
+</html>

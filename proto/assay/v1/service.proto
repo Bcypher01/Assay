@@ -63,6 +63,10 @@ service PrimitiveService { rpc ListPrimitives(Empty) returns (ListPrimitivesResp
 message ValidateRequest { bytes strategy_json = 1; }
 message FieldError { string path = 1; string message = 2; }
 message ValidateResponse { repeated FieldError errors = 1; string hash = 2; }
+message StrategyRule { string branch = 1; string text = 2; bool enabled = 3; }
+message StrategyDescription { string summary = 1; repeated StrategyRule rules = 2; }
+message DescribeStrategyRequest { bytes strategy_json = 1; }
+message DescribeStrategyResponse { StrategyDescription description = 1; }
 message RunRequest {
   bytes strategy_json = 1;
   string snapshot = 2;
@@ -86,7 +90,20 @@ message RunSummary {
   string error_code = 12;
 }
 message RunUpdate { oneof payload { Progress progress = 1; EquityChunk equity = 2; TradeChunk trades = 3; RunSummary summary = 4; } }
-service StudyService { rpc Validate(ValidateRequest) returns (ValidateResponse); rpc Run(RunRequest) returns (stream RunUpdate); }
+service StudyService { rpc Validate(ValidateRequest) returns (ValidateResponse); rpc Describe(DescribeStrategyRequest) returns (DescribeStrategyResponse); rpc Run(RunRequest) returns (stream RunUpdate); }
+
+message StrategyTemplate {
+  string id = 1;
+  uint32 version = 2;
+  string name = 3;
+  string family = 4;
+  string description = 5;
+  string expected_frequency = 6;
+  bytes strategy_json = 7;
+  StrategyDescription strategy_description = 8;
+}
+message ListTemplatesResponse { repeated StrategyTemplate templates = 1; }
+service TemplateService { rpc ListTemplates(Empty) returns (ListTemplatesResponse); }
 
 message ListRunsResponse { repeated string hashes = 1; }
 message GetRunRequest { string hash = 1; }

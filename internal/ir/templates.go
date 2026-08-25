@@ -21,6 +21,32 @@ const (
 	LiquiditySweepStructureTemplateVersion = 1
 )
 
+// TemplateDefinition is stable catalogue metadata for a strategy that can be
+// expressed and executed by the engine. It is deliberately separate from UI
+// presentation assets such as charts or icons.
+type TemplateDefinition struct {
+	ID                string
+	Version           uint32
+	Name              string
+	Family            string
+	Description       string
+	ExpectedFrequency string
+	New               func() *Strategy
+}
+
+// PopularTemplates returns fresh, editable documents in a stable catalogue
+// order. Callers must not mutate a document and reuse it for another request.
+func PopularTemplates() []TemplateDefinition {
+	return []TemplateDefinition{
+		{MovingAverageCrossoverTemplateID, MovingAverageCrossoverTemplateVersion, "20/50 moving-average crossover", "Trend following", "Captures sustained directional moves and gives most of them back at the turn.", "Low", NewMovingAverageCrossover},
+		{RSIPullbackTemplateID, RSIPullbackTemplateVersion, "RSI pullback in a trend", "Mean reversion + trend", "Buys temporary weakness while the larger trend is still intact.", "Medium", NewRSIPullback},
+		{DonchianBreakoutTemplateID, DonchianBreakoutTemplateVersion, "20-bar Donchian breakout", "Trend following", "Enters when price leaves an established range, looking for continuation.", "Low", NewDonchianBreakout},
+		{BollingerReversionTemplateID, BollingerReversionTemplateVersion, "Bollinger-band mean reversion", "Mean reversion", "Looks for price to return inside a stretched Bollinger band.", "High", NewBollingerReversion},
+		{SessionBreakoutTemplateID, SessionBreakoutTemplateVersion, "London session breakout", "Price action", "Trades a break of a completed session range using an explicit UTC window.", "Medium", NewSessionBreakout},
+		{LiquiditySweepStructureTemplateID, LiquiditySweepStructureTemplateVersion, "Liquidity sweep with market-structure confirmation", "SMC workflow", "Waits for a sweep and a later directional structure confirmation.", "Low", NewLiquiditySweepStructure},
+	}
+}
+
 // NewMovingAverageCrossover returns Assay's first editable stock template.
 // Defaults are examples, not trading advice: EUR/USD daily data, a 20/50 SMA
 // crossover, 0.5% risk per trade, a 50-pip stop, and a 2R target.

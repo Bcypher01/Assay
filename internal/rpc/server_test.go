@@ -58,6 +58,31 @@ func TestHandlerHasEmbeddedInstrumentCatalogueByDefault(t *testing.T) {
 	}
 }
 
+func TestTemplateCatalogueAndDescriptionRoundTrip(t *testing.T) {
+	srv := httptest.NewServer(NewHandler(&Server{}))
+	defer srv.Close()
+	templates := assayv1connect.NewTemplateServiceClient(srv.Client(), srv.URL)
+	listed, err := templates.ListTemplates(context.Background(), connect.NewRequest(&assayv1.Empty{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Msg.Templates) != 6 {
+		t.Fatalf("templates = %d, want 6", len(listed.Msg.Templates))
+	}
+	first := listed.Msg.Templates[0]
+	if first.Id != "moving-average-crossover" || first.StrategyDescription.GetSummary() == "" || len(first.StrategyJson) == 0 {
+		t.Fatalf("first template = %#v", first)
+	}
+	study := assayv1connect.NewStudyServiceClient(srv.Client(), srv.URL)
+	description, err := study.Describe(context.Background(), connect.NewRequest(&assayv1.DescribeStrategyRequest{StrategyJson: first.StrategyJson}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if description.Msg.Description.GetSummary() != first.StrategyDescription.GetSummary() || len(description.Msg.Description.Rules) != 2 {
+		t.Fatalf("description = %#v", description.Msg.Description)
+	}
+}
+
 func TestSwaggerStyleEmptyRequestIsNormalized(t *testing.T) {
 	srv := httptest.NewServer(NewHandler(&Server{}))
 	defer srv.Close()

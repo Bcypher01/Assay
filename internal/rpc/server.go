@@ -75,6 +75,8 @@ func NewHandler(s *Server) http.Handler {
 	mux.Handle(path, h)
 	path, h = assayv1connect.NewStudyServiceHandler(s)
 	mux.Handle(path, h)
+	path, h = assayv1connect.NewTemplateServiceHandler(s)
+	mux.Handle(path, h)
 	path, h = assayv1connect.NewRunServiceHandler(s)
 	mux.Handle(path, h)
 	return withEmptyJSON(mux)
@@ -108,6 +110,7 @@ func withEmptyJSON(next http.Handler) http.Handler {
 		assayv1connect.DataServiceListInstrumentsProcedure:     true,
 		assayv1connect.PrimitiveServiceListPrimitivesProcedure: true,
 		assayv1connect.RunServiceListRunsProcedure:             true,
+		assayv1connect.TemplateServiceListTemplatesProcedure:   true,
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && empty[r.URL.Path] && r.Header.Get("Content-Type") == "" && r.ContentLength == 0 {
@@ -206,6 +209,42 @@ func (s *Server) Validate(_ context.Context, req *connect.Request[assayv1.Valida
 		out.Errors = append(out.Errors, &assayv1.FieldError{Path: e.Path, Message: e.Message})
 	}
 	return connect.NewResponse(out), nil
+}
+
+// Describe exposes the generated reading of the persisted strategy document so
+// the UI cannot substitute display-only text for executable rules.
+func (s *Server) Describe(_ context.Context, req *connect.Request[assayv1.DescribeStrategyRequest]) (*connect.Response[assayv1.DescribeStrategyResponse], error) {
+	var strategy ir.Strategy
+	if err := json.Unmarshal(req.Msg.StrategyJson, &strategy); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("decode strategy: %w", err))
+	}
+	return connect.NewResponse(&assayv1.DescribeStrategyResponse{Description: strategyDescription(ir.Describe(&strategy))}), nil
+}
+
+func (s *Server) ListTemplates(context.Context, *connect.Request[assayv1.Empty]) (*connect.Response[assayv1.ListTemplatesResponse], error) {
+	out := &assayv1.ListTemplatesResponse{}
+	for _, definition := range ir.PopularTemplates() {
+		strategy := definition.New()
+		encoded, err := json.Marshal(strategy)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("encode template %s: %w", definition.ID, err))
+		}
+		out.Templates = append(out.Templates, &assayv1.StrategyTemplate{
+			Id: definition.ID, Version: definition.Version, Name: definition.Name,
+			Family: definition.Family, Description: definition.Description,
+			ExpectedFrequency: definition.ExpectedFrequency, StrategyJson: encoded,
+			StrategyDescription: strategyDescription(ir.Describe(strategy)),
+		})
+	}
+	return connect.NewResponse(out), nil
+}
+
+func strategyDescription(description ir.Description) *assayv1.StrategyDescription {
+	out := &assayv1.StrategyDescription{Summary: description.Summary}
+	for _, rule := range description.Rules {
+		out.Rules = append(out.Rules, &assayv1.StrategyRule{Branch: rule.Branch, Text: rule.Text, Enabled: rule.Enabled})
+	}
+	return out
 }
 
 func (s *Server) Run(ctx context.Context, req *connect.Request[assayv1.RunRequest], stream *connect.ServerStream[assayv1.RunUpdate]) error {

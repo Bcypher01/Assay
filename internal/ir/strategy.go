@@ -152,8 +152,10 @@ type OccursAfter struct {
 type ComparisonOp string
 
 const (
-	ComparisonGreaterThan ComparisonOp = "gt"
-	ComparisonLessThan    ComparisonOp = "lt"
+	ComparisonGreaterThan  ComparisonOp = "gt"
+	ComparisonLessThan     ComparisonOp = "lt"
+	ComparisonCrossesAbove ComparisonOp = "crosses_above"
+	ComparisonCrossesBelow ComparisonOp = "crosses_below"
 )
 
 // NumberComparison evaluates a numeric primitive against an explicit
@@ -482,8 +484,8 @@ func validateExpression(add func(string, string), path string, e Expression, ids
 				add(path+".comparison.node", "must reference a numeric primitive")
 			}
 		}
-		if comparison.Operator != ComparisonGreaterThan && comparison.Operator != ComparisonLessThan {
-			add(path+".comparison.operator", "must be gt or lt")
+		if comparison.Operator != ComparisonGreaterThan && comparison.Operator != ComparisonLessThan && comparison.Operator != ComparisonCrossesAbove && comparison.Operator != ComparisonCrossesBelow {
+			add(path+".comparison.operator", "must be gt, lt, crosses_above, or crosses_below")
 		}
 		return
 	}

@@ -377,6 +377,10 @@ func holdsExpression(series *core.Series, expression ir.Expression, vals map[str
 			return v.Number[bar] > comparison.Threshold
 		case ir.ComparisonLessThan:
 			return v.Number[bar] < comparison.Threshold
+		case ir.ComparisonCrossesAbove:
+			return bar > 0 && v.Valid.Get(bar-1) && v.Number[bar-1] <= comparison.Threshold && v.Number[bar] > comparison.Threshold
+		case ir.ComparisonCrossesBelow:
+			return bar > 0 && v.Valid.Get(bar-1) && v.Number[bar-1] >= comparison.Threshold && v.Number[bar] < comparison.Threshold
 		default:
 			return false
 		}

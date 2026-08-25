@@ -130,6 +130,22 @@ func TestValidateV2NumberComparison(t *testing.T) {
 	}
 }
 
+func TestValidateV2NumberCrossComparison(t *testing.T) {
+	s := validStrategy()
+	s.Schema = SchemaV2
+	s.Direction = ""
+	s.Slots = Slots{}
+	s.Template = Template{ID: "rsi-pullback", Version: 1}
+	s.Nodes = []Node{{ID: "rsi", Pack: "indicator", Type: "rsi"}}
+	s.Entries = Entries{Long: EntryBranch{
+		Enabled: true, Name: "RSI crosses above 30",
+		When: Expression{Comparison: &NumberComparison{Node: "rsi", Operator: ComparisonCrossesAbove, Threshold: core.RatioFromInt(30)}},
+	}}
+	if errs := s.Validate(primitive.DefaultRegistry); len(errs) != 0 {
+		t.Fatalf("numeric cross comparison rejected: %#v", errs)
+	}
+}
+
 func TestValidateV2TemporalExpressions(t *testing.T) {
 	s := validStrategy()
 	s.Schema = SchemaV2

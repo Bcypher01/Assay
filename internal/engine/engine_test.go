@@ -134,6 +134,20 @@ func TestRunV2EvaluatesNumberComparison(t *testing.T) {
 	}
 }
 
+func TestHoldsExpressionNumberCrossComparison(t *testing.T) {
+	values := map[string]primitive.Value{
+		"rsi": numberValue([]core.Ratio{core.RatioFromInt(25), core.RatioFromInt(35), core.RatioFromInt(25)}),
+	}
+	above := ir.Expression{Comparison: &ir.NumberComparison{Node: "rsi", Operator: ir.ComparisonCrossesAbove, Threshold: core.RatioFromInt(30)}}
+	below := ir.Expression{Comparison: &ir.NumberComparison{Node: "rsi", Operator: ir.ComparisonCrossesBelow, Threshold: core.RatioFromInt(30)}}
+	if !holdsExpression(engineSeries(), above, values, 1) {
+		t.Fatal("numeric cross above was not recognised")
+	}
+	if !holdsExpression(engineSeries(), below, values, 2) {
+		t.Fatal("numeric cross below was not recognised")
+	}
+}
+
 func TestRunMovingAverageCrossoverTemplate(t *testing.T) {
 	series := core.NewSeries("EUR/USD", core.TFD1, 75)
 	for i := 0; i < 75; i++ {

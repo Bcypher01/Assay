@@ -31,3 +31,23 @@ func TestNewMovingAverageCrossover(t *testing.T) {
 		t.Fatalf("unexpected branch rules: %#v", strategy.Entries)
 	}
 }
+
+func TestNewRSIPullback(t *testing.T) {
+	strategy := NewRSIPullback()
+	if errs := strategy.Validate(primitive.DefaultRegistry); len(errs) != 0 {
+		t.Fatalf("template is invalid: %#v", errs)
+	}
+	if strategy.Template.ID != RSIPullbackTemplateID || strategy.Template.Version != RSIPullbackTemplateVersion {
+		t.Fatalf("template identity = %#v", strategy.Template)
+	}
+	if strategy.Entries.Long.When.All[0].Price.Relation != PriceAbove ||
+		strategy.Entries.Long.When.All[1].Comparison.Operator != ComparisonCrossesAbove ||
+		strategy.Entries.Long.When.All[1].Comparison.Threshold != core.RatioFromInt(30) {
+		t.Fatalf("unexpected long branch: %#v", strategy.Entries.Long)
+	}
+	if strategy.Entries.Short.When.All[0].Price.Relation != PriceBelow ||
+		strategy.Entries.Short.When.All[1].Comparison.Operator != ComparisonCrossesBelow ||
+		strategy.Entries.Short.When.All[1].Comparison.Threshold != core.RatioFromInt(70) {
+		t.Fatalf("unexpected short branch: %#v", strategy.Entries.Short)
+	}
+}

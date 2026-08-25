@@ -11,6 +11,8 @@ const (
 	MovingAverageCrossoverTemplateVersion = 1
 	RSIPullbackTemplateID                 = "rsi-pullback-in-trend"
 	RSIPullbackTemplateVersion            = 1
+	DonchianBreakoutTemplateID            = "donchian-breakout"
+	DonchianBreakoutTemplateVersion       = 1
 )
 
 // NewMovingAverageCrossover returns Assay's first editable stock template.
@@ -91,6 +93,39 @@ func NewRSIPullback() *Strategy {
 		Nodes: []Node{
 			{ID: "trend", Pack: "indicator", Type: "sma", Params: json.RawMessage(`{"period":50}`), Timeframe: core.TFD1},
 			{ID: "rsi", Pack: "indicator", Type: "rsi", Params: json.RawMessage(`{"period":14}`), Timeframe: core.TFD1},
+		},
+	}
+}
+
+// NewDonchianBreakout returns an editable channel-breakout template. Its
+// boundaries are calculated from the preceding 20 bars, so the breakout close
+// is compared against a level it did not itself alter.
+func NewDonchianBreakout() *Strategy {
+	return &Strategy{
+		Schema:   SchemaV2,
+		Name:     "20-bar Donchian breakout",
+		Universe: Universe{Symbols: []string{"EUR/USD"}},
+		Timeframes: map[string]core.TF{
+			"bias": core.TFD1, "poi": core.TFD1, "entry": core.TFD1,
+		},
+		Risk: Risk{
+			Stop:     core.Distance{Unit: core.UnitPips, Value: core.RatioFromInt(50)},
+			Target:   core.Distance{Unit: core.UnitPips, Value: core.RatioFromInt(100)},
+			PerTrade: core.RatioFromFloat(0.005),
+		},
+		Template: Template{ID: DonchianBreakoutTemplateID, Version: DonchianBreakoutTemplateVersion},
+		Entries: Entries{
+			Timing: EntryTimingNextOpen,
+			Long: EntryBranch{Enabled: true, Name: "Close crosses above the 20-bar high", When: Expression{
+				Price: &PriceLevelPredicate{Node: "channel-high", Source: PriceClose, Relation: PriceCrossesAbove},
+			}},
+			Short: EntryBranch{Enabled: true, Name: "Close crosses below the 20-bar low", When: Expression{
+				Price: &PriceLevelPredicate{Node: "channel-low", Source: PriceClose, Relation: PriceCrossesBelow},
+			}},
+		},
+		Nodes: []Node{
+			{ID: "channel-high", Pack: "indicator", Type: "donchian_high", Params: json.RawMessage(`{"period":20}`), Timeframe: core.TFD1},
+			{ID: "channel-low", Pack: "indicator", Type: "donchian_low", Params: json.RawMessage(`{"period":20}`), Timeframe: core.TFD1},
 		},
 	}
 }

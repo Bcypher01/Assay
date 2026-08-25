@@ -51,3 +51,19 @@ func TestNewRSIPullback(t *testing.T) {
 		t.Fatalf("unexpected short branch: %#v", strategy.Entries.Short)
 	}
 }
+
+func TestNewDonchianBreakout(t *testing.T) {
+	strategy := NewDonchianBreakout()
+	if errs := strategy.Validate(primitive.DefaultRegistry); len(errs) != 0 {
+		t.Fatalf("template is invalid: %#v", errs)
+	}
+	if strategy.Template.ID != DonchianBreakoutTemplateID || strategy.Template.Version != DonchianBreakoutTemplateVersion {
+		t.Fatalf("template identity = %#v", strategy.Template)
+	}
+	if strategy.Entries.Long.When.Price.Relation != PriceCrossesAbove || strategy.Entries.Short.When.Price.Relation != PriceCrossesBelow {
+		t.Fatalf("unexpected breakout branches: %#v", strategy.Entries)
+	}
+	if len(strategy.Nodes) != 2 || strategy.Nodes[0].Type != "donchian_high" || strategy.Nodes[1].Type != "donchian_low" {
+		t.Fatalf("unexpected channel nodes: %#v", strategy.Nodes)
+	}
+}

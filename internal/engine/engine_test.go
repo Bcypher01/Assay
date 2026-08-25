@@ -170,6 +170,28 @@ func TestRunMovingAverageCrossoverTemplate(t *testing.T) {
 	}
 }
 
+func TestRunDonchianBreakoutTemplate(t *testing.T) {
+	series := core.NewSeries("EUR/USD", core.TFD1, 23)
+	for i := 0; i < 23; i++ {
+		price := core.Price(100)
+		if i >= 21 {
+			price = 110
+		}
+		series.Append(core.Time(int64(i)*core.TFD1.Millis()), price, price, price, price, 0)
+	}
+	config := sim.Config{
+		Spec: instrument.Spec{Symbol: "EUR/USD", TickSize: "1", PipTicks: 1, Gap: instrument.GapFillAtOpen},
+		Risk: sim.RiskModel{InitialEquity: 1_000, FixedLots: core.One},
+	}
+	result, _, err := Run(context.Background(), ir.NewDonchianBreakout(), Data{Series: series, Config: config})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Trades) != 1 || result.Trades[0].Side != core.SideLong || result.Trades[0].EntryBar != 22 {
+		t.Fatalf("template did not enter on the established-channel breakout's next open: %#v", result.Trades)
+	}
+}
+
 func TestHoldsExpressionTemporalOperators(t *testing.T) {
 	values := map[string]primitive.Value{
 		"event":   boolValue(5, 1, 2),

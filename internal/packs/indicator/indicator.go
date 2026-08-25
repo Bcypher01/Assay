@@ -12,7 +12,7 @@ import (
 )
 
 func init() {
-	for _, p := range []primitive.Primitive{SMA{}, EMA{}, WMA{}, Slope{}, MATouch{}, MACross{}, MACrossBullish{}, MACrossBearish{}, RSI{}, MACD{}, BollingerBands{}, ATR{}, ADX{}, Stochastic{}, Volume{}, OBV{}} {
+	for _, p := range []primitive.Primitive{SMA{}, EMA{}, WMA{}, Slope{}, MATouch{}, MACross{}, MACrossBullish{}, MACrossBearish{}, DonchianHigh{}, DonchianLow{}, RSI{}, MACD{}, BollingerBands{}, ATR{}, ADX{}, Stochastic{}, Volume{}, OBV{}} {
 		primitive.MustRegister(p)
 	}
 }
@@ -201,6 +201,74 @@ func (x cross) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.Value, erro
 	return primitive.Value{Kind: primitive.KindBool, Bool: b, Valid: v}, nil
 }
 func (cross) Overlays(core.Time, core.Time) []primitive.Overlay { return nil }
+
+// DonchianHigh and DonchianLow expose the preceding N-bar channel bounds.
+// The current bar is intentionally excluded so a close crossing the boundary
+// can be detected without comparing a bar to a level it just changed.
+type DonchianHigh struct{}
+type DonchianLow struct{}
+
+func (DonchianHigh) Spec() primitive.Spec {
+	return spec("donchian_high", primitive.KindLevel, (*assayv1.PeriodParams)(nil))
+}
+func (DonchianLow) Spec() primitive.Spec {
+	return spec("donchian_low", primitive.KindLevel, (*assayv1.PeriodParams)(nil))
+}
+func (DonchianHigh) New(p proto.Message, _ core.TF) (primitive.Instance, error) {
+	n, err := periodOf(p)
+	return donchian{period: n, high: true}, err
+}
+func (DonchianLow) New(p proto.Message, _ core.TF) (primitive.Instance, error) {
+	n, err := periodOf(p)
+	return donchian{period: n}, err
+}
+
+type donchian struct {
+	period int
+	high   bool
+}
+
+func (x donchian) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.Value, error) {
+	levels := make([]core.Price, s.Len())
+	valid := core.NewBitset(s.Len())
+	if x.period >= s.Len() {
+		return level(levels, valid), nil
+	}
+	// The queue stores candidate indexes in descending (high) or ascending
+	// (low) value order. Its fixed period-sized ring avoids per-bar allocation
+	// and reduces the rolling bound calculation from O(bars*period) to O(bars).
+	queue := make([]int, x.period)
+	head, tail, count := 0, 0, 0
+	value := func(i int) core.Price {
+		if x.high {
+			return s.High[i]
+		}
+		return s.Low[i]
+	}
+	for i := 0; i < s.Len(); i++ {
+		if i >= x.period {
+			levels[i] = value(queue[head])
+			valid.Set(i)
+			for count > 0 && queue[head] <= i-x.period {
+				head = (head + 1) % x.period
+				count--
+			}
+		}
+		for count > 0 {
+			last := (tail - 1 + x.period) % x.period
+			if (x.high && value(queue[last]) >= value(i)) || (!x.high && value(queue[last]) <= value(i)) {
+				break
+			}
+			tail = last
+			count--
+		}
+		queue[tail] = i
+		tail = (tail + 1) % x.period
+		count++
+	}
+	return level(levels, valid), nil
+}
+func (donchian) Overlays(core.Time, core.Time) []primitive.Overlay { return nil }
 
 type RSI struct{}
 
@@ -505,6 +573,10 @@ func periodOf(p proto.Message) (int, error) {
 			return int(x.Period), nil
 		}
 	case *assayv1.StochasticParams:
+		if x.Period > 0 {
+			return int(x.Period), nil
+		}
+	case *assayv1.PeriodParams:
 		if x.Period > 0 {
 			return int(x.Period), nil
 		}

@@ -10,6 +10,9 @@
   optional tick tolerance. `ma_cross` marks either-direction SMA crossing;
   `ma_cross_bullish` and `ma_cross_bearish` mark only a fast-SMA cross above or
   below the slow SMA, respectively.
+- `donchian_high` and `donchian_low` emit the highest high and lowest low,
+  respectively, of the preceding period. The current bar is excluded, so an
+  entry can cross a stable channel boundary without look-ahead.
 - `rsi` uses Wilder smoothing and is first valid at `period`.
 - `macd` emits the fast EMA minus slow EMA line. The signal period is retained
   in the schema for IR compatibility; signal/histogram are separate outputs in

@@ -69,18 +69,62 @@ type Template struct {
 }
 
 // Expression is a typed boolean expression tree. Exactly one form is allowed:
-// a primitive node reference, a non-empty all/any group, or a not group with one
-// child. Leaves are intentionally restricted to boolean primitives; comparisons
-// will be added only with explicit input and unit semantics.
+// a primitive node reference, a typed predicate, a non-empty all/any group, or
+// a not group with one child. Predicate inputs and output kinds are validated
+// before execution.
 type Expression struct {
-	Node       string            `json:"node,omitempty"`
-	Comparison *NumberComparison `json:"comparison,omitempty"`
-	Within     *OccurredWithin   `json:"within,omitempty"`
-	Persists   *RemainsTrue      `json:"persists,omitempty"`
-	After      *OccursAfter      `json:"after,omitempty"`
-	All        []Expression      `json:"all,omitempty"`
-	Any        []Expression      `json:"any,omitempty"`
-	Not        *Expression       `json:"not,omitempty"`
+	Node       string               `json:"node,omitempty"`
+	Comparison *NumberComparison    `json:"comparison,omitempty"`
+	Price      *PriceLevelPredicate `json:"price,omitempty"`
+	Zone       *ZonePredicate       `json:"zone,omitempty"`
+	Within     *OccurredWithin      `json:"within,omitempty"`
+	Persists   *RemainsTrue         `json:"persists,omitempty"`
+	After      *OccursAfter         `json:"after,omitempty"`
+	All        []Expression         `json:"all,omitempty"`
+	Any        []Expression         `json:"any,omitempty"`
+	Not        *Expression          `json:"not,omitempty"`
+}
+
+type PriceSource string
+
+const (
+	PriceOpen  PriceSource = "open"
+	PriceHigh  PriceSource = "high"
+	PriceLow   PriceSource = "low"
+	PriceClose PriceSource = "close"
+)
+
+type PriceRelation string
+
+const (
+	PriceAbove        PriceRelation = "above"
+	PriceBelow        PriceRelation = "below"
+	PriceCrossesAbove PriceRelation = "crosses_above"
+	PriceCrossesBelow PriceRelation = "crosses_below"
+)
+
+// PriceLevelPredicate compares an explicit OHLC source against a level
+// primitive. Cross predicates compare only this and the preceding closed bar.
+type PriceLevelPredicate struct {
+	Node     string        `json:"node"`
+	Source   PriceSource   `json:"source"`
+	Relation PriceRelation `json:"relation"`
+}
+
+type ZoneRelation string
+
+const (
+	ZoneInside  ZoneRelation = "inside"
+	ZoneTouches ZoneRelation = "touches"
+	ZoneLeaves  ZoneRelation = "leaves"
+)
+
+// ZonePredicate compares the current bar with a zone primitive. Inside uses
+// the close; touches uses the inclusive high-low range; leaves requires the
+// preceding close to be inside its zone and the current close to be outside.
+type ZonePredicate struct {
+	Node     string       `json:"node"`
+	Relation ZoneRelation `json:"relation"`
 }
 
 // OccurredWithin is true when Condition held on this bar or one of the prior
@@ -384,6 +428,12 @@ func validateExpression(add func(string, string), path string, e Expression, ids
 	if e.Comparison != nil {
 		forms++
 	}
+	if e.Price != nil {
+		forms++
+	}
+	if e.Zone != nil {
+		forms++
+	}
 	if e.Within != nil {
 		forms++
 	}
@@ -403,7 +453,7 @@ func validateExpression(add func(string, string), path string, e Expression, ids
 		forms++
 	}
 	if forms != 1 {
-		add(path, "must contain exactly one of node, comparison, within, persists, after, all, any, or not")
+		add(path, "must contain exactly one of node, comparison, price, zone, within, persists, after, all, any, or not")
 		return
 	}
 	if e.Node != "" {
@@ -437,6 +487,14 @@ func validateExpression(add func(string, string), path string, e Expression, ids
 		}
 		return
 	}
+	if e.Price != nil {
+		validatePricePredicate(add, path+".price", *e.Price, ids, reg)
+		return
+	}
+	if e.Zone != nil {
+		validateZonePredicate(add, path+".zone", *e.Zone, ids, reg)
+		return
+	}
 	if e.Within != nil {
 		validateTemporal(add, path+".within", e.Within.Condition, e.Within.Bars, ids, reg)
 		return
@@ -466,6 +524,41 @@ func validateExpression(add func(string, string), path string, e Expression, ids
 	}
 }
 
+func validatePricePredicate(add func(string, string), path string, predicate PriceLevelPredicate, ids map[string]Node, reg *primitive.Registry) {
+	if predicate.Node == "" {
+		add(path+".node", "required")
+	} else if n, ok := ids[predicate.Node]; !ok {
+		add(path+".node", "unknown node")
+	} else if reg != nil {
+		p, _ := reg.Get(n.Pack, n.Type)
+		if p != nil && p.Spec().Out != primitive.KindLevel {
+			add(path+".node", "must reference a level primitive")
+		}
+	}
+	if predicate.Source != PriceOpen && predicate.Source != PriceHigh && predicate.Source != PriceLow && predicate.Source != PriceClose {
+		add(path+".source", "must be open, high, low, or close")
+	}
+	if predicate.Relation != PriceAbove && predicate.Relation != PriceBelow && predicate.Relation != PriceCrossesAbove && predicate.Relation != PriceCrossesBelow {
+		add(path+".relation", "must be above, below, crosses_above, or crosses_below")
+	}
+}
+
+func validateZonePredicate(add func(string, string), path string, predicate ZonePredicate, ids map[string]Node, reg *primitive.Registry) {
+	if predicate.Node == "" {
+		add(path+".node", "required")
+	} else if n, ok := ids[predicate.Node]; !ok {
+		add(path+".node", "unknown node")
+	} else if reg != nil {
+		p, _ := reg.Get(n.Pack, n.Type)
+		if p != nil && p.Spec().Out != primitive.KindZone {
+			add(path+".node", "must reference a zone primitive")
+		}
+	}
+	if predicate.Relation != ZoneInside && predicate.Relation != ZoneTouches && predicate.Relation != ZoneLeaves {
+		add(path+".relation", "must be inside, touches, or leaves")
+	}
+}
+
 func validateTemporal(add func(string, string), path string, condition Expression, bars int, ids map[string]Node, reg *primitive.Registry) {
 	if bars <= 0 {
 		add(path+".bars", "must be positive")
@@ -474,7 +567,7 @@ func validateTemporal(add func(string, string), path string, condition Expressio
 }
 
 func (e Expression) empty() bool {
-	return e.Node == "" && e.Comparison == nil && e.Within == nil && e.Persists == nil && e.After == nil && len(e.All) == 0 && len(e.Any) == 0 && e.Not == nil
+	return e.Node == "" && e.Comparison == nil && e.Price == nil && e.Zone == nil && e.Within == nil && e.Persists == nil && e.After == nil && len(e.All) == 0 && len(e.Any) == 0 && e.Not == nil
 }
 
 func (s Slots) empty() bool {

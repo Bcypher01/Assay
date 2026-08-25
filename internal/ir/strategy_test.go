@@ -154,6 +154,39 @@ func TestValidateV2TemporalExpressions(t *testing.T) {
 	}
 }
 
+func TestValidateV2PriceAndZonePredicates(t *testing.T) {
+	s := validStrategy()
+	s.Schema = SchemaV2
+	s.Direction = ""
+	s.Slots = Slots{}
+	s.Template = Template{ID: "bollinger-reversion", Version: 1}
+	s.Nodes = []Node{
+		{ID: "average", Pack: "indicator", Type: "sma"},
+		{ID: "bands", Pack: "indicator", Type: "bollinger_bands"},
+	}
+	s.Entries = Entries{Long: EntryBranch{
+		Enabled: true, Name: "Close above average after band touch",
+		When: Expression{All: []Expression{
+			{Price: &PriceLevelPredicate{Node: "average", Source: PriceClose, Relation: PriceAbove}},
+			{Zone: &ZonePredicate{Node: "bands", Relation: ZoneTouches}},
+		}},
+	}}
+	if errs := s.Validate(primitive.DefaultRegistry); len(errs) != 0 {
+		t.Fatalf("price and zone predicates rejected: %#v", errs)
+	}
+	s.Entries.Long.When.All[0].Price.Source = "last"
+	s.Entries.Long.When.All[1].Zone.Relation = "crosses"
+	errs := s.Validate(primitive.DefaultRegistry)
+	paths := make([]string, 0, len(errs))
+	for _, err := range errs {
+		paths = append(paths, err.Path)
+	}
+	want := []string{"entries.long.when.all[0].price.source", "entries.long.when.all[1].zone.relation"}
+	if !reflect.DeepEqual(paths, want) {
+		t.Fatalf("predicate validation paths = %#v, want %#v", paths, want)
+	}
+}
+
 func TestNumberComparisonJSONUsesReadableThreshold(t *testing.T) {
 	want := NumberComparison{Node: "rsi", Operator: ComparisonLessThan, Threshold: core.RatioFromFloat(30.5)}
 	b, err := json.Marshal(want)

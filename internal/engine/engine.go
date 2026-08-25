@@ -89,7 +89,7 @@ func Run(ctx context.Context, strategy *ir.Strategy, data Data) (sim.RunResult, 
 	poiAt := -1
 	for bar := 0; bar < data.Series.Len(); bar++ {
 		if strategy.Schema == ir.SchemaV2 {
-			runV2Bar(strategy, values, &sig, &miss, bar, useRelativeExits)
+			runV2Bar(strategy, data.Series, values, &sig, &miss, bar, useRelativeExits)
 			continue
 		}
 		bias := holds(strategy.Slots.Bias, values, bar)
@@ -177,6 +177,12 @@ func collectExpressionNodes(used map[string]bool, expression ir.Expression) {
 	}
 	if expression.Comparison != nil && expression.Comparison.Node != "" {
 		used[expression.Comparison.Node] = true
+	}
+	if expression.Price != nil && expression.Price.Node != "" {
+		used[expression.Price.Node] = true
+	}
+	if expression.Zone != nil && expression.Zone.Node != "" {
+		used[expression.Zone.Node] = true
 	}
 	if expression.Within != nil {
 		collectExpressionNodes(used, expression.Within.Condition)
@@ -352,13 +358,13 @@ func holds(slot ir.SlotSpec, vals map[string]primitive.Value, bar int) bool {
 	return true
 }
 
-func holdsExpression(expression ir.Expression, vals map[string]primitive.Value, bar int) bool {
+func holdsExpression(series *core.Series, expression ir.Expression, vals map[string]primitive.Value, bar int) bool {
 	if expression.Node != "" {
 		v := vals[expression.Node]
 		return v.Valid != nil && v.Valid.Get(bar) && v.Bool != nil && v.Bool.Get(bar)
 	}
 	if expression.Not != nil {
-		return !holdsExpression(*expression.Not, vals, bar)
+		return !holdsExpression(series, *expression.Not, vals, bar)
 	}
 	if expression.Comparison != nil {
 		comparison := expression.Comparison
@@ -375,9 +381,47 @@ func holdsExpression(expression ir.Expression, vals map[string]primitive.Value, 
 			return false
 		}
 	}
+	if expression.Price != nil {
+		predicate := expression.Price
+		v := vals[predicate.Node]
+		if series == nil || v.Valid == nil || !v.Valid.Get(bar) || len(v.Level) <= bar {
+			return false
+		}
+		price := priceAt(series, predicate.Source, bar)
+		switch predicate.Relation {
+		case ir.PriceAbove:
+			return price > v.Level[bar]
+		case ir.PriceBelow:
+			return price < v.Level[bar]
+		case ir.PriceCrossesAbove:
+			return bar > 0 && v.Valid.Get(bar-1) && priceAt(series, predicate.Source, bar-1) <= v.Level[bar-1] && price > v.Level[bar]
+		case ir.PriceCrossesBelow:
+			return bar > 0 && v.Valid.Get(bar-1) && priceAt(series, predicate.Source, bar-1) >= v.Level[bar-1] && price < v.Level[bar]
+		default:
+			return false
+		}
+	}
+	if expression.Zone != nil {
+		predicate := expression.Zone
+		v := vals[predicate.Node]
+		if series == nil || v.Valid == nil || !v.Valid.Get(bar) || len(v.Zone) <= bar {
+			return false
+		}
+		zone := v.Zone[bar]
+		switch predicate.Relation {
+		case ir.ZoneInside:
+			return inZone(series.Close[bar], zone)
+		case ir.ZoneTouches:
+			return series.Low[bar] <= zone.High && series.High[bar] >= zone.Low
+		case ir.ZoneLeaves:
+			return bar > 0 && v.Valid.Get(bar-1) && !inZone(series.Close[bar], zone) && inZone(series.Close[bar-1], v.Zone[bar-1])
+		default:
+			return false
+		}
+	}
 	if expression.Within != nil {
 		for age := 0; age <= expression.Within.Bars && age <= bar; age++ {
-			if holdsExpression(expression.Within.Condition, vals, bar-age) {
+			if holdsExpression(series, expression.Within.Condition, vals, bar-age) {
 				return true
 			}
 		}
@@ -388,18 +432,18 @@ func holdsExpression(expression ir.Expression, vals map[string]primitive.Value, 
 			return false
 		}
 		for age := 0; age < expression.Persists.Bars; age++ {
-			if !holdsExpression(expression.Persists.Condition, vals, bar-age) {
+			if !holdsExpression(series, expression.Persists.Condition, vals, bar-age) {
 				return false
 			}
 		}
 		return true
 	}
 	if expression.After != nil {
-		if !holdsExpression(expression.After.Event, vals, bar) {
+		if !holdsExpression(series, expression.After.Event, vals, bar) {
 			return false
 		}
 		for age := 1; age <= expression.After.WithinBars && age <= bar; age++ {
-			if holdsExpression(expression.After.Predecessor, vals, bar-age) {
+			if holdsExpression(series, expression.After.Predecessor, vals, bar-age) {
 				return true
 			}
 		}
@@ -407,23 +451,40 @@ func holdsExpression(expression ir.Expression, vals map[string]primitive.Value, 
 	}
 	if len(expression.All) != 0 {
 		for _, child := range expression.All {
-			if !holdsExpression(child, vals, bar) {
+			if !holdsExpression(series, child, vals, bar) {
 				return false
 			}
 		}
 		return true
 	}
 	for _, child := range expression.Any {
-		if holdsExpression(child, vals, bar) {
+		if holdsExpression(series, child, vals, bar) {
 			return true
 		}
 	}
 	return false
 }
 
-func runV2Bar(strategy *ir.Strategy, values map[string]primitive.Value, sig *sim.Signals, miss *NearMiss, bar int, relativeExits bool) {
-	long := strategy.Entries.Long.Enabled && holdsExpression(strategy.Entries.Long.When, values, bar)
-	short := strategy.Entries.Short.Enabled && holdsExpression(strategy.Entries.Short.When, values, bar)
+func priceAt(series *core.Series, source ir.PriceSource, bar int) core.Price {
+	switch source {
+	case ir.PriceOpen:
+		return series.Open[bar]
+	case ir.PriceHigh:
+		return series.High[bar]
+	case ir.PriceLow:
+		return series.Low[bar]
+	default:
+		return series.Close[bar]
+	}
+}
+
+func inZone(price core.Price, zone primitive.Zone) bool {
+	return price >= zone.Low && price <= zone.High
+}
+
+func runV2Bar(strategy *ir.Strategy, series *core.Series, values map[string]primitive.Value, sig *sim.Signals, miss *NearMiss, bar int, relativeExits bool) {
+	long := strategy.Entries.Long.Enabled && holdsExpression(series, strategy.Entries.Long.When, values, bar)
+	short := strategy.Entries.Short.Enabled && holdsExpression(series, strategy.Entries.Short.When, values, bar)
 	if long && short {
 		// Signals are one instruction per bar. Opposing entries on the same close
 		// have no unambiguous ordering, so skip them rather than manufacture one.

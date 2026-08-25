@@ -163,23 +163,60 @@ func TestHoldsExpressionTemporalOperators(t *testing.T) {
 	}
 	event := ir.Expression{Node: "event"}
 	trigger := ir.Expression{Node: "trigger"}
-	if !holdsExpression(ir.Expression{Within: &ir.OccurredWithin{Condition: event, Bars: 1}}, values, 3) {
+	if !holdsExpression(engineSeries(), ir.Expression{Within: &ir.OccurredWithin{Condition: event, Bars: 1}}, values, 3) {
 		t.Fatal("event within one bar was not recognised")
 	}
-	if holdsExpression(ir.Expression{Within: &ir.OccurredWithin{Condition: event, Bars: 1}}, values, 4) {
+	if holdsExpression(engineSeries(), ir.Expression{Within: &ir.OccurredWithin{Condition: event, Bars: 1}}, values, 4) {
 		t.Fatal("expired event was still within one bar")
 	}
-	if !holdsExpression(ir.Expression{Persists: &ir.RemainsTrue{Condition: event, Bars: 2}}, values, 2) {
+	if !holdsExpression(engineSeries(), ir.Expression{Persists: &ir.RemainsTrue{Condition: event, Bars: 2}}, values, 2) {
 		t.Fatal("two-bar persistence was not recognised")
 	}
-	if holdsExpression(ir.Expression{Persists: &ir.RemainsTrue{Condition: event, Bars: 3}}, values, 2) {
+	if holdsExpression(engineSeries(), ir.Expression{Persists: &ir.RemainsTrue{Condition: event, Bars: 3}}, values, 2) {
 		t.Fatal("persistence ignored missing earlier bar")
 	}
-	if !holdsExpression(ir.Expression{After: &ir.OccursAfter{Event: trigger, Predecessor: event, WithinBars: 1}}, values, 3) {
+	if !holdsExpression(engineSeries(), ir.Expression{After: &ir.OccursAfter{Event: trigger, Predecessor: event, WithinBars: 1}}, values, 3) {
 		t.Fatal("event after predecessor was not recognised")
 	}
-	if holdsExpression(ir.Expression{After: &ir.OccursAfter{Event: trigger, Predecessor: event, WithinBars: 1}}, values, 2) {
+	if holdsExpression(engineSeries(), ir.Expression{After: &ir.OccursAfter{Event: trigger, Predecessor: event, WithinBars: 1}}, values, 2) {
 		t.Fatal("after expression allowed the predecessor as its event")
+	}
+}
+
+func TestHoldsExpressionPriceAndZonePredicates(t *testing.T) {
+	series := core.NewSeries("X", core.TFM1, 4)
+	for i, bar := range []struct{ open, high, low, close core.Price }{
+		{90, 95, 85, 90},
+		{100, 105, 95, 100},
+		{110, 115, 105, 110},
+		{90, 95, 85, 90},
+	} {
+		series.Append(core.Time(int64(i)*core.TFM1.Millis()), bar.open, bar.high, bar.low, bar.close, 0)
+	}
+	values := map[string]primitive.Value{
+		"level": levelValue(4, 100),
+		"zone":  zoneValue([]primitive.Zone{{Low: 95, High: 105}, {Low: 95, High: 105}, {Low: 95, High: 105}, {Low: 95, High: 105}}),
+	}
+	if !holdsExpression(series, ir.Expression{Price: &ir.PriceLevelPredicate{Node: "level", Source: ir.PriceClose, Relation: ir.PriceAbove}}, values, 2) {
+		t.Fatal("price above was not recognised")
+	}
+	if !holdsExpression(series, ir.Expression{Price: &ir.PriceLevelPredicate{Node: "level", Source: ir.PriceClose, Relation: ir.PriceBelow}}, values, 0) {
+		t.Fatal("price below was not recognised")
+	}
+	if !holdsExpression(series, ir.Expression{Price: &ir.PriceLevelPredicate{Node: "level", Source: ir.PriceClose, Relation: ir.PriceCrossesAbove}}, values, 2) {
+		t.Fatal("price cross above was not recognised")
+	}
+	if !holdsExpression(series, ir.Expression{Price: &ir.PriceLevelPredicate{Node: "level", Source: ir.PriceClose, Relation: ir.PriceCrossesBelow}}, values, 3) {
+		t.Fatal("price cross below was not recognised")
+	}
+	if !holdsExpression(series, ir.Expression{Zone: &ir.ZonePredicate{Node: "zone", Relation: ir.ZoneInside}}, values, 1) {
+		t.Fatal("zone containment was not recognised")
+	}
+	if !holdsExpression(series, ir.Expression{Zone: &ir.ZonePredicate{Node: "zone", Relation: ir.ZoneTouches}}, values, 1) {
+		t.Fatal("zone touch was not recognised")
+	}
+	if !holdsExpression(series, ir.Expression{Zone: &ir.ZonePredicate{Node: "zone", Relation: ir.ZoneLeaves}}, values, 2) {
+		t.Fatal("zone exit was not recognised")
 	}
 }
 
@@ -291,6 +328,14 @@ func numberValue(values []core.Ratio) primitive.Value {
 		valid.Set(i)
 	}
 	return primitive.Value{Kind: primitive.KindNumber, Number: values, Valid: valid}
+}
+
+func zoneValue(values []primitive.Zone) primitive.Value {
+	valid := core.NewBitset(len(values))
+	for i := range values {
+		valid.Set(i)
+	}
+	return primitive.Value{Kind: primitive.KindZone, Zone: values, Valid: valid}
 }
 
 func scriptedRegistry(t *testing.T, values map[string]primitive.Value) *primitive.Registry {

@@ -3,7 +3,9 @@ package rpc
 import (
 	"context"
 	"net"
+	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -11,6 +13,67 @@ import (
 	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
 	"github.com/Bcypher01/Assay/proto/assay/v1/assayv1connect"
 )
+
+func TestOpenAPIAndSwaggerEndpoints(t *testing.T) {
+	srv := httptest.NewServer(NewHandler(&Server{}))
+	defer srv.Close()
+	for _, path := range []string{"/openapi.json", "/docs"} {
+		res, err := http.Get(srv.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("%s status = %d", path, res.StatusCode)
+		}
+	}
+}
+
+func TestConnectJSONUnaryRequest(t *testing.T) {
+	srv := httptest.NewServer(NewHandler(&Server{}))
+	defer srv.Close()
+	res, err := http.Post(srv.URL+"/assay.v1.DataService/ListInstruments", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", res.StatusCode)
+	}
+}
+
+func TestHandlerHasEmbeddedInstrumentCatalogueByDefault(t *testing.T) {
+	srv := httptest.NewServer(NewHandler(&Server{}))
+	defer srv.Close()
+	data := assayv1connect.NewDataServiceClient(srv.Client(), srv.URL)
+	res, err := data.ListInstruments(context.Background(), connect.NewRequest(&assayv1.Empty{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Msg.Instruments) == 0 {
+		t.Fatal("default handler returned no instruments")
+	}
+	if res.Msg.Instruments[0].Symbol == "" {
+		t.Fatal("default handler returned a blank instrument symbol")
+	}
+}
+
+func TestSwaggerStyleEmptyRequestIsNormalized(t *testing.T) {
+	srv := httptest.NewServer(NewHandler(&Server{}))
+	defer srv.Close()
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/assay.v1.DataService/ListInstruments", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", res.StatusCode)
+	}
+}
 
 func TestServicesRoundTripAndRunHasOneTerminalSummary(t *testing.T) {
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
@@ -72,6 +135,26 @@ func TestServicesRoundTripAndRunHasOneTerminalSummary(t *testing.T) {
 	}
 	if updates != 2 || terminal != 1 {
 		t.Fatalf("updates=%d terminal=%d, want 2 and 1", updates, terminal)
+	}
+}
+
+func TestValidationFailureMakesRunErrorsActionable(t *testing.T) {
+	got := validationFailure([]*assayv1.FieldError{
+		{Path: "instrument", Message: "is required"},
+		{Path: "nodes.0", Message: "unknown primitive"},
+		{Path: "risk.stop", Message: "must be positive"},
+		{Path: "slots.target", Message: "is required"},
+	})
+	for _, want := range []string{
+		"instrument: is required",
+		"nodes.0: unknown primitive",
+		"risk.stop: must be positive",
+		"and 1 more",
+		"Open Strategy Editor to fix it.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("validation failure %q does not contain %q", got, want)
+		}
 	}
 }
 

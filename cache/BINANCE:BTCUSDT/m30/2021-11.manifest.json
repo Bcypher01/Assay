@@ -1,0 +1,12 @@
+{
+  "symbol": "BINANCE:BTCUSDT",
+  "tf": "m30",
+  "month": "2021-11",
+  "rows": 1440,
+  "first": 1635724800000,
+  "last": 1638315000000,
+  "contentHash": "8f5f52314ece2aa5f1684ec618c5adf8b46f976806c18d4ffe68fce78384bf7e",
+  "source": "venue-router",
+  "buildVersion": "fallback",
+  "schemaVersion": 1
+}

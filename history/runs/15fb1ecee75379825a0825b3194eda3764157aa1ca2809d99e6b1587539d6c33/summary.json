@@ -1,0 +1,20 @@
+{
+  "id": "15fb1ecee75379825a0825b3194eda3764157aa1ca2809d99e6b1587539d6c33",
+  "strategyHash": "e4e08301ad6abc67a5a572dce0b3c33c89cb5fbf1ba265b0850ab9dba0d65ddb",
+  "snapshot": "b31916f9a9292f319ed1da2ca246f036cedc5e5ed784c3188347437afc2dbd4e",
+  "name": "GBPUSD daily MA-cross test",
+  "scope": {
+    "Instruments": [
+      "DUKAS:GBPUSD"
+    ],
+    "Period": "1388534400000-1640908800000"
+  },
+  "createdAt": "2026-08-24T12:47:41.968363Z",
+  "trades": 108,
+  "finalEquity": {
+    "Pessimistic": -10882,
+    "Optimistic": -972
+  },
+  "parameters": "step_1={\"fastPeriod\":10,\"slowPeriod\":20}",
+  "tradeListPresent": true
+}

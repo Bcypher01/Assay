@@ -1,0 +1,82 @@
+{
+  "Strategy": {
+    "schema": "",
+    "name": "BTC breaker long",
+    "universe": {
+      "symbols": [
+        "BINANCE:BTCUSDT"
+      ]
+    },
+    "timeframes": {
+      "bias": "m30",
+      "entry": "m30",
+      "poi": "m30"
+    },
+    "risk": {
+      "stop": {
+        "unit": "pips",
+        "value": 10
+      },
+      "target": {
+        "unit": "pips",
+        "value": 30
+      },
+      "perTrade": 0
+    },
+    "direction": "long",
+    "nodes": [
+      {
+        "id": "step_1",
+        "pack": "smc",
+        "type": "breaker",
+        "params": {
+          "invalidatingTouches": 1,
+          "flipOnClose": true
+        },
+        "timeframe": "m30"
+      },
+      {
+        "id": "step_2",
+        "pack": "smc",
+        "type": "fair_value_gap",
+        "params": {},
+        "timeframe": "m30"
+      }
+    ],
+    "slots": {
+      "bias": {
+        "all": []
+      },
+      "poi": {
+        "all": []
+      },
+      "trigger": {
+        "all": [
+          "step_1"
+        ]
+      },
+      "invalidation": "",
+      "target": ""
+    }
+  },
+  "Sweep": null,
+  "WalkForward": {
+    "Train": 0,
+    "Test": 0,
+    "Step": 0,
+    "Anchored": false
+  },
+  "MonteCarlo": {
+    "Samples": 0,
+    "BlockLength": 0,
+    "Seed": 0
+  },
+  "Seed": 0,
+  "Snapshot": "b94aa7d75be0f13a1a530831160d8e6b86e69303feefd3d4682d7b4f819499e6",
+  "Scope": {
+    "Instruments": [
+      "BINANCE:BTCUSDT"
+    ],
+    "Period": "1577836800000-1640908800000"
+  }
+}

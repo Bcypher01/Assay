@@ -1,0 +1,495 @@
+package runstore
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/parquet-go/parquet-go"
+
+	"github.com/Bcypher01/Assay/internal/analytics"
+	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/Bcypher01/Assay/internal/ir"
+	"github.com/Bcypher01/Assay/internal/sim"
+)
+
+var ErrNotFound = errors.New("runstore: run not found")
+
+type RunID string
+type Scope = analytics.Scope
+
+// Filter restricts a history listing. Empty fields are ignored. Sort accepts
+// "date", "metric", or "instrument"; descending is the default for date and
+// metric, ascending for instrument.
+type Filter struct {
+	Instrument, Sort string
+	Desc             bool
+}
+
+type RunSummary struct {
+	ID               RunID             `json:"id"`
+	StrategyHash     string            `json:"strategyHash"`
+	Snapshot         string            `json:"snapshot"`
+	Name             string            `json:"name"`
+	Scope            Scope             `json:"scope"`
+	CreatedAt        time.Time         `json:"createdAt"`
+	Trades           int               `json:"trades"`
+	FinalEquity      analytics.Bounded `json:"finalEquity"`
+	Parameters       string            `json:"parameters"`
+	TradeListPresent bool              `json:"tradeListPresent"`
+}
+
+type Run struct {
+	RunSummary
+	Study  *analytics.Study       `json:"study"`
+	Result *analytics.StudyResult `json:"result"`
+	Trades []sim.Trade            `json:"trades,omitempty"`
+}
+type ParamChange struct {
+	Path string `json:"path"`
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+type Diff struct {
+	ParamChanges []ParamChange                `json:"paramChanges"`
+	MetricDeltas map[string]analytics.Bounded `json:"metricDeltas"`
+}
+
+type Store interface {
+	Put(context.Context, *analytics.Study, *analytics.StudyResult) (RunID, error)
+	Get(context.Context, RunID) (*Run, error)
+	List(context.Context, Filter) ([]RunSummary, error)
+	Trials(context.Context, Scope) (int, error)
+	Compare(context.Context, RunID, RunID) (Diff, error)
+	Export(context.Context, RunID, io.Writer) error
+}
+
+// LocalStore is a small, crash-safe file store. Index records are retained even
+// when retention removes a trade parquet file, preserving trial disclosure.
+type LocalStore struct {
+	root     string
+	maxBytes int64
+	mu       sync.Mutex
+}
+type Option func(*LocalStore)
+
+func WithMaxBytes(n int64) Option { return func(s *LocalStore) { s.maxBytes = n } }
+func Open(root string, options ...Option) (*LocalStore, error) {
+	s := &LocalStore{root: root, maxBytes: 512 << 20}
+	for _, option := range options {
+		option(s)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "runs"), 0o755); err != nil {
+		return nil, err
+	}
+	if _, err := os.Stat(s.indexPath()); errors.Is(err, os.ErrNotExist) {
+		if err := atomicWrite(s.indexPath(), []byte("[]\n")); err != nil {
+			return nil, err
+		}
+	}
+	return s, nil
+}
+func New(root string, options ...Option) (*LocalStore, error) { return Open(root, options...) }
+func (s *LocalStore) indexPath() string                       { return filepath.Join(s.root, "index.json") }
+func (s *LocalStore) runDir(id RunID) string                  { return filepath.Join(s.root, "runs", string(id)) }
+
+func (s *LocalStore) Put(ctx context.Context, study *analytics.Study, result *analytics.StudyResult) (RunID, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if study == nil || study.Strategy == nil || result == nil {
+		return "", fmt.Errorf("runstore: study, strategy, and result are required")
+	}
+	strategyHash := study.Strategy.Hash()
+	snapshot := study.Snapshot
+	if snapshot == "" {
+		return "", fmt.Errorf("runstore: data snapshot is required")
+	}
+	id := runID(strategyHash, snapshot)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	items, err := s.readIndex()
+	if err != nil {
+		return "", err
+	}
+	for _, item := range items {
+		if item.ID == id {
+			return id, nil
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	dir := s.runDir(id)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	// JSON is intentionally the canonical document and result representation.
+	if err := writeJSON(filepath.Join(dir, "study.json"), study); err != nil {
+		return "", err
+	}
+	if err := writeJSON(filepath.Join(dir, "result.json"), result); err != nil {
+		return "", err
+	}
+	summary := makeSummary(id, strategyHash, study, result)
+	if err := writeJSON(filepath.Join(dir, "summary.json"), summary); err != nil {
+		return "", err
+	}
+	items = append(items, summary)
+	if err := s.writeIndex(items); err != nil {
+		return "", err
+	}
+	if err := s.enforceRetention(items); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+// PutTrades writes the full simulator trade list after Put. Keeping this
+// separate lets analytics be persisted before a large list arrives.
+func (s *LocalStore) PutTrades(ctx context.Context, id RunID, trades []sim.Trade) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	items, err := s.readIndex()
+	if err != nil {
+		return err
+	}
+	found := -1
+	for i := range items {
+		if items[i].ID == id {
+			found = i
+			break
+		}
+	}
+	if found < 0 {
+		return ErrNotFound
+	}
+	if err := writeTrades(filepath.Join(s.runDir(id), "trades.parquet"), trades); err != nil {
+		return err
+	}
+	items[found].TradeListPresent = true
+	if err := writeJSON(filepath.Join(s.runDir(id), "summary.json"), items[found]); err != nil {
+		return err
+	}
+	if err := s.writeIndex(items); err != nil {
+		return err
+	}
+	return s.enforceRetention(items)
+}
+func (s *LocalStore) Get(ctx context.Context, id RunID) (*Run, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var summary RunSummary
+	if err := readJSON(filepath.Join(s.runDir(id), "summary.json"), &summary); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	r := &Run{RunSummary: summary, Study: &analytics.Study{}, Result: &analytics.StudyResult{}}
+	if err := readJSON(filepath.Join(s.runDir(id), "study.json"), r.Study); err != nil {
+		return nil, err
+	}
+	if err := readJSON(filepath.Join(s.runDir(id), "result.json"), r.Result); err != nil {
+		return nil, err
+	}
+	if summary.TradeListPresent {
+		r.Trades, _ = readTrades(filepath.Join(s.runDir(id), "trades.parquet"))
+	}
+	return r, nil
+}
+func (s *LocalStore) List(ctx context.Context, f Filter) ([]RunSummary, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	items, err := s.readIndex()
+	if err != nil {
+		return nil, err
+	}
+	out := items[:0]
+	for _, item := range items {
+		if f.Instrument == "" || contains(item.Scope.Instruments, f.Instrument) {
+			out = append(out, item)
+		}
+	}
+	desc := f.Desc || f.Sort == "" || f.Sort == "date"
+	sort.Slice(out, func(i, j int) bool {
+		var less bool
+		switch f.Sort {
+		case "instrument":
+			less = firstInstrument(out[i]) < firstInstrument(out[j])
+		case "metric":
+			less = out[i].FinalEquity.Pessimistic < out[j].FinalEquity.Pessimistic
+		default:
+			less = out[i].CreatedAt.Before(out[j].CreatedAt)
+		}
+		if desc {
+			return !less && out[i].ID != out[j].ID
+		}
+		return less
+	})
+	return append([]RunSummary(nil), out...), nil
+}
+func (s *LocalStore) Trials(ctx context.Context, scope Scope) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	items, err := s.readIndex()
+	if err != nil {
+		return 0, err
+	}
+	seen := map[string]bool{}
+	key := scopeKey(scope)
+	for _, item := range items {
+		if scopeKey(item.Scope) == key {
+			seen[item.StrategyHash] = true
+		}
+	}
+	return len(seen), nil
+}
+func (s *LocalStore) Compare(ctx context.Context, a, b RunID) (Diff, error) {
+	left, e := s.Get(ctx, a)
+	if e != nil {
+		return Diff{}, e
+	}
+	right, e := s.Get(ctx, b)
+	if e != nil {
+		return Diff{}, e
+	}
+	return compare(left, right), nil
+}
+func (s *LocalStore) Export(ctx context.Context, id RunID, w io.Writer) error {
+	r, e := s.Get(ctx, id)
+	if e != nil {
+		return e
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return json.NewEncoder(w).Encode(r)
+}
+
+func makeSummary(id RunID, hash string, s *analytics.Study, r *analytics.StudyResult) RunSummary {
+	return RunSummary{ID: id, StrategyHash: hash, Snapshot: s.Snapshot, Name: s.Strategy.Name, Scope: canonicalScope(s.Scope, s.Strategy.Universe.Symbols), CreatedAt: time.Now().UTC(), Trades: r.OutOfSample.Trades, FinalEquity: r.OutOfSample.FinalEquity, Parameters: paramSummary(s.Strategy)}
+}
+func runID(strategy, snapshot string) RunID {
+	h := sha256.Sum256([]byte(strategy + "\x00" + snapshot))
+	return RunID(hex.EncodeToString(h[:]))
+}
+func canonicalScope(s Scope, fallback []string) Scope {
+	if len(s.Instruments) == 0 {
+		s.Instruments = append([]string(nil), fallback...)
+	}
+	sort.Strings(s.Instruments)
+	return s
+}
+func scopeKey(s Scope) string {
+	s = canonicalScope(s, nil)
+	return strings.Join(s.Instruments, "\x1f") + "\x1e" + s.Period
+}
+func contains(xs []string, x string) bool {
+	for _, y := range xs {
+		if x == y {
+			return true
+		}
+	}
+	return false
+}
+func firstInstrument(s RunSummary) string {
+	if len(s.Scope.Instruments) == 0 {
+		return ""
+	}
+	return s.Scope.Instruments[0]
+}
+func paramSummary(s *ir.Strategy) string {
+	if s == nil {
+		return ""
+	}
+	var p []string
+	for _, n := range s.Nodes {
+		p = append(p, n.ID+"="+string(n.Params))
+	}
+	sort.Strings(p)
+	return strings.Join(p, ", ")
+}
+func compare(a, b *Run) Diff {
+	d := Diff{MetricDeltas: map[string]analytics.Bounded{}}
+	am, bm := strategyParams(a.Study.Strategy), strategyParams(b.Study.Strategy)
+	keys := map[string]bool{}
+	for k := range am {
+		keys[k] = true
+	}
+	for k := range bm {
+		keys[k] = true
+	}
+	for k := range keys {
+		if am[k] != bm[k] {
+			d.ParamChanges = append(d.ParamChanges, ParamChange{Path: k, From: am[k], To: bm[k]})
+		}
+	}
+	sort.Slice(d.ParamChanges, func(i, j int) bool { return d.ParamChanges[i].Path < d.ParamChanges[j].Path })
+	d.MetricDeltas["outOfSample.finalEquity"] = delta(a.Result.OutOfSample.FinalEquity, b.Result.OutOfSample.FinalEquity)
+	d.MetricDeltas["outOfSample.maxDrawdown"] = delta(a.Result.OutOfSample.MaxDrawdown, b.Result.OutOfSample.MaxDrawdown)
+	d.MetricDeltas["outOfSample.expectancy"] = delta(a.Result.OutOfSample.Expectancy, b.Result.OutOfSample.Expectancy)
+	return d
+}
+func strategyParams(s *ir.Strategy) map[string]string {
+	m := map[string]string{}
+	if s == nil {
+		return m
+	}
+	m["risk.stop"] = fmt.Sprint(s.Risk.Stop)
+	m["risk.target"] = fmt.Sprint(s.Risk.Target)
+	m["risk.perTrade"] = fmt.Sprint(s.Risk.PerTrade)
+	m["direction"] = string(s.Direction)
+	for _, n := range s.Nodes {
+		m["nodes."+n.ID+".params"] = string(n.Params)
+	}
+	return m
+}
+func delta(a, b analytics.Bounded) analytics.Bounded {
+	return analytics.Bounded{Pessimistic: b.Pessimistic - a.Pessimistic, Optimistic: b.Optimistic - a.Optimistic}
+}
+func (s *LocalStore) readIndex() ([]RunSummary, error) {
+	var out []RunSummary
+	err := readJSON(s.indexPath(), &out)
+	return out, err
+}
+func (s *LocalStore) writeIndex(v []RunSummary) error { return writeJSON(s.indexPath(), v) }
+func (s *LocalStore) enforceRetention(items []RunSummary) error {
+	if s.maxBytes <= 0 {
+		return nil
+	}
+	var size int64
+	type victim struct {
+		id RunID
+		at time.Time
+	}
+	var candidates []victim
+	for _, i := range items {
+		p := filepath.Join(s.runDir(i.ID), "trades.parquet")
+		if x, e := os.Stat(p); e == nil {
+			size += x.Size()
+			candidates = append(candidates, victim{i.ID, i.CreatedAt})
+		}
+	}
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].at.Before(candidates[j].at) })
+	for _, v := range candidates {
+		if size <= s.maxBytes {
+			break
+		}
+		p := filepath.Join(s.runDir(v.id), "trades.parquet")
+		x, e := os.Stat(p)
+		if e != nil {
+			continue
+		}
+		if e = os.Remove(p); e != nil {
+			return e
+		}
+		size -= x.Size()
+		for i := range items {
+			if items[i].ID == v.id {
+				items[i].TradeListPresent = false
+				_ = writeJSON(filepath.Join(s.runDir(v.id), "summary.json"), items[i])
+			}
+		}
+	}
+	return s.writeIndex(items)
+}
+func writeJSON(path string, v any) error {
+	b, e := json.MarshalIndent(v, "", "  ")
+	if e != nil {
+		return e
+	}
+	return atomicWrite(path, append(b, '\n'))
+}
+func readJSON(path string, v any) error {
+	b, e := os.ReadFile(path)
+	if e != nil {
+		return e
+	}
+	return json.Unmarshal(b, v)
+}
+func atomicWrite(path string, b []byte) error {
+	tmp := path + ".tmp"
+	if e := os.WriteFile(tmp, b, 0o644); e != nil {
+		return e
+	}
+	return os.Rename(tmp, path)
+}
+
+type tradeRow struct {
+	Side       int32 `parquet:"side"`
+	EntryTime  int64 `parquet:"entry_time"`
+	EntryBar   int64 `parquet:"entry_bar"`
+	EntryPrice int64 `parquet:"entry_price"`
+	Stop       int64 `parquet:"stop"`
+	Target     int64 `parquet:"target"`
+	Lots       int64 `parquet:"lots"`
+	PessNet    int64 `parquet:"pess_net"`
+	OptNet     int64 `parquet:"opt_net"`
+	Ambiguous  bool  `parquet:"ambiguous"`
+}
+
+func writeTrades(path string, trades []sim.Trade) error {
+	var b bytes.Buffer
+	w := parquet.NewGenericWriter[tradeRow](&b)
+	rows := make([]tradeRow, len(trades))
+	for i, t := range trades {
+		rows[i] = tradeRow{int32(t.Side), int64(t.EntryTime), int64(t.EntryBar), int64(t.EntryPrice), int64(t.Stop), int64(t.Target), int64(t.Lots), int64(t.Pessimistic.Net), int64(t.Optimistic.Net), t.Ambiguous}
+	}
+	if _, e := w.Write(rows); e != nil {
+		return e
+	}
+	if e := w.Close(); e != nil {
+		return e
+	}
+	return atomicWrite(path, b.Bytes())
+}
+func readTrades(path string) ([]sim.Trade, error) {
+	f, e := os.Open(path)
+	if e != nil {
+		return nil, e
+	}
+	defer f.Close()
+	r := parquet.NewGenericReader[tradeRow](f)
+	defer r.Close()
+	var rows []tradeRow
+	buf := make([]tradeRow, 256)
+	for {
+		n, e := r.Read(buf)
+		rows = append(rows, buf[:n]...)
+		if e == io.EOF {
+			break
+		}
+		if e != nil {
+			return nil, e
+		}
+	}
+	out := make([]sim.Trade, len(rows))
+	for i, x := range rows {
+		out[i] = sim.Trade{Side: core.Side(x.Side), EntryTime: core.Time(x.EntryTime), EntryBar: int(x.EntryBar), EntryPrice: core.Price(x.EntryPrice), Stop: core.Price(x.Stop), Target: core.Price(x.Target), Lots: core.Ratio(x.Lots), Pessimistic: sim.Outcome{Net: core.Price(x.PessNet)}, Optimistic: sim.Outcome{Net: core.Price(x.OptNet)}, Ambiguous: x.Ambiguous}
+	}
+	return out, nil
+}

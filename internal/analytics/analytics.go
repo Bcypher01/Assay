@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"sort"
 	"sync"
+
+	"github.com/Bcypher01/Assay/internal/ir"
 )
 
 // Bounded is the mandatory representation for an ambiguity-affected metric.
@@ -23,6 +25,26 @@ type StudyResult struct {
 	Trials                int
 	Deflated              Metrics
 	CostCurve             []Metrics
+}
+
+// Study is the reproducible input to an analytics run.  Snapshot identifies
+// the immutable market-data snapshot used for the run; Scope identifies the
+// instrument set and period used for multiple-testing disclosure.
+type Study struct {
+	Strategy    *ir.Strategy
+	Sweep       []ParamAxis
+	WalkForward WFConfig
+	MonteCarlo  MCConfig
+	Seed        int64
+	Snapshot    string
+	Scope       Scope
+}
+
+// Scope deliberately lives with the study document so persistence does not
+// need to infer a period from a result after the fact.
+type Scope struct {
+	Instruments []string
+	Period      string
 }
 
 // Returns contains each trade's pessimistic and optimistic PnL in account units.

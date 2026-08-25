@@ -3,5 +3,8 @@ plugins:
   - plugin: buf.build/protocolbuffers/go
     out: .
     opt: paths=source_relative
+  - plugin: buf.build/connectrpc/go
+    out: .
+    opt: paths=source_relative
   # The standalone UI consumes this same source through its own buf generation
   # target (for example buf.build/bufbuild/es). No UI code lives in this repo.

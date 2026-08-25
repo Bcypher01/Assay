@@ -1,0 +1,20 @@
+{
+  "id": "97d257d82519be8b2ca336d8c81fa242405654e8dbeeb086d890a6092a70a2fc",
+  "strategyHash": "296a86d71af03be2c1338b15b52dd0a5dfebcf257add23e4b99403befe7db652",
+  "snapshot": "b31916f9a9292f319ed1da2ca246f036cedc5e5ed784c3188347437afc2dbd4e",
+  "name": "GBPUSD daily MA cross — short",
+  "scope": {
+    "Instruments": [
+      "DUKAS:GBPUSD"
+    ],
+    "Period": "1388534400000-1640908800000"
+  },
+  "createdAt": "2026-08-24T12:57:59.302222Z",
+  "trades": 54,
+  "finalEquity": {
+    "Pessimistic": -5441,
+    "Optimistic": -486
+  },
+  "parameters": "step_1={\"fastPeriod\":10,\"slowPeriod\":20}",
+  "tradeListPresent": true
+}

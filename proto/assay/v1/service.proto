@@ -7,9 +7,52 @@ option go_package = "github.com/Bcypher01/Assay/proto/assay/v1;assayv1";
 message Empty {}
 message Instrument { string symbol = 1; string quality_tier = 2; repeated string timeframes = 3; }
 message ListInstrumentsResponse { repeated Instrument instruments = 1; }
-message EnsureDataRequest { string symbol = 1; string timeframe = 2; }
-message Progress { uint32 percent = 1; string stage = 2; }
-service DataService { rpc ListInstruments(Empty) returns (ListInstrumentsResponse); rpc EnsureData(EnsureDataRequest) returns (stream Progress); }
+message EnsureDataRequest { string symbol = 1; string timeframe = 2; sint64 from_ms = 3; sint64 to_ms = 4; }
+enum ProgressStage {
+  PROGRESS_STAGE_UNSPECIFIED = 0;
+  PROGRESS_STAGE_CHECKING_LOCAL_DATA = 1;
+  PROGRESS_STAGE_DOWNLOADING = 2;
+  PROGRESS_STAGE_VERIFYING = 3;
+  PROGRESS_STAGE_SAVING_LOCALLY = 4;
+  PROGRESS_STAGE_READY = 5;
+  PROGRESS_STAGE_LOADING_CACHE = 6;
+  PROGRESS_STAGE_EVALUATING_STRATEGY = 7;
+  PROGRESS_STAGE_SIMULATING = 8;
+  PROGRESS_STAGE_CALCULATING_METRICS = 9;
+  PROGRESS_STAGE_SAVING_HISTORY = 10;
+}
+message Progress { uint32 percent = 1; string stage = 2; sint64 bytes_done = 3; sint64 bytes_total = 4; string current_file = 5; ProgressStage stage_code = 6; }
+enum DataReadiness {
+  DATA_READINESS_UNSPECIFIED = 0;
+  DATA_READINESS_READY = 1;
+  DATA_READINESS_PARTIAL = 2;
+  DATA_READINESS_MISSING = 3;
+  DATA_READINESS_SOURCE_UNAVAILABLE = 4;
+  DATA_READINESS_CORRUPT = 5;
+  DATA_READINESS_UNSUPPORTED = 6;
+}
+message DataPartition {
+  string symbol = 1;
+  string timeframe = 2;
+  string month = 3;
+  sint64 from_ms = 4;
+  sint64 to_ms = 5;
+}
+message DataStatusResponse {
+  DataReadiness readiness = 1;
+  sint64 requested_from_ms = 2;
+  sint64 requested_to_ms = 3;
+  sint64 cached_from_ms = 4;
+  sint64 cached_to_ms = 5;
+  repeated DataPartition missing_partitions = 6;
+  string snapshot = 7;
+  repeated string sources = 8;
+  sint64 last_successful_preparation_ms = 9;
+  bool external_access_required = 10;
+  string error_code = 11;
+  string error = 12;
+}
+service DataService { rpc ListInstruments(Empty) returns (ListInstrumentsResponse); rpc DataStatus(EnsureDataRequest) returns (DataStatusResponse); rpc EnsureData(EnsureDataRequest) returns (stream Progress); }
 
 message PrimitiveInfo { string pack = 1; string type = 2; string output_kind = 3; string parameter_schema = 4; bool timeframed = 5; }
 message ListPrimitivesResponse { repeated PrimitiveInfo primitives = 1; }
@@ -28,12 +71,27 @@ message RunRequest {
 }
 message EquityChunk { repeated sint64 values = 1; }
 message TradeChunk { uint32 count = 1; }
-message RunSummary { uint32 trades = 1; uint32 unresolved = 2; string error = 3; }
+message RunSummary {
+  uint32 trades = 1;
+  uint32 unresolved = 2;
+  string error = 3;
+  string run_id = 4;
+  uint32 wins = 5;
+  uint32 losses = 6;
+  uint32 long_trades = 7;
+  uint32 short_trades = 8;
+  sint64 net_pnl = 9;
+  double expectancy = 10;
+  double profit_factor = 11;
+  string error_code = 12;
+}
 message RunUpdate { oneof payload { Progress progress = 1; EquityChunk equity = 2; TradeChunk trades = 3; RunSummary summary = 4; } }
 service StudyService { rpc Validate(ValidateRequest) returns (ValidateResponse); rpc Run(RunRequest) returns (stream RunUpdate); }
 
 message ListRunsResponse { repeated string hashes = 1; }
 message GetRunRequest { string hash = 1; }
 message CompareRunsRequest { string left = 1; string right = 2; }
-message CompareRunsResponse { string error = 1; }
+message ParamChange { string path = 1; string from = 2; string to = 3; }
+message MetricDelta { string name = 1; double pessimistic = 2; double optimistic = 3; }
+message CompareRunsResponse { string error = 1; repeated ParamChange changes = 2; repeated MetricDelta metric_deltas = 3; }
 service RunService { rpc ListRuns(Empty) returns (ListRunsResponse); rpc GetRun(GetRunRequest) returns (RunSummary); rpc Compare(CompareRunsRequest) returns (CompareRunsResponse); }

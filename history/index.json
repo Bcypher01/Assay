@@ -1,0 +1,322 @@
+[
+  {
+    "id": "5a2a80097e279b27e9c7144044ae21dfa9f21a91aff9cb2445d940993704569b",
+    "strategyHash": "4b533c00261eb556ac4664813de9489994d708ee166a092951d66dc34f76e0a8",
+    "snapshot": "d8b0b8a99d9224058e3a6ef2a163441263f74533d94739ad60f32b1c03a37e86",
+    "name": "New study",
+    "scope": {
+      "Instruments": [
+        "DUKAS:EURUSD"
+      ],
+      "Period": "1737676800000-1787529600000"
+    },
+    "createdAt": "2026-08-24T10:22:13.233138Z",
+    "trades": 200,
+    "finalEquity": {
+      "Pessimistic": -9140,
+      "Optimistic": -1400
+    },
+    "parameters": "step_2={}",
+    "tradeListPresent": true
+  },
+  {
+    "id": "446f7cce1733f3e8d8e144a30e026fbc81b7dc55c42322f45b68259690f455e4",
+    "strategyHash": "abceae8281b0d2922651170f48c59dff787ed69411218507abd1adeb76b7fb69",
+    "snapshot": "d8b0b8a99d9224058e3a6ef2a163441263f74533d94739ad60f32b1c03a37e86",
+    "name": "New study",
+    "scope": {
+      "Instruments": [
+        "DUKAS:EURUSD"
+      ],
+      "Period": "1737676800000-1787529600000"
+    },
+    "createdAt": "2026-08-24T10:26:06.869618Z",
+    "trades": 22,
+    "finalEquity": {
+      "Pessimistic": -1057,
+      "Optimistic": -154
+    },
+    "parameters": "step_1={}",
+    "tradeListPresent": true
+  },
+  {
+    "id": "0a4301a7381e52924be124394a766d3875a37e89ced12f4d61e94cf4df8ec67f",
+    "strategyHash": "344ed96050d636be1820ec6f9d635953193aa8fa8869b338a4bcb143d137780d",
+    "snapshot": "d8b0b8a99d9224058e3a6ef2a163441263f74533d94739ad60f32b1c03a37e86",
+    "name": "New study",
+    "scope": {
+      "Instruments": [
+        "DUKAS:EURUSD"
+      ],
+      "Period": "1737676800000-1787529600000"
+    },
+    "createdAt": "2026-08-24T12:03:29.612178Z",
+    "trades": 13,
+    "finalEquity": {
+      "Pessimistic": -650,
+      "Optimistic": -91
+    },
+    "parameters": "step_1={}, step_2={\"minSizeTicks\":1,\"mitigationRule\":\"MITIGATION_RULE_FIRST_TOUCH\",\"expiryBars\":20,\"trackInverted\":false}, step_3={\"invalidatingTouches\":1,\"flipOnClose\":true}",
+    "tradeListPresent": true
+  },
+  {
+    "id": "6d3e82d424cdd6c9ff09719b195d8b490e2839153b09d86fdfdd6c73e2ba1b96",
+    "strategyHash": "7705ed5051c1dd1a56f04080e5df42dbd36b68f477bdc976c99f9138fcf6d870",
+    "snapshot": "d8b0b8a99d9224058e3a6ef2a163441263f74533d94739ad60f32b1c03a37e86",
+    "name": "New study",
+    "scope": {
+      "Instruments": [
+        "DUKAS:EURUSD"
+      ],
+      "Period": "1737676800000-1787529600000"
+    },
+    "createdAt": "2026-08-24T12:07:53.863279Z",
+    "trades": 200,
+    "finalEquity": {
+      "Pessimistic": -9140,
+      "Optimistic": -1400
+    },
+    "parameters": "step_2={\"minSizeTicks\":1,\"mitigationRule\":\"MITIGATION_RULE_FIRST_TOUCH\",\"expiryBars\":20,\"trackInverted\":false}, step_3={\"invalidatingTouches\":1,\"flipOnClose\":true}",
+    "tradeListPresent": true
+  },
+  {
+    "id": "92ea3fa0e2725520c565448bc75900f247aa14208bca160db1bce2f641e783a3",
+    "strategyHash": "142124dbf69e497ee42ef10fe67d33bf8cd277b61fcf5bc13616a09676b43abf",
+    "snapshot": "d8b0b8a99d9224058e3a6ef2a163441263f74533d94739ad60f32b1c03a37e86",
+    "name": "New study",
+    "scope": {
+      "Instruments": [
+        "DUKAS:EURUSD"
+      ],
+      "Period": "1737676800000-1787529600000"
+    },
+    "createdAt": "2026-08-24T12:08:25.291803Z",
+    "trades": 200,
+    "finalEquity": {
+      "Pessimistic": -9140,
+      "Optimistic": -1400
+    },
+    "parameters": "step_3={\"invalidatingTouches\":1,\"flipOnClose\":true}",
+    "tradeListPresent": true
+  },
+  {
+    "id": "0878dbb2d5b47e613312e13dcf92a809010e8e2b7f38de7803dbe4bd2ef3f717",
+    "strategyHash": "508894c74f8d8b93178291783764c40a2908291d70b2605bff188f88b1cfbf78",
+    "snapshot": "b31916f9a9292f319ed1da2ca246f036cedc5e5ed784c3188347437afc2dbd4e",
+    "name": "GBPUSD daily MA-cross test",
+    "scope": {
+      "Instruments": [
+        "DUKAS:GBPUSD"
+      ],
+      "Period": "1388534400000-1640908800000"
+    },
+    "createdAt": "2026-08-24T12:44:41.547021Z",
+    "trades": 108,
+    "finalEquity": {
+      "Pessimistic": -14846,
+      "Optimistic": -972
+    },
+    "parameters": "step_1={\"fastPeriod\":10,\"slowPeriod\":20}",
+    "tradeListPresent": true
+  },
+  {
+    "id": "15fb1ecee75379825a0825b3194eda3764157aa1ca2809d99e6b1587539d6c33",
+    "strategyHash": "e4e08301ad6abc67a5a572dce0b3c33c89cb5fbf1ba265b0850ab9dba0d65ddb",
+    "snapshot": "b31916f9a9292f319ed1da2ca246f036cedc5e5ed784c3188347437afc2dbd4e",
+    "name": "GBPUSD daily MA-cross test",
+    "scope": {
+      "Instruments": [
+        "DUKAS:GBPUSD"
+      ],
+      "Period": "1388534400000-1640908800000"
+    },
+    "createdAt": "2026-08-24T12:47:41.968363Z",
+    "trades": 108,
+    "finalEquity": {
+      "Pessimistic": -10882,
+      "Optimistic": -972
+    },
+    "parameters": "step_1={\"fastPeriod\":10,\"slowPeriod\":20}",
+    "tradeListPresent": true
+  },
+  {
+    "id": "5178b6085f12b40cccfe608dd40879381ea9bcace1de1ba796713cf6a7f632ce",
+    "strategyHash": "192474006672a3dfcfee31c348c4c976696481ba99b1658af062a2e9b5c27676",
+    "snapshot": "b31916f9a9292f319ed1da2ca246f036cedc5e5ed784c3188347437afc2dbd4e",
+    "name": "GBPUSD daily MA cross — long",
+    "scope": {
+      "Instruments": [
+        "DUKAS:GBPUSD"
+      ],
+      "Period": "1388534400000-1640908800000"
+    },
+    "createdAt": "2026-08-24T12:57:14.717081Z",
+    "trades": 54,
+    "finalEquity": {
+      "Pessimistic": -6432,
+      "Optimistic": -486
+    },
+    "parameters": "step_2={\"fastPeriod\":10,\"slowPeriod\":20}",
+    "tradeListPresent": true
+  },
+  {
+    "id": "97d257d82519be8b2ca336d8c81fa242405654e8dbeeb086d890a6092a70a2fc",
+    "strategyHash": "296a86d71af03be2c1338b15b52dd0a5dfebcf257add23e4b99403befe7db652",
+    "snapshot": "b31916f9a9292f319ed1da2ca246f036cedc5e5ed784c3188347437afc2dbd4e",
+    "name": "GBPUSD daily MA cross — short",
+    "scope": {
+      "Instruments": [
+        "DUKAS:GBPUSD"
+      ],
+      "Period": "1388534400000-1640908800000"
+    },
+    "createdAt": "2026-08-24T12:57:59.302222Z",
+    "trades": 54,
+    "finalEquity": {
+      "Pessimistic": -5441,
+      "Optimistic": -486
+    },
+    "parameters": "step_1={\"fastPeriod\":10,\"slowPeriod\":20}",
+    "tradeListPresent": true
+  },
+  {
+    "id": "bc1cfdacbe9b3f19f4a55ce70ad6420069d5126d04fd8acbcd90374381bff75e",
+    "strategyHash": "4a9b9bc727b911535098bec177c2e65532c62019d657061993b447ee223b0f2e",
+    "snapshot": "b31916f9a9292f319ed1da2ca246f036cedc5e5ed784c3188347437afc2dbd4e",
+    "name": "GBPUSD daily MA cross — short",
+    "scope": {
+      "Instruments": [
+        "DUKAS:GBPUSD"
+      ],
+      "Period": "1388534400000-1640908800000"
+    },
+    "createdAt": "2026-08-24T13:15:55.506008Z",
+    "trades": 54,
+    "finalEquity": {
+      "Pessimistic": 302,
+      "Optimistic": 302
+    },
+    "parameters": "step_2={\"fastPeriod\":10,\"slowPeriod\":20}",
+    "tradeListPresent": true
+  },
+  {
+    "id": "5f208799fb21f33c40d78ccbfe99458dbb29094aa5ff4e18227a1885aa79cf7e",
+    "strategyHash": "c8e16f666528362017ff92d96d5a56c8b0fceb95c7406649ac910d54672f5b64",
+    "snapshot": "b31916f9a9292f319ed1da2ca246f036cedc5e5ed784c3188347437afc2dbd4e",
+    "name": "GBPUSD daily breaker long",
+    "scope": {
+      "Instruments": [
+        "DUKAS:GBPUSD"
+      ],
+      "Period": "1388534400000-1640908800000"
+    },
+    "createdAt": "2026-08-24T13:25:59.593282Z",
+    "trades": 2079,
+    "finalEquity": {
+      "Pessimistic": -510180,
+      "Optimistic": -510180
+    },
+    "parameters": "step_1={\"invalidatingTouches\":1,\"flipOnClose\":true}",
+    "tradeListPresent": true
+  },
+  {
+    "id": "4e290ddeac0b8fbba8f7533bf2cbdefeffbd396c51e78932de96685c87e2a659",
+    "strategyHash": "de14503ff8ea1e12180f687c2363af10c4d1f8d5d05045967072c6f84b21795b",
+    "snapshot": "b31916f9a9292f319ed1da2ca246f036cedc5e5ed784c3188347437afc2dbd4e",
+    "name": "GBPUSD daily breaker short",
+    "scope": {
+      "Instruments": [
+        "DUKAS:GBPUSD"
+      ],
+      "Period": "1388534400000-1640908800000"
+    },
+    "createdAt": "2026-08-24T13:26:29.424071Z",
+    "trades": 2079,
+    "finalEquity": {
+      "Pessimistic": -383274,
+      "Optimistic": -383274
+    },
+    "parameters": "step_1={\"invalidatingTouches\":1,\"flipOnClose\":true}",
+    "tradeListPresent": true
+  },
+  {
+    "id": "bf38432e556df96eb41e45967169b502fbb590f8b98e7544783a69f537d61c69",
+    "strategyHash": "a161036c6de37211341b70c6fd08cfb4ccc3925a83d16995603631199b82d90b",
+    "snapshot": "b31916f9a9292f319ed1da2ca246f036cedc5e5ed784c3188347437afc2dbd4e",
+    "name": "GBPUSD daily breaker short",
+    "scope": {
+      "Instruments": [
+        "DUKAS:GBPUSD"
+      ],
+      "Period": "1388534400000-1640908800000"
+    },
+    "createdAt": "2026-08-24T13:26:46.494759Z",
+    "trades": 2079,
+    "finalEquity": {
+      "Pessimistic": -383274,
+      "Optimistic": -383274
+    },
+    "parameters": "step_1={\"invalidatingTouches\":1,\"flipOnClose\":true}, step_2={}",
+    "tradeListPresent": true
+  },
+  {
+    "id": "b997b06946f22512967aa35bc2a5b69bf84cf6d6cd55856eadb8a2eab556b161",
+    "strategyHash": "3ba218fd70f9ffe9668954f45b88d8bfc752874e5982e5c84b1ae9894557bf03",
+    "snapshot": "b94aa7d75be0f13a1a530831160d8e6b86e69303feefd3d4682d7b4f819499e6",
+    "name": "BTC breaker long",
+    "scope": {
+      "Instruments": [
+        "BINANCE:BTCUSDT"
+      ],
+      "Period": "1577836800000-1640908800000"
+    },
+    "createdAt": "2026-08-24T21:31:17.305193Z",
+    "trades": 34966,
+    "finalEquity": {
+      "Pessimistic": -102330937,
+      "Optimistic": -102026093
+    },
+    "parameters": "step_1={\"invalidatingTouches\":1,\"flipOnClose\":true}, step_2={}",
+    "tradeListPresent": true
+  },
+  {
+    "id": "c8996ed79137d4bced9dea4281681495468d545d4438a92579bc23e2b9d7cdc0",
+    "strategyHash": "7687ce148e5b87198e749eed8e4ee9d02fc6e9dec95aa560f8762a0eb0e84a1c",
+    "snapshot": "b94aa7d75be0f13a1a530831160d8e6b86e69303feefd3d4682d7b4f819499e6",
+    "name": "BTC breaker long",
+    "scope": {
+      "Instruments": [
+        "BINANCE:BTCUSDT"
+      ],
+      "Period": "1577836800000-1640908800000"
+    },
+    "createdAt": "2026-08-24T21:31:35.948023Z",
+    "trades": 34966,
+    "finalEquity": {
+      "Pessimistic": -102330937,
+      "Optimistic": -102026093
+    },
+    "parameters": "step_1={\"invalidatingTouches\":1,\"flipOnClose\":true}",
+    "tradeListPresent": true
+  },
+  {
+    "id": "44dc1e7011da332805ad1d02afb9fa2eaf3e828d783475d060e55eb02f45e8a4",
+    "strategyHash": "90e0ea107c43fa9a3ba69a0793801fbf693c58c8e32b328d10df1365c1837f45",
+    "snapshot": "b94aa7d75be0f13a1a530831160d8e6b86e69303feefd3d4682d7b4f819499e6",
+    "name": "BTC breaker long",
+    "scope": {
+      "Instruments": [
+        "BINANCE:BTCUSDT"
+      ],
+      "Period": "1577836800000-1640908800000"
+    },
+    "createdAt": "2026-08-24T21:58:20.848067Z",
+    "trades": 0,
+    "finalEquity": {
+      "Pessimistic": 0,
+      "Optimistic": 0
+    },
+    "parameters": "step_1={\"invalidatingTouches\":1,\"flipOnClose\":true}",
+    "tradeListPresent": true
+  }
+]

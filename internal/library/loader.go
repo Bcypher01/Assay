@@ -20,6 +20,10 @@ import (
 // than the published library supports for an instrument.
 var ErrUnsupportedResolution = errors.New("library: unsupported resolution")
 
+// ErrDataNotReady reports that a run asked for data that is not fully present
+// in the local cache. Preparation may fetch that data; execution must not.
+var ErrDataNotReady = errors.New("library: data not ready")
+
 // UnsupportedResolutionError names the failing instrument and timeframe.
 type UnsupportedResolutionError struct {
 	Symbol string
@@ -43,11 +47,68 @@ type Request struct {
 
 // Progress is shaped for future RPC streaming.
 type Progress struct {
+	// Percent tracks completed cache partitions, not guessed transfer bytes.
+	// Some sources cannot disclose a content length, but the requested months
+	// are known before work begins, so this remains an honest overall measure.
+	Percent     uint32
 	Stage       string
 	BytesDone   int64
 	BytesTotal  int64
 	CurrentFile string
 }
+
+// Readiness is the cache-only answer to whether an exact request can run.
+type Readiness int
+
+const (
+	ReadinessUnspecified Readiness = iota
+	ReadinessReady
+	ReadinessPartial
+	ReadinessMissing
+	ReadinessSourceUnavailable
+	ReadinessCorrupt
+	ReadinessUnsupported
+)
+
+// MissingPartition names a cache partition required before a request can run.
+type MissingPartition struct {
+	Symbol string
+	TF     core.TF
+	Month  string
+	From   core.Time
+	To     core.Time
+}
+
+// Status describes local readiness without contacting object storage or a
+// venue. It is safe to call from Run preflight.
+type Status struct {
+	Readiness          Readiness
+	RequestedFrom      core.Time
+	RequestedTo        core.Time
+	CachedFrom         core.Time
+	CachedTo           core.Time
+	MissingPartitions  []MissingPartition
+	Snapshot           string
+	Sources            []string
+	ExternalRequired   bool
+	LastSuccessfulPrep core.Time
+	ErrorCode          string
+	Err                error
+}
+
+// DataNotReadyError carries the status that prevented cache-only execution.
+type DataNotReadyError struct {
+	Status Status
+}
+
+func (e *DataNotReadyError) Error() string {
+	if e.Status.ErrorCode != "" {
+		return fmt.Sprintf("%v: %s", ErrDataNotReady, e.Status.ErrorCode)
+	}
+	return ErrDataNotReady.Error()
+}
+
+func (e *DataNotReadyError) Unwrap() error { return ErrDataNotReady }
 
 // Window is reserved for future fine-resolution escalation.
 type Window struct {
@@ -124,7 +185,13 @@ func (l *Loader) Ensure(ctx context.Context, r Request, progress func(Progress))
 	if err := l.checkSupported(r); err != nil {
 		return err
 	}
-	report(progress, Progress{Stage: "resolving"})
+	report(progress, Progress{Stage: "checking local cache"})
+	type task struct {
+		symbol string
+		tf     core.TF
+		month  monthWindow
+	}
+	var tasks []task
 	for _, sym := range r.Symbols {
 		for _, tf := range r.TFs {
 			missing, err := l.missingMonths(ctx, sym, tf, r.From, r.To)
@@ -135,16 +202,114 @@ func (l *Loader) Ensure(ctx context.Context, r Request, progress func(Progress))
 				return err
 			}
 			for _, month := range missing {
-				if err := ctx.Err(); err != nil {
-					return err
-				}
-				if err := l.ensureMonth(ctx, sym, tf, month, progress); err != nil {
-					return err
-				}
+				tasks = append(tasks, task{symbol: sym, tf: tf, month: month})
 			}
 		}
 	}
+	if len(tasks) == 0 {
+		report(progress, Progress{Percent: 100, Stage: "data already available"})
+		return nil
+	}
+	for i, task := range tasks {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		start := uint32(i * 100 / len(tasks))
+		forward := func(p Progress) {
+			p.Percent = start
+			report(progress, p)
+		}
+		if err := l.ensureMonth(ctx, task.symbol, task.tf, task.month, forward); err != nil {
+			return err
+		}
+		report(progress, Progress{
+			Percent:     uint32((i + 1) * 100 / len(tasks)),
+			Stage:       "preparing data",
+			CurrentFile: objectKey(task.symbol, task.tf, task.month.name),
+		})
+	}
 	return nil
+}
+
+// Status checks whether r is fully available in the local cache. Unlike Ensure,
+// it never contacts object storage or a fallback venue.
+func (l *Loader) Status(ctx context.Context, r Request) Status {
+	status := Status{
+		Readiness:        ReadinessMissing,
+		RequestedFrom:    r.From,
+		RequestedTo:      r.To,
+		ExternalRequired: true,
+	}
+	if l.Cache == nil {
+		status.ErrorCode = "CACHE_NOT_CONFIGURED"
+		status.Err = fmt.Errorf("library: missing local cache")
+		return status
+	}
+	if len(r.Symbols) == 0 || len(r.TFs) == 0 {
+		status.ErrorCode = "EMPTY_REQUEST"
+		status.Err = fmt.Errorf("library: empty request")
+		return status
+	}
+	if r.To <= r.From {
+		status.ErrorCode = "INVALID_WINDOW"
+		status.Err = fmt.Errorf("library: invalid window")
+		return status
+	}
+	if err := l.checkSupported(r); err != nil {
+		status.Readiness = ReadinessUnsupported
+		status.ErrorCode = "UNSUPPORTED_RESOLUTION"
+		status.Err = err
+		return status
+	}
+
+	var allManifests []store.Manifest
+	sourceSet := map[string]bool{}
+	for _, sym := range r.Symbols {
+		for _, tf := range r.TFs {
+			_, manifests, err := l.Cache.Load(ctx, sym, tf, r.From, r.To)
+			if err != nil {
+				status.Readiness = ReadinessCorrupt
+				status.ErrorCode = "CACHE_CORRUPT"
+				status.Err = err
+				return status
+			}
+			allManifests = append(allManifests, manifests...)
+			for _, mf := range manifests {
+				if status.CachedFrom == 0 || mf.First < status.CachedFrom {
+					status.CachedFrom = mf.First
+				}
+				if mf.Last > status.CachedTo {
+					status.CachedTo = mf.Last
+				}
+				if mf.Source != "" {
+					sourceSet[mf.Source] = true
+				}
+				if mf.Last > status.LastSuccessfulPrep {
+					status.LastSuccessfulPrep = mf.Last
+				}
+			}
+			missing := missingPartitions(sym, tf, r.From, r.To, manifests)
+			status.MissingPartitions = append(status.MissingPartitions, missing...)
+		}
+	}
+	status.Snapshot = store.SnapshotHash(allManifests)
+	for source := range sourceSet {
+		status.Sources = append(status.Sources, source)
+	}
+	sort.Strings(status.Sources)
+	switch {
+	case len(status.MissingPartitions) == 0 && len(allManifests) > 0:
+		status.Readiness = ReadinessReady
+		status.ExternalRequired = false
+		status.ErrorCode = ""
+	case len(allManifests) > 0:
+		status.Readiness = ReadinessPartial
+		status.ErrorCode = "DATA_PARTIAL"
+	default:
+		status.Readiness = ReadinessMissing
+		status.ErrorCode = "DATA_MISSING"
+	}
+	return status
 }
 
 // Load reads from the local cache.
@@ -185,7 +350,7 @@ func (l *Loader) ensureMonth(ctx context.Context, sym string, tf core.TF, month 
 }
 
 func (l *Loader) downloadMonth(ctx context.Context, key string, meta store.Manifest, progress func(Progress)) error {
-	report(progress, Progress{Stage: "downloading", BytesTotal: meta.Rows, CurrentFile: key})
+	report(progress, Progress{Stage: "downloading", CurrentFile: key})
 	rc, ok, err := l.Objects.Get(ctx, key)
 	if err != nil {
 		return err
@@ -237,6 +402,38 @@ func (l *Loader) missingMonths(ctx context.Context, sym string, tf core.TF, from
 		}
 	}
 	return missing, nil
+}
+
+func missingPartitions(sym string, tf core.TF, from, to core.Time, manifests []store.Manifest) []MissingPartition {
+	byMonth := make(map[string]store.Manifest, len(manifests))
+	for _, mf := range manifests {
+		byMonth[mf.Month] = mf
+	}
+	var missing []MissingPartition
+	for _, month := range months(from, to) {
+		mf, ok := byMonth[month.name]
+		if !ok || !manifestCovers(mf, month, tf) {
+			missing = append(missing, MissingPartition{
+				Symbol: sym,
+				TF:     tf,
+				Month:  month.name,
+				From:   month.from,
+				To:     month.to,
+			})
+		}
+	}
+	return missing
+}
+
+func manifestCovers(mf store.Manifest, month monthWindow, tf core.TF) bool {
+	if mf.First > month.from {
+		return false
+	}
+	lastRequired := month.to - core.Time(tf.Millis())
+	if lastRequired < month.from {
+		lastRequired = month.from
+	}
+	return mf.Last >= lastRequired
 }
 
 func (l *Loader) checkSupported(r Request) error {

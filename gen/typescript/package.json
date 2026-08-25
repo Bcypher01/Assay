@@ -1,0 +1,21 @@
+{
+  "name": "@assay/rpc-client",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "generate": "rm -rf src && mkdir -p src && protoc --proto_path=../../proto --es_out=target=ts,import_extension=.js:src --connect-es_out=target=ts,import_extension=.js:src assay/v1/service.proto assay/v1/primitive.proto",
+    "check": "tsc --noEmit",
+    "build": "tsc --outDir dist",
+    "test": "npm run generate && npm run check && npm run build && node --input-type=module -e 'import(\"./dist/service_connect.js\").then(({ DataService, StudyService, RunService }) => { if (DataService.methods.ensureData.kind !== 1 || StudyService.methods.run.kind !== 1 || RunService.methods.compare.kind !== 0) throw new Error(\"generated service descriptors are incomplete\"); })'"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^1.10.0",
+    "@connectrpc/connect": "1.7.0"
+  },
+  "devDependencies": {
+    "@bufbuild/protoc-gen-es": "^1.10.0",
+    "@connectrpc/protoc-gen-connect-es": "1.7.0",
+    "typescript": "^5.9.3"
+  }
+}

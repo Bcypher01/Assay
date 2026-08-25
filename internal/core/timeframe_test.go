@@ -1,6 +1,9 @@
 package core
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestTFParseAndString(t *testing.T) {
 	for tf := TFTick; tf < tfCount; tf++ {
@@ -14,6 +17,29 @@ func TestTFParseAndString(t *testing.T) {
 	}
 	if _, err := ParseTF("15m"); err == nil {
 		t.Fatal("expected an error for a non-canonical name")
+	}
+}
+
+func TestTFJSONUsesNamesAtTheStrategyBoundary(t *testing.T) {
+	var got TF
+	if err := json.Unmarshal([]byte(`"M15"`), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got != TFM15 {
+		t.Fatalf("decoded timeframe = %v, want m15", got)
+	}
+	if err := json.Unmarshal([]byte(`8`), &got); err != nil {
+		t.Fatalf("legacy numeric timeframe: %v", err)
+	}
+	if got != TFD1 {
+		t.Fatalf("legacy numeric timeframe = %v, want d1", got)
+	}
+	data, err := json.Marshal(TFH4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != `"h4"` {
+		t.Fatalf("encoded timeframe = %s", data)
 	}
 }
 

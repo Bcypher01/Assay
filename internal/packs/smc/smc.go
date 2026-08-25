@@ -345,8 +345,13 @@ func (Breaker) Spec() primitive.Spec {
 }
 func (Breaker) New(p proto.Message, _ core.TF) (primitive.Instance, error) {
 	x, ok := p.(*assayv1.BreakerParams)
-	if !ok || x.InvalidatingTouches == 0 {
+	if !ok {
 		return nil, fmt.Errorf("smc: invalid breaker parameters")
+	}
+	// Older guided documents did not scaffold this required value. One touch
+	// is the least surprising usable default and preserves those strategies.
+	if x.InvalidatingTouches == 0 {
+		x.InvalidatingTouches = 1
 	}
 	return &breaker{close: x.FlipOnClose, touches: int(x.InvalidatingTouches)}, nil
 }

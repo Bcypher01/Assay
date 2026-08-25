@@ -1,0 +1,20 @@
+{
+  "id": "5a2a80097e279b27e9c7144044ae21dfa9f21a91aff9cb2445d940993704569b",
+  "strategyHash": "4b533c00261eb556ac4664813de9489994d708ee166a092951d66dc34f76e0a8",
+  "snapshot": "d8b0b8a99d9224058e3a6ef2a163441263f74533d94739ad60f32b1c03a37e86",
+  "name": "New study",
+  "scope": {
+    "Instruments": [
+      "DUKAS:EURUSD"
+    ],
+    "Period": "1737676800000-1787529600000"
+  },
+  "createdAt": "2026-08-24T10:22:13.233138Z",
+  "trades": 200,
+  "finalEquity": {
+    "Pessimistic": -9140,
+    "Optimistic": -1400
+  },
+  "parameters": "step_2={}",
+  "tradeListPresent": true
+}

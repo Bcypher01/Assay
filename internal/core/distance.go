@@ -1,6 +1,10 @@
 package core
 
-import "fmt"
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+)
 
 // Unit is the unit a Distance is expressed in.
 type Unit uint8
@@ -57,6 +61,42 @@ func ParseUnit(s string) (Unit, error) {
 type Distance struct {
 	Unit  Unit
 	Value Ratio
+}
+
+// MarshalJSON keeps strategy documents readable at the authoring boundary.
+// The fixed-point Ratio remains an internal detail; users express a distance
+// as a decimal amount together with its unit, for example
+// {"unit":"pips","value":20}.
+func (d Distance) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Unit  string  `json:"unit"`
+		Value float64 `json:"value"`
+	}{Unit: d.Unit.String(), Value: d.Value.Float64()})
+}
+
+// UnmarshalJSON accepts the human-readable distance form used by strategy
+// clients. It deliberately requires an explicit unit so a value can never be
+// silently interpreted differently when an instrument changes.
+func (d *Distance) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Unit  string      `json:"unit"`
+		Value json.Number `json:"value"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(&raw); err != nil {
+		return fmt.Errorf("distance: decode: %w", err)
+	}
+	unit, err := ParseUnit(raw.Unit)
+	if err != nil {
+		return err
+	}
+	value, err := raw.Value.Float64()
+	if err != nil {
+		return fmt.Errorf("distance: value: %w", err)
+	}
+	*d = Distance{Unit: unit, Value: RatioFromFloat(value)}
+	return nil
 }
 
 // Ticks converts d to a number of ticks.

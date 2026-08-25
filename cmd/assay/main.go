@@ -6,19 +6,45 @@ import (
 	"net/http"
 
 	"github.com/Bcypher01/Assay/internal/instrument"
+	"github.com/Bcypher01/Assay/internal/library"
 	"github.com/Bcypher01/Assay/internal/rpc"
+	"github.com/Bcypher01/Assay/internal/runstore"
 	"github.com/Bcypher01/Assay/internal/store"
+	"github.com/Bcypher01/Assay/internal/venue"
+	"github.com/Bcypher01/Assay/internal/venue/binance"
+	"github.com/Bcypher01/Assay/internal/venue/yahoo"
 )
 
 func main() {
 	addr := flag.String("addr", "127.0.0.1:8080", "local HTTP listen address")
 	cacheDir := flag.String("cache-dir", "cache", "local bar-cache directory")
+	cacheMaxMB := flag.Int64("cache-max-mb", 5120, "maximum local bar-cache size in MiB; zero disables eviction")
+	historyDir := flag.String("history-dir", "history", "persistent study history directory")
+	libraryURL := flag.String("library-url", "", "public read-only R2/CDN library URL")
 	flag.Parse()
 	registry, err := instrument.Default()
 	if err != nil {
 		log.Fatal(err)
 	}
-	server, err := rpc.NewLocalServer(store.NewLocalStore(*cacheDir), registry)
+	cache := store.NewLocalStoreWithMaxBytes(*cacheDir, *cacheMaxMB<<20)
+	history, err := runstore.Open(*historyDir)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var objects library.ObjectStore
+	if *libraryURL != "" {
+		objects = &library.HTTPStore{BaseURL: *libraryURL}
+	}
+	// The public-library URL is preferred when configured. The venue router lets
+	// a new local installation use real public historical data immediately when
+	// an object has not yet been published to that library.
+	fallback := &venue.Router{Registry: registry, Fetchers: map[string]venue.Fetcher{
+		"binance":   &binance.Client{BaseURL: "https://data.binance.vision", Registry: registry},
+		"dukascopy": &yahoo.Client{BaseURL: "https://query1.finance.yahoo.com/v8/finance/chart/", Registry: registry},
+	}}
+	loader := library.New(cache, objects, fallback)
+	loader.Registry = registry
+	server, err := rpc.NewLocalServerWithServices(cache, registry, loader, history)
 	if err != nil {
 		log.Fatal(err)
 	}

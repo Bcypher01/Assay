@@ -4,11 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
+	"github.com/Bcypher01/Assay/internal/analytics"
 	"github.com/Bcypher01/Assay/internal/core"
 	"github.com/Bcypher01/Assay/internal/engine"
 	"github.com/Bcypher01/Assay/internal/instrument"
 	"github.com/Bcypher01/Assay/internal/ir"
+	"github.com/Bcypher01/Assay/internal/library"
+	"github.com/Bcypher01/Assay/internal/runstore"
 	"github.com/Bcypher01/Assay/internal/sim"
 	"github.com/Bcypher01/Assay/internal/store"
 	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
@@ -18,25 +22,139 @@ import (
 // supports one instrument per run: portfolio execution needs an engine-level
 // alignment model rather than silently running only the first symbol.
 func NewLocalServer(cache *store.LocalStore, registry *instrument.Registry) (*Server, error) {
+	return NewLocalServerWithServices(cache, registry, nil, nil)
+}
+
+// NewLocalServerWithServices wires the client-facing local server. Loader is
+// optional for fixture and offline use; when present it prepares missing data
+// before a run. History is optional for callers that do not persist studies.
+func NewLocalServerWithServices(cache *store.LocalStore, registry *instrument.Registry, loader *library.Loader, history runstore.Store) (*Server, error) {
 	if cache == nil || registry == nil {
 		return nil, fmt.Errorf("rpc: local cache and instrument registry are required")
 	}
-	instruments := make([]*assayv1.Instrument, 0, registry.Len())
-	for _, symbol := range registry.Symbols() {
-		spec, err := registry.Get(symbol)
-		if err != nil {
-			return nil, err
+	instruments := instrumentsFromRegistry(registry)
+	s := &Server{Instruments: instruments, RunStore: history}
+	if loader != nil {
+		loader.Registry = registry
+		s.DataStatusFn = func(ctx context.Context, req *assayv1.EnsureDataRequest) (*assayv1.DataStatusResponse, error) {
+			r, err := dataRequest(loader, req)
+			if err != nil {
+				return nil, err
+			}
+			return dataStatusResponse(loader.Status(ctx, r)), nil
 		}
-		instruments = append(instruments, &assayv1.Instrument{Symbol: spec.Symbol, QualityTier: string(spec.Quality), Timeframes: supportedTimeframes(spec.Quality)})
+		s.EnsureDataFn = func(ctx context.Context, req *assayv1.EnsureDataRequest, report func(*assayv1.Progress) error) error {
+			request, err := dataRequest(loader, req)
+			if err != nil {
+				return err
+			}
+			return loader.Ensure(ctx, request, func(p library.Progress) {
+				_ = report(&assayv1.Progress{Percent: p.Percent, Stage: p.Stage, BytesDone: p.BytesDone, BytesTotal: p.BytesTotal, CurrentFile: p.CurrentFile, StageCode: progressStageCode(p.Stage)})
+			})
+		}
 	}
-	s := &Server{Instruments: instruments}
 	s.RunFn = func(ctx context.Context, req *assayv1.RunRequest, send func(*assayv1.RunUpdate) error) (*assayv1.RunSummary, error) {
-		return runLocal(ctx, cache, registry, req, send)
+		if loader != nil {
+			var strategy ir.Strategy
+			if err := json.Unmarshal(req.StrategyJson, &strategy); err != nil {
+				return nil, fmt.Errorf("rpc: decode strategy: %w", err)
+			}
+			tf, ok := strategy.Timeframes["entry"]
+			if !ok {
+				return nil, fmt.Errorf("rpc: strategy entry timeframe is required")
+			}
+			r, err := loader.DeriveRequest(strategy.Universe.Symbols, []core.TF{tf}, core.Time(req.FromMs), core.Time(req.ToMs))
+			if err != nil {
+				return nil, err
+			}
+			status := loader.Status(ctx, r)
+			if status.Readiness != library.ReadinessReady {
+				return &assayv1.RunSummary{
+					Error:     dataStatusMessage(status),
+					ErrorCode: status.ErrorCode,
+				}, nil
+			}
+		}
+		return runLocal(ctx, cache, registry, history, req, send)
 	}
 	return s, nil
 }
 
-func runLocal(ctx context.Context, cache *store.LocalStore, registry *instrument.Registry, req *assayv1.RunRequest, send func(*assayv1.RunUpdate) error) (*assayv1.RunSummary, error) {
+func dataRequest(loader *library.Loader, req *assayv1.EnsureDataRequest) (library.Request, error) {
+	if req.FromMs >= req.ToMs {
+		return library.Request{}, fmt.Errorf("rpc: data window must have from_ms before to_ms")
+	}
+	tf, err := core.ParseTF(req.Timeframe)
+	if err != nil {
+		return library.Request{}, err
+	}
+	return loader.DeriveRequest([]string{req.Symbol}, []core.TF{tf}, core.Time(req.FromMs), core.Time(req.ToMs))
+}
+
+func dataStatusResponse(status library.Status) *assayv1.DataStatusResponse {
+	out := &assayv1.DataStatusResponse{
+		Readiness:                   dataReadiness(status.Readiness),
+		RequestedFromMs:             int64(status.RequestedFrom),
+		RequestedToMs:               int64(status.RequestedTo),
+		CachedFromMs:                int64(status.CachedFrom),
+		CachedToMs:                  int64(status.CachedTo),
+		Snapshot:                    status.Snapshot,
+		Sources:                     append([]string(nil), status.Sources...),
+		LastSuccessfulPreparationMs: int64(status.LastSuccessfulPrep),
+		ExternalAccessRequired:      status.ExternalRequired,
+		ErrorCode:                   status.ErrorCode,
+	}
+	if status.Err != nil {
+		out.Error = status.Err.Error()
+	}
+	for _, p := range status.MissingPartitions {
+		out.MissingPartitions = append(out.MissingPartitions, &assayv1.DataPartition{
+			Symbol:    p.Symbol,
+			Timeframe: p.TF.String(),
+			Month:     p.Month,
+			FromMs:    int64(p.From),
+			ToMs:      int64(p.To),
+		})
+	}
+	return out
+}
+
+func dataReadiness(readiness library.Readiness) assayv1.DataReadiness {
+	switch readiness {
+	case library.ReadinessReady:
+		return assayv1.DataReadiness_DATA_READINESS_READY
+	case library.ReadinessPartial:
+		return assayv1.DataReadiness_DATA_READINESS_PARTIAL
+	case library.ReadinessMissing:
+		return assayv1.DataReadiness_DATA_READINESS_MISSING
+	case library.ReadinessSourceUnavailable:
+		return assayv1.DataReadiness_DATA_READINESS_SOURCE_UNAVAILABLE
+	case library.ReadinessCorrupt:
+		return assayv1.DataReadiness_DATA_READINESS_CORRUPT
+	case library.ReadinessUnsupported:
+		return assayv1.DataReadiness_DATA_READINESS_UNSUPPORTED
+	default:
+		return assayv1.DataReadiness_DATA_READINESS_UNSPECIFIED
+	}
+}
+
+func dataStatusMessage(status library.Status) string {
+	if status.Err != nil {
+		return status.Err.Error()
+	}
+	switch status.Readiness {
+	case library.ReadinessPartial:
+		return "Data is only partially prepared for the requested market, timeframe, and date window."
+	case library.ReadinessUnsupported:
+		return "The requested timeframe is not supported for this instrument."
+	case library.ReadinessCorrupt:
+		return "Cached data failed verification and must be prepared again."
+	default:
+		return "Data must be prepared locally before this backtest can run."
+	}
+}
+
+func runLocal(ctx context.Context, cache *store.LocalStore, registry *instrument.Registry, history runstore.Store, req *assayv1.RunRequest, send func(*assayv1.RunUpdate) error) (*assayv1.RunSummary, error) {
 	var strategy ir.Strategy
 	if err := json.Unmarshal(req.StrategyJson, &strategy); err != nil {
 		return nil, fmt.Errorf("rpc: decode strategy: %w", err)
@@ -70,7 +188,8 @@ func runLocal(ctx context.Context, cache *store.LocalStore, registry *instrument
 		return nil, err
 	}
 	config := sim.Config{Spec: *spec, Risk: sim.RiskModel{InitialEquity: 100_000, FixedLots: core.One}}
-	result, _, err := engine.Run(ctx, &strategy, engine.Data{Series: series, Config: config, Snapshot: req.Snapshot})
+	snapshot := store.SnapshotHash(manifests)
+	result, _, err := engine.Run(ctx, &strategy, engine.Data{Series: series, Config: config, Snapshot: snapshot})
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +213,44 @@ func runLocal(ctx context.Context, cache *store.LocalStore, registry *instrument
 	if err := send(&assayv1.RunUpdate{Payload: &assayv1.RunUpdate_Trades{Trades: &assayv1.TradeChunk{Count: uint32(len(result.Trades))}}}); err != nil {
 		return nil, err
 	}
-	return &assayv1.RunSummary{Trades: uint32(len(result.Trades)), Unresolved: uint32(result.Unresolved)}, nil
+	returns := analytics.Returns{Pessimistic: make([]float64, len(result.Trades)), Optimistic: make([]float64, len(result.Trades))}
+	summary := &assayv1.RunSummary{Trades: uint32(len(result.Trades)), Unresolved: uint32(result.Unresolved)}
+	var netPnL core.Price
+	for i, trade := range result.Trades {
+		returns.Pessimistic[i] = float64(trade.Pessimistic.Net)
+		returns.Optimistic[i] = float64(trade.Optimistic.Net)
+		netPnL += trade.Pessimistic.Net
+		if trade.Side == core.SideShort {
+			summary.ShortTrades++
+		} else {
+			summary.LongTrades++
+		}
+	}
+	metrics, err := analytics.MetricsFor(returns)
+	if err != nil {
+		return nil, err
+	}
+	summary.Wins = uint32(metrics.Wins)
+	summary.Losses = uint32(metrics.Losses)
+	summary.NetPnl = int64(netPnL)
+	summary.Expectancy = metrics.Expectancy.Pessimistic
+	summary.ProfitFactor = metrics.ProfitFactor.Pessimistic
+	if history != nil {
+		study := &analytics.Study{Strategy: &strategy, Snapshot: snapshot, Scope: analytics.Scope{Instruments: append([]string(nil), strategy.Universe.Symbols...), Period: strconv.FormatInt(req.FromMs, 10) + "-" + strconv.FormatInt(req.ToMs, 10)}}
+		id, err := history.Put(ctx, study, &analytics.StudyResult{OutOfSample: metrics, InSample: metrics})
+		if err != nil {
+			return nil, err
+		}
+		if trades, ok := history.(interface {
+			PutTrades(context.Context, runstore.RunID, []sim.Trade) error
+		}); ok {
+			if err := trades.PutTrades(ctx, id, result.Trades); err != nil {
+				return nil, err
+			}
+		}
+		summary.RunId = string(id)
+	}
+	return summary, nil
 }
 
 func supportedTimeframes(q instrument.QualityTier) []string {

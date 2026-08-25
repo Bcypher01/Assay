@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Bcypher01/Assay/internal/core"
@@ -34,11 +35,20 @@ type Writer interface {
 // One month per file: coarse enough to keep file counts small, fine enough that
 // fetching two years pulls 24 independently cacheable files.
 type LocalStore struct {
-	root string
+	root     string
+	maxBytes int64
+	mu       sync.Mutex
 }
 
 // NewLocalStore returns a store rooted at dir.
-func NewLocalStore(dir string) *LocalStore { return &LocalStore{root: dir} }
+func NewLocalStore(dir string) *LocalStore { return NewLocalStoreWithMaxBytes(dir, 5<<30) }
+
+// NewLocalStoreWithMaxBytes bounds cached Parquet files. A non-positive limit
+// disables eviction. Manifests are evicted with their files, since they only
+// describe cached payloads and can be fetched again from the published library.
+func NewLocalStoreWithMaxBytes(dir string, maxBytes int64) *LocalStore {
+	return &LocalStore{root: dir, maxBytes: maxBytes}
+}
 
 var (
 	_ Reader = (*LocalStore)(nil)
@@ -72,6 +82,8 @@ func (s *LocalStore) manifestPath(sym string, tf core.TF, month string) string {
 // Both files are written through a temp-and-rename so a crash mid-write never
 // leaves a valid manifest beside a truncated Parquet file.
 func (s *LocalStore) Write(ctx context.Context, series *core.Series, meta Manifest) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if series.Len() == 0 {
 		return ErrEmptySeries
 	}
@@ -119,12 +131,14 @@ func (s *LocalStore) Write(ctx context.Context, series *core.Series, meta Manife
 	if err := writeFileAtomic(s.manifestPath(meta.Symbol, meta.TF, meta.Month), manifestBytes); err != nil {
 		return err
 	}
-	return nil
+	return s.enforceLimit()
 }
 
 // WritePublished persists already-encoded published bytes plus their manifest
 // into the local cache layout without re-encoding the Parquet payload.
 func (s *LocalStore) WritePublished(ctx context.Context, data []byte, meta Manifest) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -145,6 +159,54 @@ func (s *LocalStore) WritePublished(ctx context.Context, data []byte, meta Manif
 	if err := writeFileAtomic(s.manifestPath(meta.Symbol, meta.TF, meta.Month), manifestBytes); err != nil {
 		return err
 	}
+	return s.enforceLimit()
+}
+
+func (s *LocalStore) enforceLimit() error {
+	if s.maxBytes <= 0 {
+		return nil
+	}
+	type cached struct {
+		parquet, manifest string
+		size              int64
+		modified          time.Time
+	}
+	var files []cached
+	var total int64
+	err := filepath.WalkDir(s.root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".parquet") {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		files = append(files, cached{parquet: path, manifest: strings.TrimSuffix(path, ".parquet") + ".manifest.json", size: info.Size(), modified: info.ModTime()})
+		total += info.Size()
+		return nil
+	})
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("store: measuring cache: %w", err)
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].modified.Before(files[j].modified) })
+	for _, file := range files {
+		if total <= s.maxBytes {
+			break
+		}
+		if err := os.Remove(file.parquet); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		if err := os.Remove(file.manifest); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		total -= file.size
+	}
 	return nil
 }
 
@@ -157,6 +219,8 @@ func (s *LocalStore) WritePublished(ctx context.Context, data []byte, meta Manif
 // enumerating calendar months, so an unbounded window (MinTime..MaxTime) costs
 // a directory read, not a walk over every month in the representable range.
 func (s *LocalStore) Load(ctx context.Context, sym string, tf core.TF, from, to core.Time) (*core.Series, []Manifest, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if to < from {
 		return nil, nil, fmt.Errorf("store: load window end %d precedes start %d", int64(to), int64(from))
 	}

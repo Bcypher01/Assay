@@ -50,8 +50,15 @@ func Run(ctx context.Context, strategy *ir.Strategy, data Data) (sim.RunResult, 
 	if errs := strategy.Validate(reg); len(errs) > 0 {
 		return result, miss, errs[0]
 	}
+	activeNodes := referencedNodesForStrategy(strategy)
 	values := make(map[string]primitive.Value, len(strategy.Nodes))
 	for _, n := range strategy.Nodes {
+		// A saved strategy can contain exploratory building blocks that are not
+		// wired into a condition or exit. They are not part of the executable
+		// strategy and must not be evaluated (or be able to fail a run).
+		if !activeNodes[n.ID] {
+			continue
+		}
 		p, e := reg.Get(n.Pack, n.Type)
 		if e != nil {
 			return result, miss, e
@@ -61,7 +68,11 @@ func Run(ctx context.Context, strategy *ir.Strategy, data Data) (sim.RunResult, 
 			return result, miss, fmt.Errorf("engine: node %s: %w", n.ID, e)
 		}
 		tf := n.Timeframe
-		if !tf.Valid() {
+		// Node timeframes were optional in the first strategy documents. The
+		// omitted enum decodes to TFTick, but a tick primitive cannot run over a
+		// candle series. Treat that legacy zero value as the selected entry
+		// timeframe; explicitly-authored candle timeframes remain unchanged.
+		if !tf.Valid() || (tf == core.TFTick && data.Series.TF != core.TFTick) {
 			tf = data.Series.TF
 		}
 		v, _, e := primitive.Evaluate(ctx, p, params, tf, data.Series, data.Snapshot, data.Cache)
@@ -74,20 +85,31 @@ func Run(ctx context.Context, strategy *ir.Strategy, data Data) (sim.RunResult, 
 		values[n.ID] = v
 	}
 	sig := sim.Signals{Enter: core.NewBitset(data.Series.Len())}
+	useRelativeExits := strategy.Slots.Invalidation == "" && strategy.Slots.Target == ""
 	poiAt := -1
 	for bar := 0; bar < data.Series.Len(); bar++ {
+		if strategy.Schema == ir.SchemaV2 {
+			runV2Bar(strategy, values, &sig, &miss, bar, useRelativeExits)
+			continue
+		}
 		bias := holds(strategy.Slots.Bias, values, bar)
 		poi := holds(strategy.Slots.POI, values, bar)
 		trigger := holds(strategy.Slots.Trigger, values, bar)
 		if poi {
 			poiAt = bar
 		}
+		poiOK := poi
 		triggerOK := trigger
 		if strategy.Slots.Trigger.WithinBars > 0 {
-			triggerOK = trigger && poiAt >= 0 && bar-poiAt <= strategy.Slots.Trigger.WithinBars
+			poiOK = poiAt >= 0 && bar-poiAt <= strategy.Slots.Trigger.WithinBars
+			triggerOK = trigger && poiOK
 		}
-		if bias && poi && triggerOK {
-			addSides(&sig, strategy.Direction, bar, values[strategy.Slots.Invalidation].Level[bar], values[strategy.Slots.Target].Level[bar])
+		if bias && poiOK && triggerOK {
+			if useRelativeExits {
+				addRelativeSides(&sig, strategy.Direction, bar, strategy.Risk.Stop, strategy.Risk.Target)
+			} else {
+				addSides(&sig, strategy.Direction, bar, values[strategy.Slots.Invalidation].Level[bar], values[strategy.Slots.Target].Level[bar])
+			}
 		} else {
 			m := Miss{Bar: bar}
 			if !bias {
@@ -96,7 +118,7 @@ func Run(ctx context.Context, strategy *ir.Strategy, data Data) (sim.RunResult, 
 			} else {
 				m.Held = append(m.Held, "bias")
 			}
-			if !poi {
+			if !poiOK {
 				m.Failed = append(m.Failed, "poi")
 				miss.SlotFailures["poi"]++
 			} else {
@@ -116,18 +138,130 @@ func Run(ctx context.Context, strategy *ir.Strategy, data Data) (sim.RunResult, 
 	}
 	return result, miss, nil
 }
+
+func referencedNodes(slots ir.Slots) map[string]bool {
+	used := make(map[string]bool)
+	for _, slot := range []ir.SlotSpec{slots.Bias, slots.POI, slots.Trigger} {
+		for _, id := range slot.All {
+			used[id] = true
+		}
+	}
+	if slots.Invalidation != "" {
+		used[slots.Invalidation] = true
+	}
+	if slots.Target != "" {
+		used[slots.Target] = true
+	}
+	return used
+}
+
+func referencedNodesForStrategy(strategy *ir.Strategy) map[string]bool {
+	used := referencedNodes(strategy.Slots)
+	if strategy.Schema != ir.SchemaV2 {
+		return used
+	}
+	collectExpressionNodes(used, strategy.Entries.Long.When)
+	collectExpressionNodes(used, strategy.Entries.Short.When)
+	if strategy.Slots.Invalidation != "" {
+		used[strategy.Slots.Invalidation] = true
+	}
+	if strategy.Slots.Target != "" {
+		used[strategy.Slots.Target] = true
+	}
+	return used
+}
+
+func collectExpressionNodes(used map[string]bool, expression ir.Expression) {
+	if expression.Node != "" {
+		used[expression.Node] = true
+	}
+	for _, child := range expression.All {
+		collectExpressionNodes(used, child)
+	}
+	for _, child := range expression.Any {
+		collectExpressionNodes(used, child)
+	}
+	if expression.Not != nil {
+		collectExpressionNodes(used, *expression.Not)
+	}
+}
 func decodeParams(p primitive.Primitive, raw json.RawMessage) (proto.Message, error) {
 	m, err := parameterMessage(string(p.Spec().Params.FullName()))
 	if err != nil {
 		return nil, err
 	}
 	if len(raw) == 0 || string(raw) == "null" {
-		return m, nil
+		return applyLegacyDefaults(m), nil
 	}
 	if err := protojson.Unmarshal(raw, m); err != nil {
 		return nil, err
 	}
-	return m, nil
+	return applyLegacyDefaults(m), nil
+}
+
+// applyLegacyDefaults lets previously saved guided strategies remain runnable
+// after parameter fields became explicit. Values are deliberately conservative
+// and match the defaults authored by the current guided UI.
+func applyLegacyDefaults(m proto.Message) proto.Message {
+	switch x := m.(type) {
+	case *assayv1.MarketStructureParams:
+		if x.SwingLookback == 0 {
+			x.SwingLookback = 5
+		}
+	case *assayv1.DisplacementParams:
+		if x.MinBodyRatioMilli == 0 {
+			x.MinBodyRatioMilli = 600
+		}
+		if x.MinConsecutiveBars == 0 {
+			x.MinConsecutiveBars = 1
+		}
+	case *assayv1.FairValueGapParams:
+		if x.MinSizeTicks == 0 {
+			x.MinSizeTicks = 1
+		}
+		if x.MitigationRule == assayv1.MitigationRule_MITIGATION_RULE_UNSPECIFIED {
+			x.MitigationRule = assayv1.MitigationRule_MITIGATION_RULE_FIRST_TOUCH
+		}
+		if x.ExpiryBars == 0 {
+			x.ExpiryBars = 20
+		}
+	case *assayv1.OrderBlockParams:
+		if x.ClusterBars == 0 {
+			x.ClusterBars = 1
+		}
+		if x.DisplacementWithinBars == 0 {
+			x.DisplacementWithinBars = 5
+		}
+		if x.MinBodyRatioMilli == 0 {
+			x.MinBodyRatioMilli = 600
+		}
+	case *assayv1.BreakerParams:
+		if x.InvalidatingTouches == 0 {
+			x.InvalidatingTouches = 1
+		}
+	case *assayv1.LiquidityPoolParams:
+		if x.MinTouches == 0 {
+			x.MinTouches = 2
+		}
+		if x.AgeBars == 0 {
+			x.AgeBars = 50
+		}
+	case *assayv1.SweepParams:
+		if x.CloseBackBars == 0 {
+			x.CloseBackBars = 3
+		}
+	case *assayv1.PremiumDiscountParams:
+		if x.DealingRangeBars == 0 {
+			x.DealingRangeBars = 20
+		}
+		if x.OteLowerMilli == 0 {
+			x.OteLowerMilli = 620
+		}
+		if x.OteUpperMilli == 0 {
+			x.OteUpperMilli = 790
+		}
+	}
+	return m
 }
 func parameterMessage(name string) (proto.Message, error) {
 	switch name {
@@ -204,17 +338,94 @@ func holds(slot ir.SlotSpec, vals map[string]primitive.Value, bar int) bool {
 	}
 	return true
 }
-func addSides(sig *sim.Signals, d ir.Direction, bar int, stop, target core.Price) {
-	sig.Enter.Set(bar)
-	add := func(side core.Side) {
-		sig.Side = append(sig.Side, side)
-		sig.StopLevel = append(sig.StopLevel, stop)
-		sig.TargetPlan = append(sig.TargetPlan, sim.TargetPlan{Level: target})
+
+func holdsExpression(expression ir.Expression, vals map[string]primitive.Value, bar int) bool {
+	if expression.Node != "" {
+		v := vals[expression.Node]
+		return v.Valid != nil && v.Valid.Get(bar) && v.Bool != nil && v.Bool.Get(bar)
 	}
+	if expression.Not != nil {
+		return !holdsExpression(*expression.Not, vals, bar)
+	}
+	if len(expression.All) != 0 {
+		for _, child := range expression.All {
+			if !holdsExpression(child, vals, bar) {
+				return false
+			}
+		}
+		return true
+	}
+	for _, child := range expression.Any {
+		if holdsExpression(child, vals, bar) {
+			return true
+		}
+	}
+	return false
+}
+
+func runV2Bar(strategy *ir.Strategy, values map[string]primitive.Value, sig *sim.Signals, miss *NearMiss, bar int, relativeExits bool) {
+	long := strategy.Entries.Long.Enabled && holdsExpression(strategy.Entries.Long.When, values, bar)
+	short := strategy.Entries.Short.Enabled && holdsExpression(strategy.Entries.Short.When, values, bar)
+	if long && short {
+		// Signals are one instruction per bar. Opposing entries on the same close
+		// have no unambiguous ordering, so skip them rather than manufacture one.
+		miss.SlotFailures["entry_conflict"]++
+		miss.Bars = append(miss.Bars, Miss{Bar: bar, Failed: []string{"entry_conflict"}})
+		return
+	}
+	if long || short {
+		side := core.SideLong
+		if short {
+			side = core.SideShort
+		}
+		if relativeExits {
+			addRelativeSide(sig, side, bar, strategy.Risk.Stop, strategy.Risk.Target)
+		} else {
+			addSide(sig, side, bar, values[strategy.Slots.Invalidation].Level[bar], values[strategy.Slots.Target].Level[bar])
+		}
+		return
+	}
+	m := Miss{Bar: bar}
+	if strategy.Entries.Long.Enabled {
+		m.Failed = append(m.Failed, "long")
+		miss.SlotFailures["long"]++
+	}
+	if strategy.Entries.Short.Enabled {
+		m.Failed = append(m.Failed, "short")
+		miss.SlotFailures["short"]++
+	}
+	miss.Bars = append(miss.Bars, m)
+}
+
+func addSides(sig *sim.Signals, d ir.Direction, bar int, stop, target core.Price) {
 	switch d {
 	case ir.DirectionShort:
-		add(core.SideShort)
+		addSide(sig, core.SideShort, bar, stop, target)
 	default:
-		add(core.SideLong)
+		addSide(sig, core.SideLong, bar, stop, target)
 	}
+}
+
+func addRelativeSides(sig *sim.Signals, d ir.Direction, bar int, stopDistance, targetDistance core.Distance) {
+	side := core.SideLong
+	if d == ir.DirectionShort {
+		side = core.SideShort
+	}
+	addRelativeSide(sig, side, bar, stopDistance, targetDistance)
+}
+
+func addSide(sig *sim.Signals, side core.Side, bar int, stop, target core.Price) {
+	sig.Enter.Set(bar)
+	sig.Side = append(sig.Side, side)
+	sig.StopLevel = append(sig.StopLevel, stop)
+	sig.TargetPlan = append(sig.TargetPlan, sim.TargetPlan{Level: target})
+}
+
+func addRelativeSide(sig *sim.Signals, side core.Side, bar int, stopDistance, targetDistance core.Distance) {
+	sig.Enter.Set(bar)
+	sig.Side = append(sig.Side, side)
+	sig.StopLevel = append(sig.StopLevel, 0)
+	sig.TargetPlan = append(sig.TargetPlan, sim.TargetPlan{})
+	sig.StopSpec = append(sig.StopSpec, stopDistance)
+	sig.TargetSpec = append(sig.TargetSpec, targetDistance)
 }

@@ -72,8 +72,8 @@ func Run(ctx context.Context, s *core.Series, fine *core.Series, sig Signals, cf
 		// Existing positions process exits before a newly activated entry.
 		for i := 0; i < len(positions); {
 			p := &positions[i]
-			if partialTarget(*p) && hit(s, bar, p.side, p.target.Level, cfg.Spec.Gap) && !hit(s, bar, p.side, p.stop, cfg.Spec.Gap) {
-				realizePartial(p, s.Time[bar], bar, cfg, fillExit(s, bar, p.side, p.target.Level, cfg.Spec.Gap))
+			if partialTarget(*p) && hitTarget(s, bar, p.side, p.target.Level) && !hitStop(s, bar, p.side, p.stop) {
+				realizePartial(p, s.Time[bar], bar, cfg, fillTarget(s, bar, p.side, p.target.Level, cfg.Spec.Gap))
 				equityP += p.realP.Net
 				equityO += p.realO.Net
 				p.realP, p.realO = Outcome{}, Outcome{}
@@ -119,15 +119,31 @@ func Run(ctx context.Context, s *core.Series, fine *core.Series, sig Signals, cf
 				continue
 			}
 			fill = applyEntryCosts(fill, sig.Side[idx], cfg)
-			req, lots := sizeFor(equityP, fill, sig.StopLevel[idx], cfg)
+			stop, target := sig.StopLevel[idx], sig.TargetPlan[idx]
+			if len(sig.StopSpec) != 0 {
+				stop, target.Level = levelsFromDistances(
+					fill,
+					sig.Side[idx],
+					sig.StopSpec[idx].Ticks(cfg.Spec.PipTicks, fill, 0),
+					sig.TargetSpec[idx].Ticks(cfg.Spec.PipTicks, fill, 0),
+				)
+			} else if len(sig.StopDistance) != 0 {
+				stop, target.Level = levelsFromDistances(
+					fill,
+					sig.Side[idx],
+					sig.StopDistance[idx],
+					sig.TargetDistance[idx],
+				)
+			}
+			req, lots := sizeFor(equityP, fill, stop, cfg)
 			if lots <= 0 {
 				continue
 			}
-			tr := Trade{Side: sig.Side[idx], EntryTime: s.Time[bar], EntryBar: bar, EntryPrice: fill, Stop: sig.StopLevel[idx], Target: sig.TargetPlan[idx].Level, Lots: lots, RequestedLots: req}
+			tr := Trade{Side: sig.Side[idx], EntryTime: s.Time[bar], EntryBar: bar, EntryPrice: fill, Stop: stop, Target: target.Level, Lots: lots, RequestedLots: req}
 			tr.RoundingLoss = absRatio(req - lots)
 			out.RoundingLoss += tr.RoundingLoss
 			out.Trades = append(out.Trades, tr)
-			p := position{trade: len(out.Trades) - 1, side: tr.Side, entry: fill, stop: tr.Stop, target: sig.TargetPlan[idx], lots: lots, opened: s.Time[bar]}
+			p := position{trade: len(out.Trades) - 1, side: tr.Side, entry: fill, stop: tr.Stop, target: target, lots: lots, opened: s.Time[bar]}
 			// An order filled at this bar's open is exposed to the rest of this
 			// bar. Deferring this check would incorrectly make same-bar stops and
 			// targets impossible.
@@ -196,7 +212,18 @@ func addOutcome(a, b Outcome) Outcome {
 
 func errorsOut() error { return ErrNilResult }
 func validSignals(n int, x Signals) error {
-	if x.Enter == nil || x.Enter.Len() != n || len(x.Side) != x.Enter.Count() || len(x.StopLevel) != x.Enter.Count() || len(x.TargetPlan) != x.Enter.Count() || (len(x.Orders) != 0 && len(x.Orders) != x.Enter.Count()) {
+	count := 0
+	if x.Enter != nil {
+		count = x.Enter.Count()
+	}
+	relative := (len(x.StopDistance) == 0 && len(x.TargetDistance) == 0) ||
+		(len(x.StopDistance) == count && len(x.TargetDistance) == count)
+	relativeSpec := (len(x.StopSpec) == 0 && len(x.TargetSpec) == 0) ||
+		(len(x.StopSpec) == count && len(x.TargetSpec) == count)
+	if len(x.StopDistance) != 0 && len(x.StopSpec) != 0 {
+		return ErrInvalidSignals
+	}
+	if x.Enter == nil || x.Enter.Len() != n || len(x.Side) != count || len(x.StopLevel) != count || len(x.TargetPlan) != count || (len(x.Orders) != 0 && len(x.Orders) != count) || !relative || !relativeSpec {
 		return ErrInvalidSignals
 	}
 	for _, side := range x.Side {
@@ -205,6 +232,13 @@ func validSignals(n int, x Signals) error {
 		}
 	}
 	return nil
+}
+
+func levelsFromDistances(entry core.Price, side core.Side, stopDistance, targetDistance core.Price) (core.Price, core.Price) {
+	if side == core.SideShort {
+		return entry + stopDistance, entry - targetDistance
+	}
+	return entry - stopDistance, entry + targetDistance
 }
 func validConfig(c *Config) error {
 	if c.Direction != 0 && !c.Direction.Valid() {
@@ -298,18 +332,18 @@ func entryFill(s *core.Series, i int, side core.Side, o Order, gap instrument.Ga
 }
 func exitsForBar(s, f *core.Series, i int, p position, gap instrument.GapPolicy) (core.Price, core.Price, bool, bool) {
 	stop, target := p.stop, p.target.Level
-	sh, th := hit(s, i, p.side, stop, gap), false
+	sh, th := hitStop(s, i, p.side, stop), false
 	if target != 0 {
-		th = hit(s, i, p.side, target, gap)
+		th = hitTarget(s, i, p.side, target)
 	}
 	if !sh && !th {
 		return 0, 0, false, false
 	}
 	if sh && !th {
-		return fillExit(s, i, p.side, stop, gap), fillExit(s, i, p.side, stop, gap), false, true
+		return fillStop(s, i, p.side, stop, gap), fillStop(s, i, p.side, stop, gap), false, true
 	}
 	if th && !sh {
-		return fillExit(s, i, p.side, target, gap), fillExit(s, i, p.side, target, gap), false, true
+		return fillTarget(s, i, p.side, target, gap), fillTarget(s, i, p.side, target, gap), false, true
 	}
 	if resolved, first, ok := fineFirst(f, s, i, p); ok {
 		if first == stop {
@@ -317,20 +351,37 @@ func exitsForBar(s, f *core.Series, i int, p position, gap instrument.GapPolicy)
 		}
 		return resolved, resolved, false, true
 	}
-	return fillExit(s, i, p.side, stop, gap), fillExit(s, i, p.side, target, gap), true, true
+	return fillStop(s, i, p.side, stop, gap), fillTarget(s, i, p.side, target, gap), true, true
 }
-func hit(s *core.Series, i int, side core.Side, l core.Price, g instrument.GapPolicy) bool {
+func hitStop(s *core.Series, i int, side core.Side, l core.Price) bool {
 	if side == core.SideLong {
 		return s.Low[i] <= l
 	}
 	return s.High[i] >= l
 }
-func fillExit(s *core.Series, i int, side core.Side, l core.Price, g instrument.GapPolicy) core.Price {
+func hitTarget(s *core.Series, i int, side core.Side, l core.Price) bool {
+	if side == core.SideLong {
+		return s.High[i] >= l
+	}
+	return s.Low[i] <= l
+}
+func fillStop(s *core.Series, i int, side core.Side, l core.Price, g instrument.GapPolicy) core.Price {
 	if g == instrument.GapFillAtOpen {
 		if side == core.SideLong && s.Open[i] < l {
 			return s.Open[i]
 		}
 		if side == core.SideShort && s.Open[i] > l {
+			return s.Open[i]
+		}
+	}
+	return l
+}
+func fillTarget(s *core.Series, i int, side core.Side, l core.Price, g instrument.GapPolicy) core.Price {
+	if g == instrument.GapFillAtOpen {
+		if side == core.SideLong && s.Open[i] > l {
+			return s.Open[i]
+		}
+		if side == core.SideShort && s.Open[i] < l {
 			return s.Open[i]
 		}
 	}
@@ -343,13 +394,13 @@ func fineFirst(f, main *core.Series, i int, p position) (core.Price, core.Price,
 	from, to := main.Time[i], main.TF.CloseOf(main.Time[i])
 	lo := sort.Search(len(f.Time), func(j int) bool { return f.Time[j] >= from })
 	for ; lo < len(f.Time) && f.Time[lo] < to; lo++ {
-		sh := hit(f, lo, p.side, p.stop, instrument.GapFillAtLevel)
-		th := p.target.Level != 0 && hit(f, lo, p.side, p.target.Level, instrument.GapFillAtLevel)
+		sh := hitStop(f, lo, p.side, p.stop)
+		th := p.target.Level != 0 && hitTarget(f, lo, p.side, p.target.Level)
 		if sh && !th {
-			return fillExit(f, lo, p.side, p.stop, instrument.GapFillAtLevel), p.stop, true
+			return fillStop(f, lo, p.side, p.stop, instrument.GapFillAtLevel), p.stop, true
 		}
 		if th && !sh {
-			return fillExit(f, lo, p.side, p.target.Level, instrument.GapFillAtLevel), p.target.Level, true
+			return fillTarget(f, lo, p.side, p.target.Level, instrument.GapFillAtLevel), p.target.Level, true
 		}
 		if sh && th {
 			return 0, 0, false

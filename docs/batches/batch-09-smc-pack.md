@@ -113,3 +113,9 @@ expiry.
 golden set and its agreement threshold cannot be fabricated from synthetic test
 data. It remains a release gate until annotations and their provenance are
 supplied.
+
+**Annotation pilot started.** `internal/packs/smc/testdata/golden/pilot-fvg.json`
+is the copyable fixture template. The pilot records raw precision, recall, and
+F1 per primitive and annotator; it deliberately has no agreement threshold
+until independent annotations establish a defensible baseline. The included
+fixture is a synthetic harness check, not an annotator contribution.

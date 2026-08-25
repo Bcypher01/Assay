@@ -3,6 +3,9 @@ package smc
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/Bcypher01/Assay/internal/core"
@@ -80,6 +83,16 @@ func TestPackRegistersAllImplementedPrimitives(t *testing.T) {
 	}
 }
 
+func TestBreakerUsesSafeDefaultForLegacyEmptyParameters(t *testing.T) {
+	params := &assayv1.BreakerParams{}
+	if _, err := (Breaker{}).New(params, core.TFM1); err != nil {
+		t.Fatalf("empty legacy parameters should receive defaults: %v", err)
+	}
+	if params.InvalidatingTouches != 1 {
+		t.Fatalf("default touches = %d, want 1", params.InvalidatingTouches)
+	}
+}
+
 func TestFairValueGapIsDeterministic(t *testing.T) {
 	s := series([][4]core.Price{{10, 10, 8, 9}, {9, 12, 9, 11}, {12, 15, 13, 14}})
 	p := FairValueGap{}
@@ -129,10 +142,78 @@ func TestGoldenFixtureTemplateLoads(t *testing.T) {
 	}
 }
 
+func TestGoldenPilotLoadsAndSummarizesDeterministically(t *testing.T) {
+	dir := t.TempDir()
+	fixture, err := os.ReadFile("testdata/golden/pilot-fvg.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "z.json"), fixture, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	second := string(fixture)
+	second = replaceOnce(second, "example-annotator", "annotator-b")
+	if err := os.WriteFile(filepath.Join(dir, "a.json"), []byte(second), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fixtures, err := LoadGoldenFixtures(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fixtures) != 2 || fixtures[0].Annotator != "annotator-b" {
+		t.Fatalf("fixtures = %#v", fixtures)
+	}
+	reports, summaries, err := ScoreAll(context.Background(), fixtures, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reports) != 2 || len(summaries) != 2 {
+		t.Fatalf("reports=%#v summaries=%#v", reports, summaries)
+	}
+	for _, summary := range summaries {
+		if summary.Windows != 1 || summary.Agreement.F1 != 1 {
+			t.Fatalf("summary = %#v", summary)
+		}
+	}
+	reversed := []GoldenFixture{fixtures[1], fixtures[0]}
+	againReports, againSummaries, err := ScoreAll(context.Background(), reversed, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(reports, againReports) || !reflect.DeepEqual(summaries, againSummaries) {
+		t.Fatal("pilot report changed with fixture order")
+	}
+}
+
+func TestGoldenPilotRejectsDuplicateSubmission(t *testing.T) {
+	dir := t.TempDir()
+	fixture, err := os.ReadFile("testdata/golden/pilot-fvg.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"one.json", "two.json"} {
+		if err := os.WriteFile(filepath.Join(dir, name), fixture, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := LoadGoldenFixtures(dir); err == nil {
+		t.Fatal("LoadGoldenFixtures accepted duplicate submission")
+	}
+}
+
 func series(bars [][4]core.Price) *core.Series {
 	s := core.NewSeries("X", core.TFM1, len(bars))
 	for i, b := range bars {
 		s.Append(core.Time(i*60_000), b[0], b[1], b[2], b[3], 1)
+	}
+	return s
+}
+
+func replaceOnce(s, old, new string) string {
+	for i := 0; i+len(old) <= len(s); i++ {
+		if s[i:i+len(old)] == old {
+			return s[:i] + new + s[i+len(old):]
+		}
 	}
 	return s
 }

@@ -1,6 +1,9 @@
 package core
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestDistanceTicks(t *testing.T) {
 	const pipTicks = 10
@@ -48,5 +51,22 @@ func TestUnitParseRoundTrip(t *testing.T) {
 	}
 	if _, err := ParseUnit("furlongs"); err == nil {
 		t.Fatal("expected an error")
+	}
+}
+
+func TestDistanceJSONUsesExplicitReadableUnits(t *testing.T) {
+	var got Distance
+	if err := json.Unmarshal([]byte(`{"unit":"pips","value":12.5}`), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Unit != UnitPips || got.Value != RatioFromFloat(12.5) {
+		t.Fatalf("decoded distance = %#v", got)
+	}
+	data, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != `{"unit":"pips","value":12.5}` {
+		t.Fatalf("encoded distance = %s", data)
 	}
 }

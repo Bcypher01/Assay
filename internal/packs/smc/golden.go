@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 
 	"github.com/Bcypher01/Assay/internal/core"
@@ -67,6 +68,16 @@ type SweepReport struct {
 	Report GoldenReport
 }
 
+// GoldenSummary aggregates the count-based agreement metric for one primitive
+// and annotator. It intentionally retains the raw totals so a future UI does
+// not have to average window-level percentages.
+type GoldenSummary struct {
+	Primitive string
+	Annotator string
+	Windows   int
+	Agreement Agreement
+}
+
 func LoadGoldenFixture(path string) (GoldenFixture, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -80,6 +91,38 @@ func LoadGoldenFixture(path string) (GoldenFixture, error) {
 		return GoldenFixture{}, err
 	}
 	return f, nil
+}
+
+// LoadGoldenFixtures reads JSON fixtures from one directory in filename order.
+// A directory is used for the annotation pilot so each annotator can submit a
+// self-contained window without changing a shared manifest.
+func LoadGoldenFixtures(dir string) ([]GoldenFixture, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("smc golden: read fixture directory: %w", err)
+	}
+	paths := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".json" {
+			paths = append(paths, filepath.Join(dir, entry.Name()))
+		}
+	}
+	sort.Strings(paths)
+	fixtures := make([]GoldenFixture, 0, len(paths))
+	seen := make(map[string]struct{}, len(paths))
+	for _, path := range paths {
+		f, err := LoadGoldenFixture(path)
+		if err != nil {
+			return nil, err
+		}
+		key := f.WindowID + "\x00" + f.Annotator + "\x00" + f.Primitive
+		if _, ok := seen[key]; ok {
+			return nil, fmt.Errorf("smc golden: duplicate window, annotator, and primitive in %q", path)
+		}
+		seen[key] = struct{}{}
+		fixtures = append(fixtures, f)
+	}
+	return fixtures, nil
 }
 func (f GoldenFixture) Validate() error {
 	if f.Version != 1 || f.WindowID == "" || f.Annotator == "" || f.Instrument == "" || !f.Timeframe.Valid() || f.Primitive == "" || len(f.Bars) == 0 {
@@ -177,32 +220,109 @@ func Sweep(ctx context.Context, f GoldenFixture, candidates []SweepCandidate, zo
 	return out, nil
 }
 
+// ScoreAll evaluates a pilot corpus and returns every window report alongside
+// summaries grouped by primitive and annotator. Both outputs are sorted to keep
+// saved reports and test output byte-stable.
+func ScoreAll(ctx context.Context, fixtures []GoldenFixture, zoneTolerance core.Price) ([]GoldenReport, []GoldenSummary, error) {
+	ordered := append([]GoldenFixture(nil), fixtures...)
+	sort.Slice(ordered, func(i, j int) bool {
+		if ordered[i].Primitive != ordered[j].Primitive {
+			return ordered[i].Primitive < ordered[j].Primitive
+		}
+		if ordered[i].Annotator != ordered[j].Annotator {
+			return ordered[i].Annotator < ordered[j].Annotator
+		}
+		return ordered[i].WindowID < ordered[j].WindowID
+	})
+	reports := make([]GoldenReport, 0, len(ordered))
+	summaries := make(map[string]*GoldenSummary)
+	for _, fixture := range ordered {
+		report, err := Score(ctx, fixture, zoneTolerance)
+		if err != nil {
+			return nil, nil, err
+		}
+		reports = append(reports, report)
+		key := report.Primitive + "\x00" + report.Annotator
+		summary := summaries[key]
+		if summary == nil {
+			summary = &GoldenSummary{Primitive: report.Primitive, Annotator: report.Annotator}
+			summaries[key] = summary
+		}
+		summary.Windows++
+		summary.Agreement.Expected += report.Agreement.Expected
+		summary.Agreement.Detected += report.Agreement.Detected
+		summary.Agreement.Matched += report.Agreement.Matched
+	}
+	out := make([]GoldenSummary, 0, len(summaries))
+	for _, summary := range summaries {
+		summary.Agreement.Precision = ratio(summary.Agreement.Matched, summary.Agreement.Detected)
+		summary.Agreement.Recall = ratio(summary.Agreement.Matched, summary.Agreement.Expected)
+		if summary.Agreement.Precision+summary.Agreement.Recall > 0 {
+			summary.Agreement.F1 = 2 * summary.Agreement.Precision * summary.Agreement.Recall / (summary.Agreement.Precision + summary.Agreement.Recall)
+		}
+		out = append(out, *summary)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Primitive != out[j].Primitive {
+			return out[i].Primitive < out[j].Primitive
+		}
+		return out[i].Annotator < out[j].Annotator
+	})
+	return reports, out, nil
+}
+
 // AnnotationDisagreement returns annotations that are not shared by every
 // annotator of a window. It is input data for parameter design, not a verdict
 // that any trader's drawing is wrong.
 type AnnotationDisagreement struct {
-	WindowID               string
+	WindowID, Primitive    string
 	Object                 AnnotatedObject
 	PresentBy, MissingFrom []string
 }
 
 func Disagreements(fixtures []GoldenFixture, tolerance core.Price) []AnnotationDisagreement {
-	byWindow := make(map[string][]GoldenFixture)
+	type groupKey struct{ windowID, primitive string }
+	byWindow := make(map[groupKey][]GoldenFixture)
 	for _, f := range fixtures {
-		byWindow[f.WindowID] = append(byWindow[f.WindowID], f)
+		key := groupKey{windowID: f.WindowID, primitive: f.Primitive}
+		byWindow[key] = append(byWindow[key], f)
 	}
+	keys := make([]groupKey, 0, len(byWindow))
+	for key := range byWindow {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].windowID != keys[j].windowID {
+			return keys[i].windowID < keys[j].windowID
+		}
+		return keys[i].primitive < keys[j].primitive
+	})
 	var out []AnnotationDisagreement
-	for id, group := range byWindow {
+	for _, key := range keys {
+		group := byWindow[key]
 		if len(group) < 2 {
 			continue
 		}
+		sort.Slice(group, func(i, j int) bool { return group[i].Annotator < group[j].Annotator })
 		names := make([]string, 0, len(group))
 		for _, f := range group {
 			names = append(names, f.Annotator)
 		}
 		sort.Strings(names)
+		representatives := make([]AnnotatedObject, 0)
 		for _, f := range group {
 			for _, object := range f.Objects {
+				alreadyReported := false
+				for _, representative := range representatives {
+					if match(object, representative, tolerance) {
+						alreadyReported = true
+						break
+					}
+				}
+				if alreadyReported {
+					continue
+				}
+				representatives = append(representatives, object)
 				present := []string{}
 				for _, other := range group {
 					for _, candidate := range other.Objects {
@@ -225,7 +345,7 @@ func Disagreements(fixtures []GoldenFixture, tolerance core.Price) []AnnotationD
 						missing = append(missing, n)
 					}
 				}
-				out = append(out, AnnotationDisagreement{WindowID: id, Object: object, PresentBy: present, MissingFrom: missing})
+				out = append(out, AnnotationDisagreement{WindowID: key.windowID, Primitive: key.primitive, Object: object, PresentBy: present, MissingFrom: missing})
 			}
 		}
 	}

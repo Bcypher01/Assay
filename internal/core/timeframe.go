@@ -1,6 +1,10 @@
 package core
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+)
 
 // TF is a timeframe. The set is closed: an open string type invites "m15"
 // versus "M15" versus "15m", and prevents the ordering comparisons the
@@ -86,6 +90,36 @@ func ParseTF(s string) (TF, error) {
 		}
 	}
 	return 0, fmt.Errorf("%w: %q", ErrUnknownTimeframe, s)
+}
+
+// MarshalJSON exposes canonical timeframe names at the strategy boundary. The
+// enum's numeric values are an implementation detail and should never leak
+// into a hand-authored strategy document.
+func (tf TF) MarshalJSON() ([]byte, error) {
+	return json.Marshal(tf.String())
+}
+
+// UnmarshalJSON accepts the case-insensitive names used by browser clients
+// (for example "M15") and normalises them to the closed TF enum.
+func (tf *TF) UnmarshalJSON(data []byte) error {
+	var name string
+	if err := json.Unmarshal(data, &name); err == nil {
+		parsed, parseErr := ParseTF(strings.ToLower(name))
+		if parseErr != nil {
+			return parseErr
+		}
+		*tf = parsed
+		return nil
+	}
+	// Numeric values appeared in early fixture and persisted strategy JSON.
+	// Continue accepting only the closed enum range while serialising modern
+	// documents as readable names.
+	var legacy uint8
+	if err := json.Unmarshal(data, &legacy); err != nil || TF(legacy) >= tfCount {
+		return fmt.Errorf("timeframe: decode: expected a timeframe name or legacy enum")
+	}
+	*tf = TF(legacy)
+	return nil
 }
 
 // Finer reports whether tf is strictly finer than o. TFTick is finer than

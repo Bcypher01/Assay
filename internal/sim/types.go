@@ -44,13 +44,20 @@ type TargetPlan struct {
 }
 
 // Signals are sparse entry instructions. Side, StopLevel, TargetPlan and Orders
-// are aligned to Enter's set bits, not bar indexes.
+// are aligned to Enter's set bits, not bar indexes. StopDistance and
+// TargetDistance are optional fixed tick offsets resolved from the actual entry
+// fill. Stop/TargetDistanceSpec keep percentage and ATR distances honest by
+// resolving them after the market order fill is known.
 type Signals struct {
-	Enter      *core.Bitset
-	Side       []core.Side
-	StopLevel  []core.Price
-	TargetPlan []TargetPlan
-	Orders     []Order
+	Enter          *core.Bitset
+	Side           []core.Side
+	StopLevel      []core.Price
+	TargetPlan     []TargetPlan
+	Orders         []Order
+	StopDistance   []core.Price
+	TargetDistance []core.Price
+	StopSpec       []core.Distance
+	TargetSpec     []core.Distance
 }
 
 // RiskModel controls position size. Equity and PnL use instrument ticks times

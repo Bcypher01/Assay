@@ -98,6 +98,72 @@ func TestRunAmbiguousBarCarriesBounds(t *testing.T) {
 	}
 }
 
+func TestRunResolvesPipOffsetsFromActualEntryFill(t *testing.T) {
+	s := fixtureSeries(core.TFM1, [][4]core.Price{{100, 100, 100, 100}, {103, 110, 90, 103}})
+	b := core.NewBitset(2)
+	b.Set(0)
+	sig := Signals{
+		Enter: b, Side: []core.Side{core.SideLong}, StopLevel: []core.Price{0}, TargetPlan: []TargetPlan{{}},
+		StopDistance: []core.Price{5}, TargetDistance: []core.Price{10},
+	}
+	var out RunResult
+	if err := Run(context.Background(), s, nil, sig, fixtureConfig(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Trades) != 1 || out.Trades[0].EntryPrice != 103 || out.Trades[0].Stop != 98 || out.Trades[0].Target != 113 {
+		t.Fatalf("relative exit levels = %#v", out.Trades)
+	}
+}
+
+func TestRunResolvesPercentOffsetsFromActualEntryFill(t *testing.T) {
+	s := fixtureSeries(core.TFM1, [][4]core.Price{{100, 100, 100, 100}, {200, 206, 199, 204}})
+	b := core.NewBitset(2)
+	b.Set(0)
+	sig := Signals{
+		Enter: b, Side: []core.Side{core.SideLong}, StopLevel: []core.Price{0}, TargetPlan: []TargetPlan{{}},
+		StopSpec:   []core.Distance{{Unit: core.UnitPercent, Value: core.RatioFromInt(1)}},
+		TargetSpec: []core.Distance{{Unit: core.UnitPercent, Value: core.RatioFromInt(3)}},
+	}
+	var out RunResult
+	if err := Run(context.Background(), s, nil, sig, fixtureConfig(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Trades) != 1 || out.Trades[0].EntryPrice != 200 || out.Trades[0].Stop != 198 || out.Trades[0].Target != 206 {
+		t.Fatalf("percentage exit levels = %#v", out.Trades)
+	}
+	if out.Trades[0].Pessimistic.Net <= 0 {
+		t.Fatalf("target exit should be profitable: %#v", out.Trades[0])
+	}
+}
+
+func TestRunLongTargetOnlyBarIsAWin(t *testing.T) {
+	s := fixtureSeries(core.TFM1, [][4]core.Price{{100, 100, 100, 100}, {100, 106, 99, 104}})
+	b := core.NewBitset(2)
+	b.Set(0)
+	sig := Signals{Enter: b, Side: []core.Side{core.SideLong}, StopLevel: []core.Price{95}, TargetPlan: []TargetPlan{{Level: 105}}}
+	var out RunResult
+	if err := Run(context.Background(), s, nil, sig, fixtureConfig(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Trades) != 1 || out.Trades[0].Ambiguous || out.Trades[0].Pessimistic.Net <= 0 {
+		t.Fatalf("long target-only bar should close as a resolved win: %#v", out.Trades)
+	}
+}
+
+func TestRunShortTargetOnlyBarIsAWin(t *testing.T) {
+	s := fixtureSeries(core.TFM1, [][4]core.Price{{100, 100, 100, 100}, {100, 101, 94, 96}})
+	b := core.NewBitset(2)
+	b.Set(0)
+	sig := Signals{Enter: b, Side: []core.Side{core.SideShort}, StopLevel: []core.Price{105}, TargetPlan: []TargetPlan{{Level: 95}}}
+	var out RunResult
+	if err := Run(context.Background(), s, nil, sig, fixtureConfig(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Trades) != 1 || out.Trades[0].Ambiguous || out.Trades[0].Pessimistic.Net <= 0 {
+		t.Fatalf("short target-only bar should close as a resolved win: %#v", out.Trades)
+	}
+}
+
 func TestRunFineSeriesNarrowsAmbiguity(t *testing.T) {
 	s := fixtureSeries(core.TFM1, [][4]core.Price{{100, 101, 99, 100}, {100, 110, 90, 100}})
 	f := fixtureSeries(core.TFS1, [][4]core.Price{{100, 101, 99, 100}, {100, 106, 100, 105}, {105, 105, 90, 95}})

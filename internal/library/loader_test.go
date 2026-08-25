@@ -67,8 +67,8 @@ func TestEnsureColdDownloadsVerifiesAndLoads(t *testing.T) {
 		From:    core.MustParseTime("2024-01-01T00:00:00Z"),
 		To:      core.MustParseTime("2024-02-01T00:00:00Z"),
 	}
-	var stages []string
-	if err := loader.Ensure(ctx, req, func(p Progress) { stages = append(stages, p.Stage) }); err != nil {
+	var updates []Progress
+	if err := loader.Ensure(ctx, req, func(p Progress) { updates = append(updates, p) }); err != nil {
 		t.Fatalf("ensure: %v", err)
 	}
 	if objects.heads != 1 || objects.gets != 1 {
@@ -82,8 +82,17 @@ func TestEnsureColdDownloadsVerifiesAndLoads(t *testing.T) {
 	if len(manifests) != 1 || manifests[0].ContentHash == "" {
 		t.Fatalf("bad manifests: %+v", manifests)
 	}
-	if len(stages) == 0 {
+	if len(updates) == 0 {
 		t.Fatal("expected progress callbacks")
+	}
+	last := updates[len(updates)-1]
+	if last.Percent != 100 || last.Stage != "preparing data" {
+		t.Fatalf("final progress = %+v, want a completed preparation update", last)
+	}
+	for _, update := range updates {
+		if update.Stage == "downloading" && update.BytesTotal != 0 {
+			t.Fatalf("download progress must not label manifest rows as bytes: %+v", update)
+		}
 	}
 }
 
@@ -106,6 +115,48 @@ func TestEnsureWarmCacheMakesZeroNetworkCalls(t *testing.T) {
 	}
 	if err := loader.Ensure(ctx, req, nil); err != nil {
 		t.Fatalf("ensure warm: %v", err)
+	}
+}
+
+func TestStatusReportsReadyMissingAndPartialWithoutNetwork(t *testing.T) {
+	ctx := context.Background()
+	cache := store.NewLocalStore(t.TempDir())
+	series := buildMonth("BINANCE:BTCUSDT", core.TFM15, "2024-01", 4)
+	if err := cache.Write(ctx, series, store.Manifest{
+		Symbol: "BINANCE:BTCUSDT", TF: core.TFM15, Month: "2024-01", Source: "fixture", BuildVersion: "test",
+	}); err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
+	loader := New(cache, failingObjects{}, nil)
+
+	ready := loader.Status(ctx, Request{
+		Symbols: []string{"BINANCE:BTCUSDT"},
+		TFs:     []core.TF{core.TFM15},
+		From:    core.MustParseTime("2024-01-01T00:00:00Z"),
+		To:      core.MustParseTime("2024-01-01T01:00:00Z"),
+	})
+	if ready.Readiness != ReadinessReady || ready.ExternalRequired || ready.Snapshot == "" {
+		t.Fatalf("ready status = %+v", ready)
+	}
+
+	partial := loader.Status(ctx, Request{
+		Symbols: []string{"BINANCE:BTCUSDT"},
+		TFs:     []core.TF{core.TFM15},
+		From:    core.MustParseTime("2024-01-01T00:00:00Z"),
+		To:      core.MustParseTime("2024-02-01T00:00:00Z"),
+	})
+	if partial.Readiness != ReadinessPartial || partial.ErrorCode != "DATA_PARTIAL" || len(partial.MissingPartitions) != 1 {
+		t.Fatalf("partial status = %+v", partial)
+	}
+
+	missing := loader.Status(ctx, Request{
+		Symbols: []string{"BINANCE:BTCUSDT"},
+		TFs:     []core.TF{core.TFM15},
+		From:    core.MustParseTime("2024-02-01T00:00:00Z"),
+		To:      core.MustParseTime("2024-03-01T00:00:00Z"),
+	})
+	if missing.Readiness != ReadinessMissing || missing.ErrorCode != "DATA_MISSING" || len(missing.MissingPartitions) != 1 {
+		t.Fatalf("missing status = %+v", missing)
 	}
 }
 

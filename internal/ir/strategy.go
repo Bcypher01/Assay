@@ -11,7 +11,10 @@ import (
 	"github.com/Bcypher01/Assay/internal/primitive"
 )
 
-const SchemaV1 = "assay.strategy/v1"
+const (
+	SchemaV1 = "assay.strategy/v1"
+	SchemaV2 = "assay.strategy/v2"
+)
 
 type Direction string
 
@@ -51,6 +54,40 @@ type Slots struct {
 	Invalidation string   `json:"invalidation"`
 	Target       string   `json:"target"`
 }
+
+// EntryTiming defines when an entry signal becomes an order. The simulator only
+// supports next-bar open execution today; keeping this explicit prevents an
+// authoring client from implying unsupported fill behaviour.
+type EntryTiming string
+
+const EntryTimingNextOpen EntryTiming = "next_open"
+
+type Template struct {
+	ID      string `json:"id"`
+	Version uint32 `json:"version"`
+}
+
+// Expression is a typed boolean expression tree. Exactly one form is allowed:
+// a primitive node reference, a non-empty all/any group, or a not group with one
+// child. Leaves are intentionally restricted to boolean primitives; comparisons
+// will be added only with explicit input and unit semantics.
+type Expression struct {
+	Node string       `json:"node,omitempty"`
+	All  []Expression `json:"all,omitempty"`
+	Any  []Expression `json:"any,omitempty"`
+	Not  *Expression  `json:"not,omitempty"`
+}
+
+type EntryBranch struct {
+	Enabled bool       `json:"enabled"`
+	When    Expression `json:"when"`
+}
+
+type Entries struct {
+	Timing EntryTiming `json:"timing,omitempty"`
+	Long   EntryBranch `json:"long"`
+	Short  EntryBranch `json:"short"`
+}
 type Strategy struct {
 	Schema     string             `json:"schema"`
 	Name       string             `json:"name"`
@@ -61,6 +98,10 @@ type Strategy struct {
 	Nodes      []Node             `json:"nodes"`
 	Slots      Slots              `json:"slots"`
 	Edges      []Edge             `json:"edges,omitempty"`
+	// Template and Entries are required by schema v2. Slots and Direction remain
+	// readable for v1 documents and are deterministically migrated to Entries.
+	Template Template `json:"template,omitempty"`
+	Entries  Entries  `json:"entries,omitempty"`
 }
 type ValidationError struct{ Path, Message string }
 
@@ -71,7 +112,7 @@ func (e ValidationError) Error() string { return e.Path + ": " + e.Message }
 func (s *Strategy) Validate(reg *primitive.Registry) []ValidationError {
 	var out []ValidationError
 	add := func(p, m string) { out = append(out, ValidationError{p, m}) }
-	if s.Schema != "" && s.Schema != SchemaV1 {
+	if s.Schema != "" && s.Schema != SchemaV1 && s.Schema != SchemaV2 {
 		add("schema", "unsupported schema")
 	}
 	if s.Name == "" {
@@ -82,6 +123,9 @@ func (s *Strategy) Validate(reg *primitive.Registry) []ValidationError {
 	}
 	if s.Direction != "" && s.Direction != DirectionLong && s.Direction != DirectionShort && s.Direction != DirectionBoth {
 		add("direction", "must be long, short, or both")
+	}
+	if s.Schema == SchemaV2 && s.Direction != "" {
+		add("direction", "must be omitted for schema v2; use entries.long and entries.short")
 	}
 	for _, name := range []string{"bias", "poi", "entry"} {
 		if _, ok := s.Timeframes[name]; !ok {
@@ -140,10 +184,40 @@ func (s *Strategy) Validate(reg *primitive.Registry) []ValidationError {
 			add("slots."+name+".withinBars", "must not be negative")
 		}
 	}
-	check("bias", s.Slots.Bias)
-	check("poi", s.Slots.POI)
-	check("trigger", s.Slots.Trigger)
-	for name, id := range map[string]string{"invalidation": s.Slots.Invalidation, "target": s.Slots.Target} {
+	if s.Schema != SchemaV2 {
+		check("bias", s.Slots.Bias)
+		check("poi", s.Slots.POI)
+		check("trigger", s.Slots.Trigger)
+		if len(s.Slots.Bias.All) == 0 && len(s.Slots.POI.All) == 0 && len(s.Slots.Trigger.All) == 0 {
+			add("slots.trigger.all", "add at least one boolean entry condition")
+		}
+	} else {
+		validateV2Entries(add, s.Entries, ids, reg)
+		if !s.Slots.empty() {
+			add("slots", "must be empty for schema v2; use entries instead")
+		}
+		if s.Template.ID == "" {
+			add("template.id", "required")
+		}
+		if s.Template.Version == 0 {
+			add("template.version", "must be positive")
+		}
+	}
+	if (s.Slots.Invalidation == "") != (s.Slots.Target == "") {
+		add("slots.invalidation", "set both price levels or leave both blank to use the stop and target distances")
+		add("slots.target", "set both price levels or leave both blank to use the stop and target distances")
+	}
+	for _, slot := range []struct {
+		name string
+		id   string
+	}{
+		{name: "invalidation", id: s.Slots.Invalidation},
+		{name: "target", id: s.Slots.Target},
+	} {
+		name, id := slot.name, slot.id
+		if id == "" {
+			continue
+		}
 		n, ok := ids[id]
 		if !ok {
 			add("slots."+name, "unknown node")
@@ -169,9 +243,166 @@ func (s *Strategy) Hash() string {
 	if c.Direction == "" {
 		c.Direction = DirectionBoth
 	}
-	b, _ := canonicalJSON(c)
+	if c.Schema == SchemaV2 {
+		c.Direction = ""
+		if c.Entries.Timing == "" {
+			c.Entries.Timing = EntryTimingNextOpen
+		}
+	}
+	var b []byte
+	if c.Schema == SchemaV2 {
+		b, _ = canonicalJSON(c)
+	} else {
+		// Keep the v1 canonical representation byte-for-byte compatible with
+		// documents written before v2 fields existed. Run identity and trial
+		// counting must not change merely because the application was upgraded.
+		v1 := struct {
+			Schema     string             `json:"schema"`
+			Name       string             `json:"name"`
+			Universe   Universe           `json:"universe"`
+			Timeframes map[string]core.TF `json:"timeframes"`
+			Risk       Risk               `json:"risk"`
+			Direction  Direction          `json:"direction"`
+			Nodes      []Node             `json:"nodes"`
+			Slots      Slots              `json:"slots"`
+			Edges      []Edge             `json:"edges,omitempty"`
+		}{
+			Schema: c.Schema, Name: c.Name, Universe: c.Universe, Timeframes: c.Timeframes,
+			Risk: c.Risk, Direction: c.Direction, Nodes: c.Nodes, Slots: c.Slots, Edges: c.Edges,
+		}
+		b, _ = canonicalJSON(v1)
+	}
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
+}
+
+func validateV2Entries(add func(string, string), entries Entries, ids map[string]Node, reg *primitive.Registry) {
+	if entries.Timing != "" && entries.Timing != EntryTimingNextOpen {
+		add("entries.timing", "only next_open is currently supported")
+	}
+	branches := []struct {
+		name   string
+		branch EntryBranch
+	}{
+		{name: "long", branch: entries.Long},
+		{name: "short", branch: entries.Short},
+	}
+	enabled := 0
+	for _, x := range branches {
+		path := "entries." + x.name
+		if x.branch.Enabled {
+			enabled++
+			validateExpression(add, path+".when", x.branch.When, ids, reg)
+		} else if !x.branch.When.empty() {
+			add(path+".when", "must be empty when the branch is disabled")
+		}
+	}
+	if enabled == 0 {
+		add("entries", "enable at least one entry branch")
+	}
+}
+
+func validateExpression(add func(string, string), path string, e Expression, ids map[string]Node, reg *primitive.Registry) {
+	forms := 0
+	if e.Node != "" {
+		forms++
+	}
+	if len(e.All) != 0 {
+		forms++
+	}
+	if len(e.Any) != 0 {
+		forms++
+	}
+	if e.Not != nil {
+		forms++
+	}
+	if forms != 1 {
+		add(path, "must contain exactly one of node, all, any, or not")
+		return
+	}
+	if e.Node != "" {
+		n, ok := ids[e.Node]
+		if !ok {
+			add(path+".node", "unknown node")
+			return
+		}
+		if reg != nil {
+			p, _ := reg.Get(n.Pack, n.Type)
+			if p != nil && p.Spec().Out != primitive.KindBool {
+				add(path+".node", "must reference a boolean primitive")
+			}
+		}
+		return
+	}
+	if e.Not != nil {
+		validateExpression(add, path+".not", *e.Not, ids, reg)
+		return
+	}
+	children, kind := e.All, "all"
+	if len(e.Any) != 0 {
+		children, kind = e.Any, "any"
+	}
+	for i, child := range children {
+		validateExpression(add, fmt.Sprintf("%s.%s[%d]", path, kind, i), child, ids, reg)
+	}
+}
+
+func (e Expression) empty() bool {
+	return e.Node == "" && len(e.All) == 0 && len(e.Any) == 0 && e.Not == nil
+}
+
+func (s Slots) empty() bool {
+	return len(s.Bias.All) == 0 && s.Bias.WithinBars == 0 &&
+		len(s.POI.All) == 0 && s.POI.WithinBars == 0 &&
+		len(s.Trigger.All) == 0 && s.Trigger.WithinBars == 0 &&
+		s.Invalidation == "" && s.Target == ""
+}
+
+// MigrateV1ToV2 returns a deterministic v2 document with the same v1 entry
+// condition and direction semantics. The legacy template identity distinguishes
+// migrated documents from authored templates without inventing a user-facing
+// strategy name.
+func (s *Strategy) MigrateV1ToV2() (*Strategy, error) {
+	if s == nil {
+		return nil, fmt.Errorf("strategy: cannot migrate nil document")
+	}
+	if s.Schema != "" && s.Schema != SchemaV1 {
+		return nil, fmt.Errorf("strategy: can only migrate schema v1")
+	}
+	if s.Slots.Trigger.WithinBars != 0 {
+		return nil, fmt.Errorf("strategy: v1 trigger withinBars is not representable in schema v2")
+	}
+	c := *s
+	c.Schema = SchemaV2
+	c.Direction = ""
+	c.Template = Template{ID: "legacy-v1", Version: 1}
+	c.Entries = Entries{Timing: EntryTimingNextOpen}
+	when := legacyExpression(s.Slots)
+	direction := s.Direction
+	if direction == "" {
+		direction = DirectionBoth
+	}
+	if direction == DirectionLong || direction == DirectionBoth {
+		c.Entries.Long = EntryBranch{Enabled: true, When: when}
+	}
+	if direction == DirectionShort || direction == DirectionBoth {
+		c.Entries.Short = EntryBranch{Enabled: true, When: when}
+	}
+	c.Slots = Slots{}
+	return &c, nil
+}
+
+func legacyExpression(slots Slots) Expression {
+	children := make([]Expression, 0, len(slots.Bias.All)+len(slots.POI.All)+len(slots.Trigger.All))
+	for _, slot := range []SlotSpec{slots.Bias, slots.POI, slots.Trigger} {
+		for _, id := range slot.All {
+			children = append(children, Expression{Node: id})
+		}
+	}
+	if len(children) == 1 {
+		return children[0]
+	}
+	return Expression{All: children}
 }
 func canonicalJSON(v any) ([]byte, error) {
 	b, e := json.Marshal(v)

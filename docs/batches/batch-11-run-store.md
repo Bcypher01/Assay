@@ -91,3 +91,13 @@ Sharing between users. Cloud sync. The comparison UI.
 ## Decision log
 
 _Record the on-disk layout, retention default, and the trial-scope definition._
+
+**Implemented decisions.** The local root contains `index.json` and one
+`runs/<run-id>/` directory per unique `(strategy hash, data snapshot hash)`.
+Each run directory stores `study.json`, `result.json`, `summary.json`, and,
+while retained, `trades.parquet`. The default trade-list budget is 512 MiB;
+oldest trade lists are evicted first, while the JSON documents and index remain.
+Trial scope is the sorted strategy universe (or an explicitly supplied
+instrument set) plus the caller-supplied period label. A trial is a unique
+strategy hash within that scope, so reruns against new snapshots preserve the
+honest count rather than incrementing it.

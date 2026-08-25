@@ -1,0 +1,93 @@
+{
+  "OutOfSample": {
+    "FinalEquity": {
+      "Pessimistic": -650,
+      "Optimistic": -91
+    },
+    "MaxDrawdown": {
+      "Pessimistic": 650,
+      "Optimistic": 91
+    },
+    "AverageDrawdown": {
+      "Pessimistic": 350,
+      "Optimistic": 49
+    },
+    "ProfitFactor": {
+      "Pessimistic": 0,
+      "Optimistic": 0
+    },
+    "Expectancy": {
+      "Pessimistic": -50,
+      "Optimistic": -7
+    },
+    "Trades": 13,
+    "Wins": 0,
+    "Losses": 13,
+    "LongestLosingStreak": 13
+  },
+  "InSample": {
+    "FinalEquity": {
+      "Pessimistic": -650,
+      "Optimistic": -91
+    },
+    "MaxDrawdown": {
+      "Pessimistic": 650,
+      "Optimistic": 91
+    },
+    "AverageDrawdown": {
+      "Pessimistic": 350,
+      "Optimistic": 49
+    },
+    "ProfitFactor": {
+      "Pessimistic": 0,
+      "Optimistic": 0
+    },
+    "Expectancy": {
+      "Pessimistic": -50,
+      "Optimistic": -7
+    },
+    "Trades": 13,
+    "Wins": 0,
+    "Losses": 13,
+    "LongestLosingStreak": 13
+  },
+  "Distribution": {
+    "FinalEquity": null,
+    "MaxDrawdown": null,
+    "RealisedFinal": 0,
+    "RealisedDrawdown": 0
+  },
+  "Sensitivity": {
+    "X": null,
+    "Y": null,
+    "Cells": null
+  },
+  "Trials": 0,
+  "Deflated": {
+    "FinalEquity": {
+      "Pessimistic": 0,
+      "Optimistic": 0
+    },
+    "MaxDrawdown": {
+      "Pessimistic": 0,
+      "Optimistic": 0
+    },
+    "AverageDrawdown": {
+      "Pessimistic": 0,
+      "Optimistic": 0
+    },
+    "ProfitFactor": {
+      "Pessimistic": 0,
+      "Optimistic": 0
+    },
+    "Expectancy": {
+      "Pessimistic": 0,
+      "Optimistic": 0
+    },
+    "Trades": 0,
+    "Wins": 0,
+    "Losses": 0,
+    "LongestLosingStreak": 0
+  },
+  "CostCurve": null
+}

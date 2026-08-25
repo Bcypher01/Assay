@@ -42,6 +42,8 @@ const (
 	// DataServiceListInstrumentsProcedure is the fully-qualified name of the DataService's
 	// ListInstruments RPC.
 	DataServiceListInstrumentsProcedure = "/assay.v1.DataService/ListInstruments"
+	// DataServiceDataStatusProcedure is the fully-qualified name of the DataService's DataStatus RPC.
+	DataServiceDataStatusProcedure = "/assay.v1.DataService/DataStatus"
 	// DataServiceEnsureDataProcedure is the fully-qualified name of the DataService's EnsureData RPC.
 	DataServiceEnsureDataProcedure = "/assay.v1.DataService/EnsureData"
 	// PrimitiveServiceListPrimitivesProcedure is the fully-qualified name of the PrimitiveService's
@@ -65,6 +67,7 @@ const (
 // DataServiceClient is a client for the assay.v1.DataService service.
 type DataServiceClient interface {
 	ListInstruments(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.ListInstrumentsResponse], error)
+	DataStatus(context.Context, *connect.Request[v1.EnsureDataRequest]) (*connect.Response[v1.DataStatusResponse], error)
 	EnsureData(context.Context, *connect.Request[v1.EnsureDataRequest]) (*connect.ServerStreamForClient[v1.Progress], error)
 }
 
@@ -85,6 +88,12 @@ func NewDataServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(dataServiceMethods.ByName("ListInstruments")),
 			connect.WithClientOptions(opts...),
 		),
+		dataStatus: connect.NewClient[v1.EnsureDataRequest, v1.DataStatusResponse](
+			httpClient,
+			baseURL+DataServiceDataStatusProcedure,
+			connect.WithSchema(dataServiceMethods.ByName("DataStatus")),
+			connect.WithClientOptions(opts...),
+		),
 		ensureData: connect.NewClient[v1.EnsureDataRequest, v1.Progress](
 			httpClient,
 			baseURL+DataServiceEnsureDataProcedure,
@@ -97,12 +106,18 @@ func NewDataServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 // dataServiceClient implements DataServiceClient.
 type dataServiceClient struct {
 	listInstruments *connect.Client[v1.Empty, v1.ListInstrumentsResponse]
+	dataStatus      *connect.Client[v1.EnsureDataRequest, v1.DataStatusResponse]
 	ensureData      *connect.Client[v1.EnsureDataRequest, v1.Progress]
 }
 
 // ListInstruments calls assay.v1.DataService.ListInstruments.
 func (c *dataServiceClient) ListInstruments(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.ListInstrumentsResponse], error) {
 	return c.listInstruments.CallUnary(ctx, req)
+}
+
+// DataStatus calls assay.v1.DataService.DataStatus.
+func (c *dataServiceClient) DataStatus(ctx context.Context, req *connect.Request[v1.EnsureDataRequest]) (*connect.Response[v1.DataStatusResponse], error) {
+	return c.dataStatus.CallUnary(ctx, req)
 }
 
 // EnsureData calls assay.v1.DataService.EnsureData.
@@ -113,6 +128,7 @@ func (c *dataServiceClient) EnsureData(ctx context.Context, req *connect.Request
 // DataServiceHandler is an implementation of the assay.v1.DataService service.
 type DataServiceHandler interface {
 	ListInstruments(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.ListInstrumentsResponse], error)
+	DataStatus(context.Context, *connect.Request[v1.EnsureDataRequest]) (*connect.Response[v1.DataStatusResponse], error)
 	EnsureData(context.Context, *connect.Request[v1.EnsureDataRequest], *connect.ServerStream[v1.Progress]) error
 }
 
@@ -129,6 +145,12 @@ func NewDataServiceHandler(svc DataServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(dataServiceMethods.ByName("ListInstruments")),
 		connect.WithHandlerOptions(opts...),
 	)
+	dataServiceDataStatusHandler := connect.NewUnaryHandler(
+		DataServiceDataStatusProcedure,
+		svc.DataStatus,
+		connect.WithSchema(dataServiceMethods.ByName("DataStatus")),
+		connect.WithHandlerOptions(opts...),
+	)
 	dataServiceEnsureDataHandler := connect.NewServerStreamHandler(
 		DataServiceEnsureDataProcedure,
 		svc.EnsureData,
@@ -139,6 +161,8 @@ func NewDataServiceHandler(svc DataServiceHandler, opts ...connect.HandlerOption
 		switch r.URL.Path {
 		case DataServiceListInstrumentsProcedure:
 			dataServiceListInstrumentsHandler.ServeHTTP(w, r)
+		case DataServiceDataStatusProcedure:
+			dataServiceDataStatusHandler.ServeHTTP(w, r)
 		case DataServiceEnsureDataProcedure:
 			dataServiceEnsureDataHandler.ServeHTTP(w, r)
 		default:
@@ -152,6 +176,10 @@ type UnimplementedDataServiceHandler struct{}
 
 func (UnimplementedDataServiceHandler) ListInstruments(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.ListInstrumentsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("assay.v1.DataService.ListInstruments is not implemented"))
+}
+
+func (UnimplementedDataServiceHandler) DataStatus(context.Context, *connect.Request[v1.EnsureDataRequest]) (*connect.Response[v1.DataStatusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("assay.v1.DataService.DataStatus is not implemented"))
 }
 
 func (UnimplementedDataServiceHandler) EnsureData(context.Context, *connect.Request[v1.EnsureDataRequest], *connect.ServerStream[v1.Progress]) error {

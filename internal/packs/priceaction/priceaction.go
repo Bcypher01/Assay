@@ -12,6 +12,8 @@ func init() {
 	primitive.MustRegister(SwingHigh{})
 	primitive.MustRegister(SwingLow{})
 	primitive.MustRegister(Engulfing{})
+	primitive.MustRegister(EngulfingBullish{})
+	primitive.MustRegister(EngulfingBearish{})
 	primitive.MustRegister(InsideBar{})
 	primitive.MustRegister(PinBar{})
 	primitive.MustRegister(Doji{})
@@ -84,20 +86,38 @@ func swing(p proto.Message) (int, error) {
 }
 
 type Engulfing struct{}
+type EngulfingBullish struct{}
+type EngulfingBearish struct{}
 
-func (Engulfing) Spec() primitive.Spec                                   { return candleSpec("engulfing") }
-func (Engulfing) New(proto.Message, core.TF) (primitive.Instance, error) { return engulf{}, nil }
+func (Engulfing) Spec() primitive.Spec {
+	return candleSpec("engulfing")
+}
+func (EngulfingBullish) Spec() primitive.Spec {
+	return candleSpec("engulfing_bullish")
+}
+func (EngulfingBearish) Spec() primitive.Spec {
+	return candleSpec("engulfing_bearish")
+}
+func (Engulfing) New(proto.Message, core.TF) (primitive.Instance, error) {
+	return engulf{}, nil
+}
+func (EngulfingBullish) New(proto.Message, core.TF) (primitive.Instance, error) {
+	return engulf{bullish: true}, nil
+}
+func (EngulfingBearish) New(proto.Message, core.TF) (primitive.Instance, error) {
+	return engulf{bearish: true}, nil
+}
 
-type engulf struct{}
+type engulf struct{ bullish, bearish bool }
 
-func (engulf) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.Value, error) {
+func (x engulf) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.Value, error) {
 	b := core.NewBitset(s.Len())
 	v := core.NewBitset(s.Len())
 	for i := 1; i < s.Len(); i++ {
 		v.Set(i)
 		bull := s.Close[i] > s.Open[i] && s.Close[i-1] < s.Open[i-1] && s.Open[i] <= s.Close[i-1] && s.Close[i] >= s.Open[i-1]
 		bear := s.Close[i] < s.Open[i] && s.Close[i-1] > s.Open[i-1] && s.Open[i] >= s.Close[i-1] && s.Close[i] <= s.Open[i-1]
-		if bull || bear {
+		if (!x.bullish && !x.bearish && (bull || bear)) || (x.bullish && bull) || (x.bearish && bear) {
 			b.Set(i)
 		}
 	}

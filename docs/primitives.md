@@ -28,7 +28,8 @@
 ## Price-action pack
 
 `swing_high` and `swing_low` are strict symmetric fractals. `engulfing` uses
-real bodies; `inside_bar` uses the prior high-low range. `pin_bar` and `doji`
+real bodies; `engulfing_bullish` and `engulfing_bearish` select its direction.
+`inside_bar` uses the prior high-low range. `pin_bar` and `doji`
 use body and wick/range ratios in thousandths. `consolidation` marks a rolling
 range with a width under the tick threshold. `measured_move` projects the
 current close by the rolling range in the candle direction.

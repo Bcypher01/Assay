@@ -7,16 +7,18 @@ import (
 )
 
 const (
-	MovingAverageCrossoverTemplateID      = "moving-average-crossover"
-	MovingAverageCrossoverTemplateVersion = 1
-	RSIPullbackTemplateID                 = "rsi-pullback-in-trend"
-	RSIPullbackTemplateVersion            = 1
-	DonchianBreakoutTemplateID            = "donchian-breakout"
-	DonchianBreakoutTemplateVersion       = 1
-	BollingerReversionTemplateID          = "bollinger-mean-reversion"
-	BollingerReversionTemplateVersion     = 1
-	SessionBreakoutTemplateID             = "london-session-breakout"
-	SessionBreakoutTemplateVersion        = 1
+	MovingAverageCrossoverTemplateID       = "moving-average-crossover"
+	MovingAverageCrossoverTemplateVersion  = 1
+	RSIPullbackTemplateID                  = "rsi-pullback-in-trend"
+	RSIPullbackTemplateVersion             = 1
+	DonchianBreakoutTemplateID             = "donchian-breakout"
+	DonchianBreakoutTemplateVersion        = 1
+	BollingerReversionTemplateID           = "bollinger-mean-reversion"
+	BollingerReversionTemplateVersion      = 1
+	SessionBreakoutTemplateID              = "london-session-breakout"
+	SessionBreakoutTemplateVersion         = 1
+	LiquiditySweepStructureTemplateID      = "liquidity-sweep-structure-confirmation"
+	LiquiditySweepStructureTemplateVersion = 1
 )
 
 // NewMovingAverageCrossover returns Assay's first editable stock template.
@@ -203,10 +205,53 @@ func NewSessionBreakout() *Strategy {
 	}
 }
 
+// NewLiquiditySweepStructure returns an editable reversal template. A sweep
+// must be followed within five bars by a directional break of market structure,
+// preventing the template from treating the sweep itself as an entry signal.
+func NewLiquiditySweepStructure() *Strategy {
+	return &Strategy{
+		Schema:   SchemaV2,
+		Name:     "Liquidity sweep with market-structure confirmation",
+		Universe: Universe{Symbols: []string{"EUR/USD"}},
+		Timeframes: map[string]core.TF{
+			"bias": core.TFH1, "poi": core.TFH1, "entry": core.TFH1,
+		},
+		Risk: Risk{
+			Stop:     core.Distance{Unit: core.UnitPips, Value: core.RatioFromInt(30)},
+			Target:   core.Distance{Unit: core.UnitPips, Value: core.RatioFromInt(60)},
+			PerTrade: core.RatioFromFloat(0.005),
+		},
+		Template: Template{ID: LiquiditySweepStructureTemplateID, Version: LiquiditySweepStructureTemplateVersion},
+		Entries: Entries{
+			Timing: EntryTimingNextOpen,
+			Long: EntryBranch{Enabled: true, Name: "Bullish sweep followed by bullish structure", When: Expression{After: &OccursAfter{
+				Event: Expression{Node: "bullish-structure"}, Predecessor: Expression{Node: "bullish-sweep"}, WithinBars: 5,
+			}}},
+			Short: EntryBranch{Enabled: true, Name: "Bearish sweep followed by bearish structure", When: Expression{After: &OccursAfter{
+				Event: Expression{Node: "bearish-structure"}, Predecessor: Expression{Node: "bearish-sweep"}, WithinBars: 5,
+			}}},
+		},
+		Nodes: []Node{
+			{ID: "bullish-sweep", Pack: "smc", Type: "liquidity_sweep_bullish", Params: sweepParams(), Timeframe: core.TFH1},
+			{ID: "bearish-sweep", Pack: "smc", Type: "liquidity_sweep_bearish", Params: sweepParams(), Timeframe: core.TFH1},
+			{ID: "bullish-structure", Pack: "smc", Type: "market_structure_bullish", Params: structureParams(), Timeframe: core.TFH1},
+			{ID: "bearish-structure", Pack: "smc", Type: "market_structure_bearish", Params: structureParams(), Timeframe: core.TFH1},
+		},
+	}
+}
+
 func sessionParams() json.RawMessage {
 	return json.RawMessage(`{"startMinuteUtc":420,"endMinuteUtc":540}`)
 }
 
 func bollingerParams() json.RawMessage {
 	return json.RawMessage(`{"period":20,"widthMilli":2000}`)
+}
+
+func sweepParams() json.RawMessage {
+	return json.RawMessage(`{"wickThroughTicks":1,"closeBackBars":3,"requireStructureShift":true}`)
+}
+
+func structureParams() json.RawMessage {
+	return json.RawMessage(`{"swingLookback":5,"confirmByClose":true}`)
 }

@@ -10,6 +10,8 @@ import (
 
 func init() {
 	primitive.MustRegister(Session{})
+	primitive.MustRegister(SessionHigh{})
+	primitive.MustRegister(SessionLow{})
 	primitive.MustRegister(DayOfWeek{})
 	primitive.MustRegister(TimeOfDayRange{})
 	primitive.MustRegister(BarOfSession{})
@@ -21,11 +23,7 @@ func (Session) Spec() primitive.Spec {
 	return primitive.Spec{Pack: "timeofday", Type: "session", Out: primitive.KindBool, Params: (*assayv1.SessionParams)(nil).ProtoReflect().Descriptor(), Timeframed: true}
 }
 func (Session) New(p proto.Message, _ core.TF) (primitive.Instance, error) {
-	x, ok := p.(*assayv1.SessionParams)
-	if !ok || x.StartMinuteUtc > 1439 || x.EndMinuteUtc > 1439 {
-		return nil, fmt.Errorf("timeofday: invalid session")
-	}
-	return session{x.StartMinuteUtc, x.EndMinuteUtc}, nil
+	return newSession(p)
 }
 
 type session struct{ s, e uint32 }
@@ -34,8 +32,7 @@ func (x session) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.Value, er
 	b := core.NewBitset(s.Len())
 	v := core.NewBitset(s.Len())
 	for i, t := range s.Time {
-		m := uint32(t.Std().Hour()*60 + t.Std().Minute())
-		if (x.s <= x.e && m >= x.s && m < x.e) || (x.s > x.e && (m >= x.s || m < x.e)) {
+		if x.contains(t) {
 			b.Set(i)
 		}
 		v.Set(i)
@@ -43,6 +40,99 @@ func (x session) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.Value, er
 	return primitive.Value{Kind: primitive.KindBool, Bool: b, Valid: v}, nil
 }
 func (session) Overlays(core.Time, core.Time) []primitive.Overlay { return nil }
+
+func newSession(p proto.Message) (session, error) {
+	x, ok := p.(*assayv1.SessionParams)
+	if !ok || x.StartMinuteUtc > 1439 || x.EndMinuteUtc > 1439 || x.StartMinuteUtc == x.EndMinuteUtc {
+		return session{}, fmt.Errorf("timeofday: invalid session")
+	}
+	return session{x.StartMinuteUtc, x.EndMinuteUtc}, nil
+}
+
+func (x session) contains(t core.Time) bool {
+	m := uint32(t.Std().Hour()*60 + t.Std().Minute())
+	return (x.s < x.e && m >= x.s && m < x.e) || (x.s > x.e && (m >= x.s || m < x.e))
+}
+
+func (x session) key(t core.Time) int64 {
+	std := t.Std()
+	day := std.Unix() / (24 * 60 * 60)
+	m := uint32(std.Hour()*60 + std.Minute())
+	if x.s > x.e && m < x.e {
+		day--
+	}
+	return day
+}
+
+// SessionHigh and SessionLow expose the completed configured-session range.
+// Their values are invalid while the next session is forming, so a breakout
+// can only reference a stable range known at the close of that session.
+type SessionHigh struct{}
+type SessionLow struct{}
+
+func (SessionHigh) Spec() primitive.Spec {
+	return primitive.Spec{Pack: "timeofday", Type: "session_high", Out: primitive.KindLevel, Params: (*assayv1.SessionParams)(nil).ProtoReflect().Descriptor(), Timeframed: true}
+}
+func (SessionLow) Spec() primitive.Spec {
+	return primitive.Spec{Pack: "timeofday", Type: "session_low", Out: primitive.KindLevel, Params: (*assayv1.SessionParams)(nil).ProtoReflect().Descriptor(), Timeframed: true}
+}
+func (SessionHigh) New(p proto.Message, _ core.TF) (primitive.Instance, error) {
+	s, err := newSession(p)
+	if err != nil {
+		return nil, err
+	}
+	return sessionRange{session: s, high: true}, nil
+}
+func (SessionLow) New(p proto.Message, _ core.TF) (primitive.Instance, error) {
+	s, err := newSession(p)
+	if err != nil {
+		return nil, err
+	}
+	return sessionRange{session: s}, nil
+}
+
+type sessionRange struct {
+	session session
+	high    bool
+}
+
+func (x sessionRange) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.Value, error) {
+	levels := make([]core.Price, s.Len())
+	valid := core.NewBitset(s.Len())
+	var current, completed core.Price
+	active, haveCurrent, haveCompleted := false, false, false
+	var currentKey int64
+	for i, t := range s.Time {
+		if x.session.contains(t) {
+			candidate := s.Low[i]
+			if x.high {
+				candidate = s.High[i]
+			}
+			key := x.session.key(t)
+			if !active || key != currentKey {
+				if active && haveCurrent {
+					completed, haveCompleted = current, true
+				}
+				current, currentKey, active, haveCurrent = candidate, key, true, true
+			} else if x.high {
+				current = core.Max(current, candidate)
+			} else {
+				current = core.Min(current, candidate)
+			}
+			continue
+		}
+		if active && haveCurrent {
+			completed, haveCompleted = current, true
+			active, haveCurrent = false, false
+		}
+		if haveCompleted {
+			levels[i] = completed
+			valid.Set(i)
+		}
+	}
+	return primitive.Value{Kind: primitive.KindLevel, Level: levels, Valid: valid}, nil
+}
+func (sessionRange) Overlays(core.Time, core.Time) []primitive.Overlay { return nil }
 
 type DayOfWeek struct{}
 

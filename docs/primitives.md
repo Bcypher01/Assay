@@ -42,6 +42,8 @@ midnight. `day_of_week` uses UTC weekdays. `bar_of_session` emits the one-based
 bar index within the configured session and zero outside it. Named exchange
 sessions are intentionally deferred until `primitive.EvalCtx` carries the
 instrument calendar, so the package never silently hardcodes DST behaviour.
+`session_high` and `session_low` expose the completed configured-session range
+only after that session ends; they are invalid while the next range is forming.
 
 ## SMC pack
 

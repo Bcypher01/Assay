@@ -15,6 +15,8 @@ const (
 	DonchianBreakoutTemplateVersion       = 1
 	BollingerReversionTemplateID          = "bollinger-mean-reversion"
 	BollingerReversionTemplateVersion     = 1
+	SessionBreakoutTemplateID             = "london-session-breakout"
+	SessionBreakoutTemplateVersion        = 1
 )
 
 // NewMovingAverageCrossover returns Assay's first editable stock template.
@@ -165,6 +167,44 @@ func NewBollingerReversion() *Strategy {
 			{ID: "lower-band", Pack: "indicator", Type: "bollinger_lower", Params: bollingerParams(), Timeframe: core.TFD1},
 		},
 	}
+}
+
+// NewSessionBreakout returns an editable UTC session-range breakout template.
+// The 07:00–09:00 UTC range is an example configuration, not a claim about an
+// exchange session or daylight-saving schedule; users must set their market's
+// intended UTC window explicitly.
+func NewSessionBreakout() *Strategy {
+	return &Strategy{
+		Schema:   SchemaV2,
+		Name:     "London session breakout (UTC example)",
+		Universe: Universe{Symbols: []string{"EUR/USD"}},
+		Timeframes: map[string]core.TF{
+			"bias": core.TFM15, "poi": core.TFM15, "entry": core.TFM15,
+		},
+		Risk: Risk{
+			Stop:     core.Distance{Unit: core.UnitPips, Value: core.RatioFromInt(25)},
+			Target:   core.Distance{Unit: core.UnitPips, Value: core.RatioFromInt(50)},
+			PerTrade: core.RatioFromFloat(0.005),
+		},
+		Template: Template{ID: SessionBreakoutTemplateID, Version: SessionBreakoutTemplateVersion},
+		Entries: Entries{
+			Timing: EntryTimingNextOpen,
+			Long: EntryBranch{Enabled: true, Name: "Close crosses above the completed session high", When: Expression{
+				Price: &PriceLevelPredicate{Node: "session-high", Source: PriceClose, Relation: PriceCrossesAbove},
+			}},
+			Short: EntryBranch{Enabled: true, Name: "Close crosses below the completed session low", When: Expression{
+				Price: &PriceLevelPredicate{Node: "session-low", Source: PriceClose, Relation: PriceCrossesBelow},
+			}},
+		},
+		Nodes: []Node{
+			{ID: "session-high", Pack: "timeofday", Type: "session_high", Params: sessionParams(), Timeframe: core.TFM15},
+			{ID: "session-low", Pack: "timeofday", Type: "session_low", Params: sessionParams(), Timeframe: core.TFM15},
+		},
+	}
+}
+
+func sessionParams() json.RawMessage {
+	return json.RawMessage(`{"startMinuteUtc":420,"endMinuteUtc":540}`)
 }
 
 func bollingerParams() json.RawMessage {

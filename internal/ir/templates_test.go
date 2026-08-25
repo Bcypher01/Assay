@@ -5,6 +5,7 @@ import (
 
 	"github.com/Bcypher01/Assay/internal/core"
 	_ "github.com/Bcypher01/Assay/internal/packs/indicator"
+	_ "github.com/Bcypher01/Assay/internal/packs/timeofday"
 	"github.com/Bcypher01/Assay/internal/primitive"
 )
 
@@ -81,5 +82,18 @@ func TestNewBollingerReversion(t *testing.T) {
 	}
 	if strategy.Entries.Short.When.All[0].Price.Source != PriceHigh || strategy.Entries.Short.When.All[1].Price.Relation != PriceCrossesBelow {
 		t.Fatalf("unexpected short reversion rule: %#v", strategy.Entries.Short)
+	}
+}
+
+func TestNewSessionBreakout(t *testing.T) {
+	strategy := NewSessionBreakout()
+	if errs := strategy.Validate(primitive.DefaultRegistry); len(errs) != 0 {
+		t.Fatalf("template is invalid: %#v", errs)
+	}
+	if strategy.Template.ID != SessionBreakoutTemplateID || strategy.Template.Version != SessionBreakoutTemplateVersion {
+		t.Fatalf("template identity = %#v", strategy.Template)
+	}
+	if strategy.Timeframes["entry"] != core.TFM15 || strategy.Entries.Long.When.Price.Relation != PriceCrossesAbove || strategy.Entries.Short.When.Price.Relation != PriceCrossesBelow {
+		t.Fatalf("unexpected session breakout rules: %#v", strategy)
 	}
 }

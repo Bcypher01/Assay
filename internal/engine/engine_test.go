@@ -192,6 +192,29 @@ func TestRunDonchianBreakoutTemplate(t *testing.T) {
 	}
 }
 
+func TestRunSessionBreakoutTemplate(t *testing.T) {
+	series := core.NewSeries("EUR/USD", core.TFM15, 12)
+	start := core.MustParseTime("2025-01-01T06:45:00Z")
+	for i := 0; i < 12; i++ {
+		price := core.Price(100)
+		if i >= 10 {
+			price = 110
+		}
+		series.Append(start+core.Time(int64(i)*core.TFM15.Millis()), price, price, price, price, 0)
+	}
+	config := sim.Config{
+		Spec: instrument.Spec{Symbol: "EUR/USD", TickSize: "1", PipTicks: 1, Gap: instrument.GapFillAtOpen},
+		Risk: sim.RiskModel{InitialEquity: 1_000, FixedLots: core.One},
+	}
+	result, _, err := Run(context.Background(), ir.NewSessionBreakout(), Data{Series: series, Config: config})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Trades) != 1 || result.Trades[0].Side != core.SideLong || result.Trades[0].EntryBar != 11 {
+		t.Fatalf("template did not enter after the completed-session breakout: %#v", result.Trades)
+	}
+}
+
 func TestHoldsExpressionTemporalOperators(t *testing.T) {
 	values := map[string]primitive.Value{
 		"event":   boolValue(5, 1, 2),

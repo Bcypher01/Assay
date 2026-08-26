@@ -377,6 +377,17 @@ func (s *Server) GetDetails(ctx context.Context, req *connect.Request[assayv1.Ge
 	for _, miss := range run.Result.NearMisses {
 		d.NearMisses = append(d.NearMisses, &assayv1.NearMissSummary{Condition: miss.Condition, Count: uint32(miss.Count)})
 	}
+	for _, window := range run.Result.WalkForward {
+		d.WalkForward = append(d.WalkForward, &assayv1.WalkForwardWindow{TrainFrom: uint32(window.Window.TrainFrom), TrainTo: uint32(window.Window.TrainTo), TestFrom: uint32(window.Window.TestFrom), TestTo: uint32(window.Window.TestTo), OutOfSample: resultMetrics(window.Metrics)})
+	}
+	for _, point := range run.Result.CostStress {
+		d.CostStress = append(d.CostStress, &assayv1.CostStressPoint{Multiplier: uint32(point.Multiplier), Metrics: resultMetrics(point.Metrics)})
+	}
+	d.MonteCarlo = monteCarloMessage(run.Result.Distribution, run.Study.MonteCarlo, stableStudySeed(run.Study))
+	d.Sensitivity = sensitivityMessage(run.Result.Sensitivity)
+	for _, action := range run.Result.NextActions {
+		d.NextActions = append(d.NextActions, &assayv1.NextAction{Kind: action.Kind, Reason: action.Reason})
+	}
 	return connect.NewResponse(&assayv1.GetRunDetailsResponse{Details: d}), nil
 }
 
@@ -464,6 +475,40 @@ func periodMetrics(trades []sim.Trade, layout string) []*assayv1.PeriodMetrics {
 	out := make([]*assayv1.PeriodMetrics, len(items))
 	for i, x := range items {
 		out[i] = &assayv1.PeriodMetrics{Period: x.period, NetPnl: &assayv1.BoundedMetric{Pessimistic: x.p, Optimistic: x.o}, Trades: x.trades, Wins: x.wins, Losses: x.losses}
+	}
+	return out
+}
+
+func monteCarloMessage(d analytics.MCDistribution, c analytics.MCConfig, seed uint64) *assayv1.MonteCarloSummary {
+	if c.Samples == 0 {
+		c.Samples, c.BlockLength, c.Seed = 1000, 5, seed
+	}
+	return &assayv1.MonteCarloSummary{FinalEquity: percentiles(d.FinalEquity), MaxDrawdown: percentiles(d.MaxDrawdown), RealisedFinalEquity: d.RealisedFinal, RealisedMaxDrawdown: d.RealisedDrawdown, Samples: uint32(c.Samples), BlockLength: uint32(c.BlockLength), Seed: c.Seed}
+}
+func percentiles(v []float64) *assayv1.Percentile {
+	if len(v) == 0 {
+		return &assayv1.Percentile{}
+	}
+	at := func(p float64) float64 { return v[int(p*float64(len(v)-1))] }
+	return &assayv1.Percentile{P05: at(.05), P50: at(.5), P95: at(.95)}
+}
+func stableStudySeed(s *analytics.Study) uint64 {
+	if s != nil && s.Strategy != nil {
+		var h uint64 = 14695981039346656037
+		for _, b := range []byte(s.Strategy.Hash()) {
+			h ^= uint64(b)
+			h *= 1099511628211
+		}
+		return h
+	}
+	return 0
+}
+func sensitivityMessage(g analytics.Grid) *assayv1.SensitivityGrid {
+	out := &assayv1.SensitivityGrid{X: append([]string(nil), g.X...), Y: append([]string(nil), g.Y...)}
+	for _, row := range g.Cells {
+		for _, cell := range row {
+			out.Cells = append(out.Cells, &assayv1.SensitivityCell{Metrics: resultMetrics(cell)})
+		}
 	}
 	return out
 }

@@ -37,6 +37,13 @@ the ambiguous-fill flag for the trade inspector. A retained trade list can be
 evicted under history retention; in that case `GetDetails.trade_list_present`
 is false and `GetTrades` returns `failed_precondition`.
 
+Every persisted local study also includes the default Phase 4 robustness pass:
+anchored held-out windows, 1×/2×/3× cost stress, a 3×3 cost/risk sensitivity
+grid, and a reproducible 1,000-sample block-bootstrap. These are returned from
+`GetDetails` as `walk_forward`, `cost_stress`, `sensitivity`, and
+`monte_carlo`. Render the returned next-action cards as experiments: running an
+altered study creates a distinct configuration and is counted in `trials`.
+
 Interactive API documentation is available from the local server at `/docs`.
 The corresponding OpenAPI 3.1 document is `/openapi.json`. Streaming endpoints
 are documented there but should be called through the generated ConnectRPC

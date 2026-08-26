@@ -237,6 +237,11 @@ message RunDetails {
   repeated PeriodMetrics yearly = 13;
   repeated PeriodMetrics monthly = 14;
   repeated NearMissSummary near_misses = 15;
+  repeated WalkForwardWindow walk_forward = 16;
+  repeated CostStressPoint cost_stress = 17;
+  MonteCarloSummary monte_carlo = 18;
+  SensitivityGrid sensitivity = 19;
+  repeated NextAction next_actions = 20;
 }
 message PeriodMetrics {
   string period = 1;
@@ -276,6 +281,43 @@ message GetRunTradesResponse {
   repeated TradeRecord trades = 1;
   uint32 total = 2;
   uint32 next_offset = 3;
+}
+message WalkForwardWindow {
+  uint32 train_from = 1;
+  uint32 train_to = 2;
+  uint32 test_from = 3;
+  uint32 test_to = 4;
+  ResultMetrics out_of_sample = 5;
+}
+message CostStressPoint {
+  uint32 multiplier = 1;
+  ResultMetrics metrics = 2;
+}
+message Percentile {
+  double p05 = 1;
+  double p50 = 2;
+  double p95 = 3;
+}
+message MonteCarloSummary {
+  Percentile final_equity = 1;
+  Percentile max_drawdown = 2;
+  double realised_final_equity = 3;
+  double realised_max_drawdown = 4;
+  uint32 samples = 5;
+  uint32 block_length = 6;
+  uint64 seed = 7;
+}
+message SensitivityCell {
+  ResultMetrics metrics = 1;
+}
+message SensitivityGrid {
+  repeated string x = 1;
+  repeated string y = 2;
+  repeated SensitivityCell cells = 3;
+}
+message NextAction {
+  string kind = 1;
+  string reason = 2;
 }
 message CompareRunsRequest {
   string left = 1;

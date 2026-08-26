@@ -1796,6 +1796,31 @@ export class RunDetails extends Message<RunDetails> {
    */
   nearMisses: NearMissSummary[] = [];
 
+  /**
+   * @generated from field: repeated assay.v1.WalkForwardWindow walk_forward = 16;
+   */
+  walkForward: WalkForwardWindow[] = [];
+
+  /**
+   * @generated from field: repeated assay.v1.CostStressPoint cost_stress = 17;
+   */
+  costStress: CostStressPoint[] = [];
+
+  /**
+   * @generated from field: assay.v1.MonteCarloSummary monte_carlo = 18;
+   */
+  monteCarlo?: MonteCarloSummary;
+
+  /**
+   * @generated from field: assay.v1.SensitivityGrid sensitivity = 19;
+   */
+  sensitivity?: SensitivityGrid;
+
+  /**
+   * @generated from field: repeated assay.v1.NextAction next_actions = 20;
+   */
+  nextActions: NextAction[] = [];
+
   constructor(data?: PartialMessage<RunDetails>) {
     super();
     proto3.util.initPartial(data, this);
@@ -1819,6 +1844,11 @@ export class RunDetails extends Message<RunDetails> {
     { no: 13, name: "yearly", kind: "message", T: PeriodMetrics, repeated: true },
     { no: 14, name: "monthly", kind: "message", T: PeriodMetrics, repeated: true },
     { no: 15, name: "near_misses", kind: "message", T: NearMissSummary, repeated: true },
+    { no: 16, name: "walk_forward", kind: "message", T: WalkForwardWindow, repeated: true },
+    { no: 17, name: "cost_stress", kind: "message", T: CostStressPoint, repeated: true },
+    { no: 18, name: "monte_carlo", kind: "message", T: MonteCarloSummary },
+    { no: 19, name: "sensitivity", kind: "message", T: SensitivityGrid },
+    { no: 20, name: "next_actions", kind: "message", T: NextAction, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): RunDetails {
@@ -2183,6 +2213,361 @@ export class GetRunTradesResponse extends Message<GetRunTradesResponse> {
 
   static equals(a: GetRunTradesResponse | PlainMessage<GetRunTradesResponse> | undefined, b: GetRunTradesResponse | PlainMessage<GetRunTradesResponse> | undefined): boolean {
     return proto3.util.equals(GetRunTradesResponse, a, b);
+  }
+}
+
+/**
+ * @generated from message assay.v1.WalkForwardWindow
+ */
+export class WalkForwardWindow extends Message<WalkForwardWindow> {
+  /**
+   * @generated from field: uint32 train_from = 1;
+   */
+  trainFrom = 0;
+
+  /**
+   * @generated from field: uint32 train_to = 2;
+   */
+  trainTo = 0;
+
+  /**
+   * @generated from field: uint32 test_from = 3;
+   */
+  testFrom = 0;
+
+  /**
+   * @generated from field: uint32 test_to = 4;
+   */
+  testTo = 0;
+
+  /**
+   * @generated from field: assay.v1.ResultMetrics out_of_sample = 5;
+   */
+  outOfSample?: ResultMetrics;
+
+  constructor(data?: PartialMessage<WalkForwardWindow>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.WalkForwardWindow";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "train_from", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 2, name: "train_to", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 3, name: "test_from", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 4, name: "test_to", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 5, name: "out_of_sample", kind: "message", T: ResultMetrics },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): WalkForwardWindow {
+    return new WalkForwardWindow().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): WalkForwardWindow {
+    return new WalkForwardWindow().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): WalkForwardWindow {
+    return new WalkForwardWindow().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: WalkForwardWindow | PlainMessage<WalkForwardWindow> | undefined, b: WalkForwardWindow | PlainMessage<WalkForwardWindow> | undefined): boolean {
+    return proto3.util.equals(WalkForwardWindow, a, b);
+  }
+}
+
+/**
+ * @generated from message assay.v1.CostStressPoint
+ */
+export class CostStressPoint extends Message<CostStressPoint> {
+  /**
+   * @generated from field: uint32 multiplier = 1;
+   */
+  multiplier = 0;
+
+  /**
+   * @generated from field: assay.v1.ResultMetrics metrics = 2;
+   */
+  metrics?: ResultMetrics;
+
+  constructor(data?: PartialMessage<CostStressPoint>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.CostStressPoint";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "multiplier", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 2, name: "metrics", kind: "message", T: ResultMetrics },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CostStressPoint {
+    return new CostStressPoint().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): CostStressPoint {
+    return new CostStressPoint().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): CostStressPoint {
+    return new CostStressPoint().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: CostStressPoint | PlainMessage<CostStressPoint> | undefined, b: CostStressPoint | PlainMessage<CostStressPoint> | undefined): boolean {
+    return proto3.util.equals(CostStressPoint, a, b);
+  }
+}
+
+/**
+ * @generated from message assay.v1.Percentile
+ */
+export class Percentile extends Message<Percentile> {
+  /**
+   * @generated from field: double p05 = 1;
+   */
+  p05 = 0;
+
+  /**
+   * @generated from field: double p50 = 2;
+   */
+  p50 = 0;
+
+  /**
+   * @generated from field: double p95 = 3;
+   */
+  p95 = 0;
+
+  constructor(data?: PartialMessage<Percentile>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.Percentile";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "p05", kind: "scalar", T: 1 /* ScalarType.DOUBLE */ },
+    { no: 2, name: "p50", kind: "scalar", T: 1 /* ScalarType.DOUBLE */ },
+    { no: 3, name: "p95", kind: "scalar", T: 1 /* ScalarType.DOUBLE */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Percentile {
+    return new Percentile().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): Percentile {
+    return new Percentile().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): Percentile {
+    return new Percentile().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: Percentile | PlainMessage<Percentile> | undefined, b: Percentile | PlainMessage<Percentile> | undefined): boolean {
+    return proto3.util.equals(Percentile, a, b);
+  }
+}
+
+/**
+ * @generated from message assay.v1.MonteCarloSummary
+ */
+export class MonteCarloSummary extends Message<MonteCarloSummary> {
+  /**
+   * @generated from field: assay.v1.Percentile final_equity = 1;
+   */
+  finalEquity?: Percentile;
+
+  /**
+   * @generated from field: assay.v1.Percentile max_drawdown = 2;
+   */
+  maxDrawdown?: Percentile;
+
+  /**
+   * @generated from field: double realised_final_equity = 3;
+   */
+  realisedFinalEquity = 0;
+
+  /**
+   * @generated from field: double realised_max_drawdown = 4;
+   */
+  realisedMaxDrawdown = 0;
+
+  /**
+   * @generated from field: uint32 samples = 5;
+   */
+  samples = 0;
+
+  /**
+   * @generated from field: uint32 block_length = 6;
+   */
+  blockLength = 0;
+
+  /**
+   * @generated from field: uint64 seed = 7;
+   */
+  seed = protoInt64.zero;
+
+  constructor(data?: PartialMessage<MonteCarloSummary>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.MonteCarloSummary";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "final_equity", kind: "message", T: Percentile },
+    { no: 2, name: "max_drawdown", kind: "message", T: Percentile },
+    { no: 3, name: "realised_final_equity", kind: "scalar", T: 1 /* ScalarType.DOUBLE */ },
+    { no: 4, name: "realised_max_drawdown", kind: "scalar", T: 1 /* ScalarType.DOUBLE */ },
+    { no: 5, name: "samples", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 6, name: "block_length", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 7, name: "seed", kind: "scalar", T: 4 /* ScalarType.UINT64 */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): MonteCarloSummary {
+    return new MonteCarloSummary().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): MonteCarloSummary {
+    return new MonteCarloSummary().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): MonteCarloSummary {
+    return new MonteCarloSummary().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: MonteCarloSummary | PlainMessage<MonteCarloSummary> | undefined, b: MonteCarloSummary | PlainMessage<MonteCarloSummary> | undefined): boolean {
+    return proto3.util.equals(MonteCarloSummary, a, b);
+  }
+}
+
+/**
+ * @generated from message assay.v1.SensitivityCell
+ */
+export class SensitivityCell extends Message<SensitivityCell> {
+  /**
+   * @generated from field: assay.v1.ResultMetrics metrics = 1;
+   */
+  metrics?: ResultMetrics;
+
+  constructor(data?: PartialMessage<SensitivityCell>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.SensitivityCell";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "metrics", kind: "message", T: ResultMetrics },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SensitivityCell {
+    return new SensitivityCell().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SensitivityCell {
+    return new SensitivityCell().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SensitivityCell {
+    return new SensitivityCell().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SensitivityCell | PlainMessage<SensitivityCell> | undefined, b: SensitivityCell | PlainMessage<SensitivityCell> | undefined): boolean {
+    return proto3.util.equals(SensitivityCell, a, b);
+  }
+}
+
+/**
+ * @generated from message assay.v1.SensitivityGrid
+ */
+export class SensitivityGrid extends Message<SensitivityGrid> {
+  /**
+   * @generated from field: repeated string x = 1;
+   */
+  x: string[] = [];
+
+  /**
+   * @generated from field: repeated string y = 2;
+   */
+  y: string[] = [];
+
+  /**
+   * @generated from field: repeated assay.v1.SensitivityCell cells = 3;
+   */
+  cells: SensitivityCell[] = [];
+
+  constructor(data?: PartialMessage<SensitivityGrid>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.SensitivityGrid";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "x", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 2, name: "y", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 3, name: "cells", kind: "message", T: SensitivityCell, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SensitivityGrid {
+    return new SensitivityGrid().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SensitivityGrid {
+    return new SensitivityGrid().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SensitivityGrid {
+    return new SensitivityGrid().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SensitivityGrid | PlainMessage<SensitivityGrid> | undefined, b: SensitivityGrid | PlainMessage<SensitivityGrid> | undefined): boolean {
+    return proto3.util.equals(SensitivityGrid, a, b);
+  }
+}
+
+/**
+ * @generated from message assay.v1.NextAction
+ */
+export class NextAction extends Message<NextAction> {
+  /**
+   * @generated from field: string kind = 1;
+   */
+  kind = "";
+
+  /**
+   * @generated from field: string reason = 2;
+   */
+  reason = "";
+
+  constructor(data?: PartialMessage<NextAction>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.NextAction";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "kind", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): NextAction {
+    return new NextAction().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): NextAction {
+    return new NextAction().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): NextAction {
+    return new NextAction().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: NextAction | PlainMessage<NextAction> | undefined, b: NextAction | PlainMessage<NextAction> | undefined): boolean {
+    return proto3.util.equals(NextAction, a, b);
   }
 }
 

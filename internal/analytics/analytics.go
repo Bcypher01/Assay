@@ -27,6 +27,9 @@ type StudyResult struct {
 	CostCurve             []Metrics
 	NearMisses            []NearMiss
 	Unresolved            int
+	WalkForward           []WalkForwardResult
+	CostStress            []CostStressPoint
+	NextActions           []NextAction
 }
 
 // Assumptions records the effective execution choices used for a study. It is
@@ -45,6 +48,19 @@ type NearMiss struct {
 	Condition string
 	Count     int
 }
+
+// WalkForwardResult records one held-out window. Metrics always describe the
+// test portion; train bounds are metadata only and prevent a UI from passing
+// in-sample performance off as unseen evidence.
+type WalkForwardResult struct {
+	Window  WFWindow
+	Metrics Metrics
+}
+type CostStressPoint struct {
+	Multiplier int
+	Metrics    Metrics
+}
+type NextAction struct{ Kind, Reason string }
 
 // Study is the reproducible input to an analytics run.  Snapshot identifies
 // the immutable market-data snapshot used for the run; Scope identifies the

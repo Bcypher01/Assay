@@ -215,8 +215,8 @@ func TestRunDetailsAndPaginatedTradesExposePersistedEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	study := &analytics.Study{Strategy: &ir.Strategy{Name: "evidence", Universe: ir.Universe{Symbols: []string{"EURUSD"}}}, Snapshot: "snapshot", Scope: analytics.Scope{Instruments: []string{"EURUSD"}, Period: "2024"}, Assumptions: analytics.Assumptions{InitialEquity: 100_000, SpreadTicks: 2, FillPolicy: "next_open"}}
-	result := &analytics.StudyResult{OutOfSample: analytics.Metrics{Trades: 2, FinalEquity: analytics.Bounded{Pessimistic: 10, Optimistic: 20}}, InSample: analytics.Metrics{Trades: 2}, NearMisses: []analytics.NearMiss{{Condition: "trigger", Count: 7}}, Unresolved: 1}
+	study := &analytics.Study{Strategy: &ir.Strategy{Name: "evidence", Universe: ir.Universe{Symbols: []string{"EURUSD"}}}, Snapshot: "snapshot", Scope: analytics.Scope{Instruments: []string{"EURUSD"}, Period: "2024"}, Assumptions: analytics.Assumptions{InitialEquity: 100_000, SpreadTicks: 2, FillPolicy: "next_open"}, MonteCarlo: analytics.MCConfig{Samples: 3, BlockLength: 2, Seed: 7}}
+	result := &analytics.StudyResult{OutOfSample: analytics.Metrics{Trades: 2, FinalEquity: analytics.Bounded{Pessimistic: 10, Optimistic: 20}}, InSample: analytics.Metrics{Trades: 2}, NearMisses: []analytics.NearMiss{{Condition: "trigger", Count: 7}}, Unresolved: 1, Distribution: analytics.MCDistribution{FinalEquity: []float64{1, 2, 3}, MaxDrawdown: []float64{2, 4, 6}, RealisedFinal: 2, RealisedDrawdown: 4}, WalkForward: []analytics.WalkForwardResult{{Window: analytics.WFWindow{TrainTo: 10, TestFrom: 10, TestTo: 15}, Metrics: analytics.Metrics{Trades: 1}}}, CostStress: []analytics.CostStressPoint{{Multiplier: 1, Metrics: analytics.Metrics{Trades: 2}}, {Multiplier: 3, Metrics: analytics.Metrics{Trades: 2}}}, Sensitivity: analytics.Grid{X: []string{"1× costs"}, Y: []string{"1× risk"}, Cells: [][]analytics.Metrics{{{Trades: 2}}}}, NextActions: []analytics.NextAction{{Kind: "paper_trade", Reason: "stable"}}}
 	id, err := history.Put(context.Background(), study, result)
 	if err != nil {
 		t.Fatal(err)
@@ -238,6 +238,9 @@ func TestRunDetailsAndPaginatedTradesExposePersistedEvidence(t *testing.T) {
 	got := details.Msg.Details
 	if got.GetAssumptions().GetInitialEquity() != 100_000 || got.GetUnresolved() != 1 || len(got.GetMonthly()) != 2 || got.GetNearMisses()[0].GetCount() != 7 {
 		t.Fatalf("details = %#v", got)
+	}
+	if got.GetMonteCarlo().GetSamples() != 3 || got.GetMonteCarlo().GetFinalEquity().GetP50() != 2 || len(got.GetWalkForward()) != 1 || len(got.GetCostStress()) != 2 || len(got.GetSensitivity().GetCells()) != 1 || got.GetNextActions()[0].GetKind() != "paper_trade" {
+		t.Fatalf("robustness = %#v", got)
 	}
 	page, err := runs.GetTrades(context.Background(), connect.NewRequest(&assayv1.GetRunTradesRequest{Hash: string(id), PageSize: 1}))
 	if err != nil {

@@ -55,3 +55,10 @@ make bench
 
 A backtest describes what a rule did on one historical sample. It does not
 describe what it will do.
+
+## Private beta
+
+The local first-run plan and supported-market/order limits are documented in
+[the private-beta guide](docs/private-beta.md). Product instrumentation is off
+by default; `assay -metrics-dir beta-metrics` records aggregate metrics only on
+the user's machine after explicit consent.

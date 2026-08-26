@@ -16,6 +16,7 @@ import (
 	"github.com/Bcypher01/Assay/internal/core"
 	"github.com/Bcypher01/Assay/internal/instrument"
 	"github.com/Bcypher01/Assay/internal/ir"
+	"github.com/Bcypher01/Assay/internal/onboarding"
 	"github.com/Bcypher01/Assay/internal/primitive"
 	"github.com/Bcypher01/Assay/internal/runstore"
 	"github.com/Bcypher01/Assay/internal/sim"
@@ -36,6 +37,12 @@ type EvaluateFunc func(context.Context, *assayv1.EvaluatePrimitiveRequest) (*ass
 // at the transport boundary.
 type RunFunc func(context.Context, *assayv1.RunRequest, func(*assayv1.RunUpdate) error) (*assayv1.RunSummary, error)
 
+// EventRecorder receives aggregate, local-only product metrics when the
+// launcher has explicitly enabled it. Recorder failures never affect a study.
+type EventRecorder interface {
+	Record(context.Context, string, map[string]any) error
+}
+
 // Server is a thin ConnectRPC adapter. Application wiring owns data loading,
 // engine execution and run history; handlers only translate wire messages.
 type Server struct {
@@ -52,6 +59,7 @@ type Server struct {
 	ListRunsFn func(context.Context) ([]string, error)
 	GetRunFn   func(context.Context, string) (*assayv1.RunSummary, error)
 	CompareFn  func(context.Context, string, string) (*assayv1.CompareRunsResponse, error)
+	Recorder   EventRecorder
 }
 
 func NewHandler(s *Server) http.Handler {
@@ -71,6 +79,7 @@ func NewHandler(s *Server) http.Handler {
 		}
 	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("/onboarding.json", onboardingHandler)
 	mux.HandleFunc("/openapi.json", openAPIHandler)
 	mux.HandleFunc("/docs", swaggerHandler)
 	path, h := assayv1connect.NewDataServiceHandler(s)
@@ -84,6 +93,19 @@ func NewHandler(s *Server) http.Handler {
 	path, h = assayv1connect.NewRunServiceHandler(s)
 	mux.Handle(path, h)
 	return withEmptyJSON(mux)
+}
+
+// onboardingHandler is intentionally a small ordinary JSON document so a
+// static UI can load a useful first-run state before its ConnectRPC client is
+// initialised. It contains only an example template and public data window.
+func onboardingHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(onboarding.Default())
 }
 
 func instrumentsFromRegistry(registry *instrument.Registry) []*assayv1.Instrument {

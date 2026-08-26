@@ -9,7 +9,7 @@ func TestDescribeTemplateIsDerivedAndStable(t *testing.T) {
 	strategy := NewMovingAverageCrossover()
 	description := Describe(strategy)
 	for _, want := range []string{
-		"Trade EUR/USD on the daily chart.",
+		"Trade DUKAS:EURUSD on the daily chart.",
 		"Go long when bullish 20/50 crossover.",
 		"Go short when bearish 20/50 crossover.",
 		"Enter at the next bar open.",

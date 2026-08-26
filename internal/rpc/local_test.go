@@ -121,13 +121,13 @@ func testStrategyJSON(t *testing.T) []byte {
 func TestRunConfigAppliesExplicitAssumptions(t *testing.T) {
 	strategy := ir.NewMovingAverageCrossover()
 	cfg, err := runConfig(instrument.Spec{Costs: instrument.CostModel{SpreadTicks: 2}}, strategy, &assayv1.StudyAssumptions{
-		InitialEquity: 50_000, RiskPerTrade: 0.01, SpreadTicks: 4,
+		InitialEquity: 50, RiskPerTrade: 0.01, SpreadTicks: 4,
 		CommissionBps: 10, SlippageTicks: 3, FillPolicy: "next_open",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Risk.InitialEquity != 50_000 || cfg.Spec.Costs.SpreadTicks != 4 || cfg.Slippage.Ticks != 3 {
+	if cfg.Risk.InitialEquity != 5_000 || cfg.Spec.Costs.SpreadTicks != 4 || cfg.Slippage.Ticks != 3 {
 		t.Fatalf("config = %#v", cfg)
 	}
 	if cfg.Spec.Costs.CommissionMode != instrument.CommissionBps {
@@ -139,5 +139,20 @@ func TestRunConfigRejectsUnsupportedFill(t *testing.T) {
 	_, err := runConfig(instrument.Spec{}, ir.NewMovingAverageCrossover(), &assayv1.StudyAssumptions{InitialEquity: 1, FillPolicy: "close"})
 	if err == nil {
 		t.Fatal("expected unsupported fill policy error")
+	}
+}
+
+func TestRunCostFreeUsesEffectiveInstrumentDefaults(t *testing.T) {
+	registry, err := instrument.Default()
+	if err != nil {
+		t.Fatal(err)
+	}
+	strategy, err := json.Marshal(ir.NewMovingAverageCrossover())
+	if err != nil {
+		t.Fatal(err)
+	}
+	free, known := runCostFree(registry, &assayv1.RunRequest{StrategyJson: strategy})
+	if !known || free {
+		t.Fatalf("defaults reported free=%v known=%v; expected known non-zero costs", free, known)
 	}
 }

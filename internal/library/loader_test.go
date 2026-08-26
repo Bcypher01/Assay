@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/Bcypher01/Assay/internal/instrument"
 	"github.com/Bcypher01/Assay/internal/pipeline"
 	"github.com/Bcypher01/Assay/internal/store"
 )
@@ -160,6 +161,64 @@ func TestStatusReportsReadyMissingAndPartialWithoutNetwork(t *testing.T) {
 	}
 }
 
+func TestStatusTreatsCompleteDailyFXMonthWithWeekendBoundariesAsReady(t *testing.T) {
+	ctx := context.Background()
+	cache := store.NewLocalStore(t.TempDir())
+	registry := instrument.MustDefault()
+	series := buildDailyTradingMonth(t, registry, "DUKAS:EURUSD", "2020-02")
+	if err := cache.Write(ctx, series, store.Manifest{
+		Symbol: "DUKAS:EURUSD", TF: core.TFD1, Month: "2020-02", Source: "fixture", BuildVersion: "test",
+	}); err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
+	loader := New(cache, failingObjects{}, nil)
+	loader.Registry = registry
+
+	status := loader.Status(ctx, Request{
+		Symbols: []string{"DUKAS:EURUSD"},
+		TFs:     []core.TF{core.TFD1},
+		From:    core.MustParseTime("2020-02-01T00:00:00Z"),
+		To:      core.MustParseTime("2020-03-01T00:00:00Z"),
+	})
+	if status.Readiness != ReadinessReady || len(status.MissingPartitions) != 0 {
+		t.Fatalf("status = %+v, want ready daily FX data despite weekend month boundaries", status)
+	}
+}
+
+func TestStatusAllowsDailyFXHolidayAtPartitionBoundary(t *testing.T) {
+	ctx := context.Background()
+	cache := store.NewLocalStore(t.TempDir())
+	registry := instrument.MustDefault()
+	// The source has no May 1 bar (a market holiday), then prints every
+	// trading day through month end. The regular FX calendar cannot list every
+	// historical bank holiday, so this remains a complete usable partition.
+	series := core.NewSeries("DUKAS:GBPUSD", core.TFD1, 20)
+	for day := time.Date(2020, 5, 4, 0, 0, 0, 0, time.UTC); !day.After(time.Date(2020, 5, 29, 0, 0, 0, 0, time.UTC)); day = day.AddDate(0, 0, 1) {
+		if day.Weekday() == time.Saturday || day.Weekday() == time.Sunday {
+			continue
+		}
+		price := core.Price(10000 + series.Len())
+		series.Append(core.FromStd(day), price, price+2, price-2, price+1, 100)
+	}
+	if err := cache.Write(ctx, series, store.Manifest{
+		Symbol: "DUKAS:GBPUSD", TF: core.TFD1, Month: "2020-05", Source: "fixture", BuildVersion: "test",
+	}); err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
+	loader := New(cache, failingObjects{}, nil)
+	loader.Registry = registry
+
+	status := loader.Status(ctx, Request{
+		Symbols: []string{"DUKAS:GBPUSD"},
+		TFs:     []core.TF{core.TFD1},
+		From:    core.MustParseTime("2020-05-01T00:00:00Z"),
+		To:      core.MustParseTime("2020-06-01T00:00:00Z"),
+	})
+	if status.Readiness != ReadinessReady || len(status.MissingPartitions) != 0 {
+		t.Fatalf("status = %+v, want ready daily FX data despite a holiday boundary", status)
+	}
+}
+
 func TestEnsureFallsBackToVenueAndBarsMatchPublished(t *testing.T) {
 	ctx := context.Background()
 	published := t.TempDir()
@@ -301,6 +360,31 @@ func buildMonth(symbol string, tf core.TF, yyyyMM string, n int) *core.Series {
 	}
 	if err := s.Validate(); err != nil {
 		panic(err)
+	}
+	return s
+}
+
+func buildDailyTradingMonth(t *testing.T, registry *instrument.Registry, symbol, yyyyMM string) *core.Series {
+	t.Helper()
+	spec, err := registry.Get(symbol)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start, err := time.Parse("2006-01", yyyyMM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	end := start.AddDate(0, 1, 0)
+	s := core.NewSeries(symbol, core.TFD1, 23)
+	for day := start; day.Before(end); day = day.AddDate(0, 0, 1) {
+		if !spec.Calendar.IsOpen(core.FromStd(day.Add(12 * time.Hour))) {
+			continue
+		}
+		price := core.Price(10000 + s.Len())
+		s.Append(core.FromStd(day), price, price+2, price-2, price+1, 100)
+	}
+	if err := s.Validate(); err != nil {
+		t.Fatalf("validate series: %v", err)
 	}
 	return s
 }

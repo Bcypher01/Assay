@@ -288,7 +288,7 @@ func (l *Loader) Status(ctx context.Context, r Request) Status {
 					status.LastSuccessfulPrep = mf.Last
 				}
 			}
-			missing := missingPartitions(sym, tf, r.From, r.To, manifests)
+			missing := missingPartitions(sym, tf, r.From, r.To, manifests, l.calendarFor(sym))
 			status.MissingPartitions = append(status.MissingPartitions, missing...)
 		}
 	}
@@ -404,7 +404,7 @@ func (l *Loader) missingMonths(ctx context.Context, sym string, tf core.TF, from
 	return missing, nil
 }
 
-func missingPartitions(sym string, tf core.TF, from, to core.Time, manifests []store.Manifest) []MissingPartition {
+func missingPartitions(sym string, tf core.TF, from, to core.Time, manifests []store.Manifest, calendar *instrument.Calendar) []MissingPartition {
 	byMonth := make(map[string]store.Manifest, len(manifests))
 	for _, mf := range manifests {
 		byMonth[mf.Month] = mf
@@ -412,7 +412,7 @@ func missingPartitions(sym string, tf core.TF, from, to core.Time, manifests []s
 	var missing []MissingPartition
 	for _, month := range months(from, to) {
 		mf, ok := byMonth[month.name]
-		if !ok || !manifestCovers(mf, month, tf) {
+		if !ok || !manifestCovers(mf, month, tf, calendar) {
 			missing = append(missing, MissingPartition{
 				Symbol: sym,
 				TF:     tf,
@@ -425,15 +425,69 @@ func missingPartitions(sym string, tf core.TF, from, to core.Time, manifests []s
 	return missing
 }
 
-func manifestCovers(mf store.Manifest, month monthWindow, tf core.TF) bool {
-	if mf.First > month.from {
-		return false
+func (l *Loader) calendarFor(symbol string) *instrument.Calendar {
+	if l.Registry == nil {
+		return nil
 	}
-	lastRequired := month.to - core.Time(tf.Millis())
-	if lastRequired < month.from {
-		lastRequired = month.from
+	spec, err := l.Registry.Get(symbol)
+	if err != nil {
+		return nil
 	}
-	return mf.Last >= lastRequired
+	return spec.Calendar
+}
+
+func manifestCovers(mf store.Manifest, month monthWindow, tf core.TF, calendar *instrument.Calendar) bool {
+	firstRequired, lastRequired, requiresBars := requiredBounds(month, tf, calendar)
+	if !requiresBars {
+		return true
+	}
+	if tf == core.TFD1 && calendar != nil {
+		// Instrument calendars describe regular sessions, but do not enumerate
+		// every historical exchange/bank holiday. A complete daily partition can
+		// therefore begin or end a few calendar days inside its nominal boundary
+		// (for example, the May Day weekend in FX data). Keep this allowance small
+		// so a genuinely truncated daily download remains detectable.
+		const holidayBoundaryAllowance = core.Time(4 * 24 * time.Hour / time.Millisecond)
+		return mf.First <= firstRequired+holidayBoundaryAllowance && mf.Last >= lastRequired-holidayBoundaryAllowance
+	}
+	return mf.First <= firstRequired && mf.Last >= lastRequired
+}
+
+// requiredBounds returns the first and last bars expected in a partition.
+// Daily instruments with market hours do not print a bar for every UTC
+// calendar day (for example, FX is closed on weekends). Checking the calendar
+// at noon UTC identifies whether that trading date should have a daily bar
+// without treating the Sunday/Monday session boundary as a missing bar.
+func requiredBounds(month monthWindow, tf core.TF, calendar *instrument.Calendar) (core.Time, core.Time, bool) {
+	if tf != core.TFD1 || calendar == nil {
+		last := month.to - core.Time(tf.Millis())
+		if last < month.from {
+			last = month.from
+		}
+		return month.from, last, true
+	}
+
+	day := month.from.Std().Truncate(24 * time.Hour)
+	end := month.to.Std()
+	var first, last core.Time
+	found := false
+	for ; day.Before(end); day = day.AddDate(0, 0, 1) {
+		bar := core.FromStd(day)
+		if !calendar.IsOpen(core.FromStd(day.Add(12 * time.Hour))) {
+			continue
+		}
+		if !found {
+			first = bar
+			found = true
+		}
+		last = bar
+	}
+	if !found {
+		// A closed-only window does not require a daily bar. A present manifest
+		// is therefore sufficient.
+		return 0, 0, false
+	}
+	return first, last, true
 }
 
 func (l *Loader) checkSupported(r Request) error {

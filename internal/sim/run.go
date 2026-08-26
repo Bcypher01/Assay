@@ -247,6 +247,9 @@ func validConfig(c *Config) error {
 	if c.Risk.RiskPerTrade < 0 || c.Risk.FixedLots < 0 || c.DailyLossCap < 0 {
 		return ErrInvalidConfig
 	}
+	if !c.Spec.SupportsUSDCashAccounting() {
+		return ErrInvalidConfig
+	}
 	return c.Spec.Validate()
 }
 func resetResult(o *RunResult, bars, trades int) {
@@ -437,12 +440,13 @@ func sizeFor(eq, entry, stop core.Price, c Config) (core.Ratio, core.Ratio) {
 	if c.Risk.RiskPerTrade == 0 {
 		return c.Risk.FixedLots, c.Risk.FixedLots
 	}
-	tv := c.Risk.TickValue
-	if tv == 0 {
-		tv = core.One
+	// Calculate the full-lot loss across the actual stop distance in account
+	// cents, rather than assuming every instrument tick is worth one dollar.
+	stopLoss, err := c.Spec.PnLCents((entry - stop).Abs(), core.One, entry)
+	if err != nil || stopLoss <= 0 {
+		return 0, 0
 	}
-	req := core.DivPrice(c.Risk.RiskPerTrade.MulPrice(eq.Abs()), (entry - stop).Abs())
-	req = divRatio(req, tv)
+	req := core.DivPrice(c.Risk.RiskPerTrade.MulPrice(eq.Abs()), stopLoss)
 	step := lotRatio(c.Spec.LotStep)
 	if step <= 0 {
 		return req, req
@@ -495,22 +499,26 @@ func lotRatio(s string) core.Ratio {
 	return core.Ratio(whole*core.RatioScale + frac)
 }
 func settle(p position, exit core.Price, t core.Time, bar int, c Config) Outcome {
-	gross := p.side.Sign() * (exit - p.entry)
-	gross = core.Ratio(p.lots).MulPrice(gross)
-	costs := commission(p, exit, c) + swap(p, t, c)
+	gross, _ := c.Spec.PnLCents(core.Price(p.side.Sign())*(exit-p.entry), p.lots, exit)
+	costs := commission(p, exit, c) + swap(p, t, exit, c)
 	return Outcome{ExitTime: t, ExitBar: bar, ExitPrice: exit, Gross: gross, Costs: costs, Net: gross - costs, Closed: true}
 }
 func commission(p position, exit core.Price, c Config) core.Price {
 	cm := c.Spec.Costs
 	switch cm.CommissionMode {
 	case instrument.CommissionPerTrade:
-		return core.Price(cm.CommissionFlat)
+		// Flat commission is specified in quote-currency minor units.
+		v, _ := c.Spec.QuoteMinorCents(cm.CommissionFlat, exit)
+		return v
 	case instrument.CommissionBps:
-		return p.lots.MulPrice(cm.CommissionBps.MulPrice(exit.Abs()))
+		// A bps fee is charged on exit notional. Convert that notional to USD
+		// through the same account-valuation path as realized P&L.
+		notional, _ := c.Spec.PnLCents(exit, p.lots, exit)
+		return cm.CommissionBps.MulPrice(notional.Abs())
 	}
 	return 0
 }
-func swap(p position, exit core.Time, c Config) core.Price {
+func swap(p position, exit core.Time, price core.Price, c Config) core.Price {
 	days := int((exit - p.opened) / (24 * 60 * 60 * 1000))
 	if days <= 0 {
 		return 0
@@ -525,7 +533,8 @@ func swap(p position, exit core.Time, c Config) core.Price {
 		if c.Spec.Costs.SwapTripleWeekday >= 0 && p.opened.Std().AddDate(0, 0, d).Weekday() == time.Weekday(c.Spec.Costs.SwapTripleWeekday) {
 			mult = 3
 		}
-		total += r.MulPrice(p.lots.MulPrice(core.Price(mult)))
+		v, _ := c.Spec.PnLCents(r.MulPrice(core.Price(mult)), p.lots, price)
+		total += v
 	}
 	return total
 }

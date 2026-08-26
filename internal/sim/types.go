@@ -60,13 +60,12 @@ type Signals struct {
 	TargetSpec     []core.Distance
 }
 
-// RiskModel controls position size. Equity and PnL use instrument ticks times
-// lots; callers with a currency conversion may supply TickValue.
+// RiskModel controls position size. Equity, PnL, and costs are USD cents.
+// Instrument contract and conversion rules determine the tick value.
 type RiskModel struct {
 	InitialEquity core.Price
 	RiskPerTrade  core.Ratio // fraction of current pessimistic equity
 	FixedLots     core.Ratio // used when RiskPerTrade is zero
-	TickValue     core.Ratio // account units represented by one tick at one lot; default 1
 }
 
 // SlippageModel overrides the spec slippage when Enabled. It is deliberately

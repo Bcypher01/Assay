@@ -10,6 +10,7 @@ import (
 	"github.com/Bcypher01/Assay/internal/rpc"
 	"github.com/Bcypher01/Assay/internal/runstore"
 	"github.com/Bcypher01/Assay/internal/store"
+	"github.com/Bcypher01/Assay/internal/telemetry"
 	"github.com/Bcypher01/Assay/internal/venue"
 	"github.com/Bcypher01/Assay/internal/venue/binance"
 	"github.com/Bcypher01/Assay/internal/venue/yahoo"
@@ -21,6 +22,7 @@ func main() {
 	cacheMaxMB := flag.Int64("cache-max-mb", 5120, "maximum local bar-cache size in MiB; zero disables eviction")
 	historyDir := flag.String("history-dir", "history", "persistent study history directory")
 	libraryURL := flag.String("library-url", "", "public read-only R2/CDN library URL")
+	metricsDir := flag.String("metrics-dir", "", "opt-in local-only product metrics directory; no telemetry is recorded when empty")
 	flag.Parse()
 	registry, err := instrument.Default()
 	if err != nil {
@@ -47,6 +49,14 @@ func main() {
 	server, err := rpc.NewLocalServerWithServices(cache, registry, loader, history)
 	if err != nil {
 		log.Fatal(err)
+	}
+	if *metricsDir != "" {
+		recorder, err := telemetry.Open(*metricsDir)
+		if err != nil {
+			log.Fatal(err)
+		}
+		server.Recorder = recorder
+		log.Printf("Local-only product metrics enabled at %s; Assay will not send them anywhere", *metricsDir)
 	}
 	log.Printf("Assay listening on http://%s", *addr)
 	if err := http.ListenAndServe(*addr, rpc.NewHandler(server)); err != nil {

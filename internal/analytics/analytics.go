@@ -98,6 +98,26 @@ func MetricsFor(r Returns) (Metrics, error) {
 	}
 	return metrics(r.Pessimistic, r.Optimistic), nil
 }
+
+// WithStartingEquity turns the cumulative trade P&L held in FinalEquity into
+// the actual account balance at the end of the period. Returns stay unchanged:
+// callers that need a period's P&L should continue to use Returns directly.
+func WithStartingEquity(m Metrics, starting float64) Metrics {
+	m.FinalEquity.Pessimistic += starting
+	m.FinalEquity.Optimistic += starting
+	return m
+}
+
+// WithStartingEquity turns Monte Carlo cumulative-P&L samples into ending
+// balance samples without mutating the source distribution.
+func (d MCDistribution) WithStartingEquity(starting float64) MCDistribution {
+	d.FinalEquity = append([]float64(nil), d.FinalEquity...)
+	for i := range d.FinalEquity {
+		d.FinalEquity[i] += starting
+	}
+	d.RealisedFinal += starting
+	return d
+}
 func metrics(p, o []float64) Metrics {
 	result := Metrics{Trades: len(p)}
 	result.FinalEquity = Bounded{sum(p), sum(o)}

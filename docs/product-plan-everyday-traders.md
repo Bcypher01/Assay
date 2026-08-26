@@ -68,6 +68,7 @@ The first screen offers:
 
 - **Use a popular strategy**
 - **Describe my own strategy**
+- **Build from a chart**
 - **Reopen a saved test**
 
 Each popular-strategy card should show:
@@ -108,6 +109,40 @@ Every bold phrase is editable. The page is divided into six cards:
 
 The engine's `bias`, `poi`, `trigger`, and primitive terminology should remain
 an internal representation. An optional Advanced view can expose it.
+
+#### Chart-first definition route
+
+Some traders can demonstrate a setup more easily than they can describe it.
+**Build from a chart** is an optional route into the same sentence-based
+builder, not a separate kind of strategy or a signal service.
+
+1. The user chooses an instrument and timeframe, then receives a clean,
+   fixed short historical window (normally 150--300 candles).
+2. They may add simple local annotations: trend lines, horizontal levels,
+   zones, notes, and explicit **long**, **short**, or **ignore** examples.
+3. The product asks separately what must be true for a long and a short, and
+   guides the user to turn each example into repeatable conditions.
+4. The resulting strategy is saved locally as a draft containing both the
+   deterministic strategy document and the annotated chart snapshot.
+5. Before a full test, the engine evaluates the saved rule over a chosen fixed
+   check period and reports long signals, short signals, qualifying trades, and
+   the conditions that prevented a trade.
+
+Annotations are examples, not rules. A manually placed long marker must be
+expressed as an exact condition before it can contribute to a backtest. This
+prevents a chart drawing from silently becoming hindsight-fitted trading logic.
+
+The first implementation must work entirely without AI: drawings map to
+structured inputs and the user confirms every rule. An optional future AI
+assistant may suggest plain-language draft wording from the user's own notes
+and annotations, but it must never invent conditions, silently alter a rule,
+or be required to save or test a strategy.
+
+The initial chart should use a product-owned, lightweight drawing surface and
+the same versioned local data used by the simulator. Do not depend on an
+embedded third-party charting terminal for the core experience; that would make
+local persistence, data reproducibility, and product behaviour depend on an
+external product and its licensing.
 
 The builder must continuously show:
 

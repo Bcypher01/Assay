@@ -214,19 +214,39 @@ func TestSizingRoundsDownAndSkipsZeroLot(t *testing.T) {
 	cfg := fixtureConfig()
 	cfg.Spec.LotStep = "0.1"
 	cfg.Spec.MinLot = "0.1"
-	cfg.Risk = RiskModel{InitialEquity: 100, RiskPerTrade: core.RatioFromFloat(.015)}
+	// Equity is USD cents: $100 at 1.5% risk is $1.50.
+	cfg.Risk = RiskModel{InitialEquity: 10_000, RiskPerTrade: core.RatioFromFloat(.015)}
 	var out RunResult
 	if err := Run(context.Background(), s, nil, sig, cfg, &out); err != nil {
 		t.Fatal(err)
 	}
-	if len(out.Trades) != 1 || out.Trades[0].Lots != core.RatioFromFloat(.2) {
+	if len(out.Trades) != 1 || out.Trades[0].Lots != core.RatioFromFloat(.1) {
 		t.Fatalf("unexpected rounded size: %#v", out.Trades)
 	}
-	cfg.Risk.RiskPerTrade = core.RatioFromFloat(.001)
+	cfg.Risk.RiskPerTrade = core.RatioFromFloat(.00001)
 	if err := Run(context.Background(), s, nil, sig, cfg, &out); err != nil {
 		t.Fatal(err)
 	}
 	if len(out.Trades) != 0 {
 		t.Fatalf("sub-minimum size opened: %#v", out.Trades)
+	}
+}
+
+func TestRunReportsUSDAccountCents(t *testing.T) {
+	// One EURUSD tick at one standard lot is exactly one USD dollar.
+	s := fixtureSeries(core.TFM1, [][4]core.Price{{100_000, 100_000, 100_000, 100_000}, {100_000, 100_001, 100_000, 100_001}})
+	b := core.NewBitset(2)
+	b.Set(0)
+	sig := Signals{Enter: b, Side: []core.Side{core.SideLong}, StopLevel: []core.Price{99_990}, TargetPlan: []TargetPlan{{Level: 100_001}}}
+	cfg := Config{Spec: instrument.Spec{Symbol: "DUKAS:EURUSD", TickSize: "0.00001", ContractSize: "100000", QuoteCurrency: "USD", SettleCurrency: "USD", Gap: instrument.GapFillAtOpen}, Risk: RiskModel{InitialEquity: 10_000, FixedLots: core.One}}
+	var out RunResult
+	if err := Run(context.Background(), s, nil, sig, cfg, &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := out.Trades[0].Pessimistic.Net; got != 100 {
+		t.Fatalf("net P&L = %d cents, want 100", got)
+	}
+	if got := out.Equity[len(out.Equity)-1]; got != 10_100 {
+		t.Fatalf("ending balance = %d cents, want 10100", got)
 	}
 }

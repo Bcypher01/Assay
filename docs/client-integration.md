@@ -8,6 +8,11 @@ read-only R2 custom-domain/CDN URL:
 assay -library-url https://data.example.com -cache-dir cache -cache-max-mb 5120 -history-dir history
 ```
 
+On first launch, fetch `GET /onboarding.json` before showing a blank builder.
+It returns the worked, four-year daily EUR/USD template and the exact data
+window to prepare. Open that template as a normal editable strategy, then use
+`EnsureData` for the returned symbol, timeframe, and range.
+
 `DataStatus` takes a symbol, timeframe, and `[from_ms, to_ms)` window and
 returns the cache-only readiness for that exact request, including missing
 partitions and the snapshot hash when local data is ready. Call it before
@@ -48,3 +53,20 @@ Interactive API documentation is available from the local server at `/docs`.
 The corresponding OpenAPI 3.1 document is `/openapi.json`. Streaming endpoints
 are documented there but should be called through the generated ConnectRPC
 client, which handles the streaming protocol.
+
+## Account-value display contract
+
+All money returned for a run is an integer number of **USD cents**. This
+includes streamed `EquityChunk.values`, `RunSummary.net_pnl`, trade `net_pnl`
+/ `costs`, and all persisted P&L and drawdown metrics. Format them as USD
+(`value / 100`) and label the curve **Balance (USD)**; never render them as
+points or instrument prices. `StudyAssumptions.initial_equity` is the one
+exception: it is a positive whole USD amount, so `50` means **$50.00**.
+
+The service values every currently listed instrument in USD: EUR/USD, GBP/USD,
+XAU/USD and USDT crypto use their quoted value (USDT is treated at USD parity);
+USD/JPY converts realized JPY P&L at the trade's closing USD/JPY price. Send a
+positive whole-dollar `initial_equity`—`100` means **$100.00**. Pair it with a
+non-zero `risk_per_trade` (for example `0.01` for 1%) so lot size compounds
+with the balance. Do not rely on `fixed_lots` for small accounts unless the
+user explicitly chose that exposure.

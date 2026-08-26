@@ -6,6 +6,11 @@ import (
 	"github.com/Bcypher01/Assay/internal/core"
 )
 
+// exampleSymbol is deliberately the catalogue identity rather than its display
+// label. A template is executable input, so using "EUR/USD" here would leave a
+// new installation unable to resolve its instrument or prepare its data.
+const exampleSymbol = "DUKAS:EURUSD"
+
 const (
 	MovingAverageCrossoverTemplateID       = "moving-average-crossover"
 	MovingAverageCrossoverTemplateVersion  = 1
@@ -54,7 +59,7 @@ func NewMovingAverageCrossover() *Strategy {
 	return &Strategy{
 		Schema:   SchemaV2,
 		Name:     "20/50 moving-average crossover",
-		Universe: Universe{Symbols: []string{"EUR/USD"}},
+		Universe: Universe{Symbols: []string{exampleSymbol}},
 		Timeframes: map[string]core.TF{
 			"bias": core.TFD1, "poi": core.TFD1, "entry": core.TFD1,
 		},
@@ -101,7 +106,7 @@ func NewRSIPullback() *Strategy {
 	return &Strategy{
 		Schema:   SchemaV2,
 		Name:     "RSI pullback in trend",
-		Universe: Universe{Symbols: []string{"EUR/USD"}},
+		Universe: Universe{Symbols: []string{exampleSymbol}},
 		Timeframes: map[string]core.TF{
 			"bias": core.TFD1, "poi": core.TFD1, "entry": core.TFD1,
 		},
@@ -136,7 +141,7 @@ func NewDonchianBreakout() *Strategy {
 	return &Strategy{
 		Schema:   SchemaV2,
 		Name:     "20-bar Donchian breakout",
-		Universe: Universe{Symbols: []string{"EUR/USD"}},
+		Universe: Universe{Symbols: []string{exampleSymbol}},
 		Timeframes: map[string]core.TF{
 			"bias": core.TFD1, "poi": core.TFD1, "entry": core.TFD1,
 		},
@@ -169,7 +174,7 @@ func NewBollingerReversion() *Strategy {
 	return &Strategy{
 		Schema:   SchemaV2,
 		Name:     "Bollinger-band mean reversion",
-		Universe: Universe{Symbols: []string{"EUR/USD"}},
+		Universe: Universe{Symbols: []string{exampleSymbol}},
 		Timeframes: map[string]core.TF{
 			"bias": core.TFD1, "poi": core.TFD1, "entry": core.TFD1,
 		},
@@ -205,7 +210,7 @@ func NewSessionBreakout() *Strategy {
 	return &Strategy{
 		Schema:   SchemaV2,
 		Name:     "London session breakout (UTC example)",
-		Universe: Universe{Symbols: []string{"EUR/USD"}},
+		Universe: Universe{Symbols: []string{exampleSymbol}},
 		Timeframes: map[string]core.TF{
 			"bias": core.TFM15, "poi": core.TFM15, "entry": core.TFM15,
 		},
@@ -238,7 +243,7 @@ func NewLiquiditySweepStructure() *Strategy {
 	return &Strategy{
 		Schema:   SchemaV2,
 		Name:     "Liquidity sweep with market-structure confirmation",
-		Universe: Universe{Symbols: []string{"EUR/USD"}},
+		Universe: Universe{Symbols: []string{exampleSymbol}},
 		Timeframes: map[string]core.TF{
 			"bias": core.TFH1, "poi": core.TFH1, "entry": core.TFH1,
 		},

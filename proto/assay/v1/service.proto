@@ -134,11 +134,10 @@ message RunRequest {
   StudyAssumptions assumptions = 5;
 }
 
-// StudyAssumptions are the user-visible execution choices for one run. All
-// money and price fields use the instrument/account's existing integer units;
-// the UI obtains their display precision from the selected instrument. A zero
-// value means "use the instrument default" except initial_equity, which must
-// be positive when assumptions are supplied.
+// StudyAssumptions are the user-visible execution choices for one run.
+// initial_equity is a positive whole USD amount: 50 means $50. EquityChunk,
+// net_pnl, commission_flat, and persisted result money values are integer USD
+// cents. Price and spread/slippage fields remain instrument ticks.
 message StudyAssumptions {
   sint64 initial_equity = 1;
   double risk_per_trade = 2;

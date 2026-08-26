@@ -23,6 +23,20 @@ func TestWalkForwardDoesNotOverlapAndMonteCarloIsSeeded(t *testing.T) {
 		t.Fatal("Monte Carlo is not reproducible")
 	}
 }
+
+func TestWithStartingEquityReportsEndingBalanceWithoutChangingPnL(t *testing.T) {
+	m, err := MetricsFor(Returns{Pessimistic: []float64{-4}, Optimistic: []float64{5}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := WithStartingEquity(m, 5_000)
+	if got.FinalEquity.Pessimistic != 4_996 || got.FinalEquity.Optimistic != 5_005 {
+		t.Fatalf("ending balance = %+v, want 4996 to 5005", got.FinalEquity)
+	}
+	if m.FinalEquity.Pessimistic != -4 || m.FinalEquity.Optimistic != 5 {
+		t.Fatalf("source PnL mutated = %+v", m.FinalEquity)
+	}
+}
 func TestSweepOrderingAndBounds(t *testing.T) {
 	axes := []ParamAxis{{Name: "a", Values: []string{"1", "2"}}, {Name: "b", Values: []string{"x", "y"}}}
 	got := Sweep(context.Background(), axes, func(_ context.Context, v []string) (Returns, error) {

@@ -7,6 +7,7 @@ import (
 	"hash/fnv"
 	"math"
 	"strconv"
+	"time"
 
 	"github.com/Bcypher01/Assay/internal/analytics"
 	"github.com/Bcypher01/Assay/internal/core"
@@ -46,16 +47,40 @@ func NewLocalServerWithServices(cache *store.LocalStore, registry *instrument.Re
 			return dataStatusResponse(loader.Status(ctx, r)), nil
 		}
 		s.EnsureDataFn = func(ctx context.Context, req *assayv1.EnsureDataRequest, report func(*assayv1.Progress) error) error {
+			started := time.Now()
 			request, err := dataRequest(loader, req)
 			if err != nil {
+				s.record(ctx, "data_preparation_completed", map[string]any{"outcome": "failure", "duration_ms": time.Since(started).Milliseconds()})
 				return err
 			}
-			return loader.Ensure(ctx, request, func(p library.Progress) {
+			err = loader.Ensure(ctx, request, func(p library.Progress) {
 				_ = report(&assayv1.Progress{Percent: p.Percent, Stage: p.Stage, BytesDone: p.BytesDone, BytesTotal: p.BytesTotal, CurrentFile: p.CurrentFile, StageCode: progressStageCode(p.Stage)})
 			})
+			outcome := "success"
+			if err != nil {
+				outcome = "failure"
+			}
+			s.record(ctx, "data_preparation_completed", map[string]any{"outcome": outcome, "duration_ms": time.Since(started).Milliseconds(), "datasets": len(request.Symbols) * len(request.TFs)})
+			return err
 		}
 	}
-	s.RunFn = func(ctx context.Context, req *assayv1.RunRequest, send func(*assayv1.RunUpdate) error) (*assayv1.RunSummary, error) {
+	s.RunFn = func(ctx context.Context, req *assayv1.RunRequest, send func(*assayv1.RunUpdate) error) (summary *assayv1.RunSummary, runErr error) {
+		started := time.Now()
+		costFree, costKnown := runCostFree(registry, req)
+		s.record(ctx, "study_started", map[string]any{"timeframe_window_ms": req.ToMs - req.FromMs})
+		defer func() {
+			fields := map[string]any{"outcome": "success", "duration_ms": time.Since(started).Milliseconds()}
+			if costKnown {
+				fields["zero_cost_assumptions"] = costFree
+			}
+			if runErr != nil || (summary != nil && summary.Error != "") {
+				fields["outcome"] = "failure"
+			}
+			if summary != nil && summary.ErrorCode != "" {
+				fields["error_code"] = summary.ErrorCode
+			}
+			s.record(ctx, "study_completed", fields)
+		}()
 		if loader != nil {
 			var strategy ir.Strategy
 			if err := json.Unmarshal(req.StrategyJson, &strategy); err != nil {
@@ -80,6 +105,34 @@ func NewLocalServerWithServices(cache *store.LocalStore, registry *instrument.Re
 		return runLocal(ctx, cache, registry, history, req, send)
 	}
 	return s, nil
+}
+
+// runCostFree reports the effective simulator configuration, not merely wire
+// zeroes. Omitted override fields intentionally retain an instrument's default
+// costs, so they must not be counted as unrealistic zero-cost studies.
+func runCostFree(registry *instrument.Registry, req *assayv1.RunRequest) (bool, bool) {
+	if registry == nil || req == nil {
+		return false, false
+	}
+	var strategy ir.Strategy
+	if err := json.Unmarshal(req.StrategyJson, &strategy); err != nil || len(strategy.Universe.Symbols) != 1 {
+		return false, false
+	}
+	spec, err := registry.Get(strategy.Universe.Symbols[0])
+	if err != nil {
+		return false, false
+	}
+	cfg, err := runConfig(*spec, &strategy, req.Assumptions)
+	if err != nil {
+		return false, false
+	}
+	return cfg.Spec.Costs.SpreadTicks == 0 && cfg.Spec.Costs.CommissionBps == 0 && cfg.Spec.Costs.CommissionFlat == 0 && cfg.Spec.Costs.SlippageTicks == 0 && (!cfg.Slippage.Enabled || cfg.Slippage.Ticks == 0), true
+}
+
+func (s *Server) record(ctx context.Context, name string, fields map[string]any) {
+	if s != nil && s.Recorder != nil {
+		_ = s.Recorder.Record(ctx, name, fields)
+	}
 }
 
 func dataRequest(loader *library.Loader, req *assayv1.EnsureDataRequest) (library.Request, error) {
@@ -277,7 +330,9 @@ func robustnessResult(ctx context.Context, strategy *ir.Strategy, series *core.S
 	if err != nil {
 		return nil, err
 	}
-	out := &analytics.StudyResult{OutOfSample: metrics, InSample: metrics, Distribution: distribution, CostStress: []analytics.CostStressPoint{{Multiplier: 1, Metrics: metrics}}}
+	starting := float64(cfg.Risk.InitialEquity)
+	balanceMetrics := analytics.WithStartingEquity(metrics, starting)
+	out := &analytics.StudyResult{OutOfSample: balanceMetrics, InSample: balanceMetrics, Distribution: distribution.WithStartingEquity(starting), CostStress: []analytics.CostStressPoint{{Multiplier: 1, Metrics: balanceMetrics}}}
 	for _, multiplier := range []int{2, 3} {
 		stress := scaleCosts(cfg, multiplier)
 		r, _, err := engine.Run(ctx, strategy, engine.Data{Series: series, Config: stress, Snapshot: snapshot})
@@ -288,7 +343,7 @@ func robustnessResult(ctx context.Context, strategy *ir.Strategy, series *core.S
 		if err != nil {
 			return nil, err
 		}
-		out.CostStress = append(out.CostStress, analytics.CostStressPoint{Multiplier: multiplier, Metrics: m})
+		out.CostStress = append(out.CostStress, analytics.CostStressPoint{Multiplier: multiplier, Metrics: analytics.WithStartingEquity(m, starting)})
 	}
 	out.Sensitivity, err = costRiskSensitivity(ctx, strategy, series, cfg, snapshot)
 	if err != nil {
@@ -310,7 +365,7 @@ func robustnessResult(ctx context.Context, strategy *ir.Strategy, series *core.S
 		if err != nil {
 			return nil, err
 		}
-		out.WalkForward = append(out.WalkForward, analytics.WalkForwardResult{Window: window, Metrics: m})
+		out.WalkForward = append(out.WalkForward, analytics.WalkForwardResult{Window: window, Metrics: analytics.WithStartingEquity(m, starting)})
 	}
 	out.NextActions = nextActions(metrics, out.CostStress, len(out.WalkForward))
 	return out, nil
@@ -336,6 +391,7 @@ func costRiskSensitivity(ctx context.Context, strategy *ir.Strategy, series *cor
 			if err != nil {
 				return analytics.Grid{}, err
 			}
+			g.Cells[y][x] = analytics.WithStartingEquity(g.Cells[y][x], float64(adjusted.Risk.InitialEquity))
 		}
 	}
 	return g, nil
@@ -407,15 +463,19 @@ func effectiveAssumptions(cfg sim.Config) analytics.Assumptions {
 // non-zero defaults; a client therefore cannot accidentally obtain a free-fill
 // backtest by omitting execution fields.
 func runConfig(spec instrument.Spec, strategy *ir.Strategy, a *assayv1.StudyAssumptions) (sim.Config, error) {
-	cfg := sim.Config{Spec: spec, Risk: sim.RiskModel{InitialEquity: 100_000, FixedLots: core.One}}
+	// Internally account values are USD cents. The user-facing request accepts
+	// whole USD so entering 50 always means a $50 account, not fifty cents.
+	// A $100 default is paired with the strategy's percentage-risk setting,
+	// never an implicit one-lot position.
+	cfg := sim.Config{Spec: spec, Risk: sim.RiskModel{InitialEquity: 10_000, RiskPerTrade: core.RatioFromFloat(.01)}}
 	if strategy != nil && strategy.Risk.PerTrade > 0 {
 		cfg.Risk.RiskPerTrade = strategy.Risk.PerTrade
 	}
 	if a == nil {
 		return cfg, nil
 	}
-	if a.InitialEquity <= 0 {
-		return sim.Config{}, fmt.Errorf("rpc: assumptions.initial_equity must be positive")
+	if a.InitialEquity <= 0 || a.InitialEquity > math.MaxInt64/100 {
+		return sim.Config{}, fmt.Errorf("rpc: assumptions.initial_equity must be a positive whole USD amount")
 	}
 	if a.RiskPerTrade < 0 || a.RiskPerTrade > 1 || math.IsNaN(a.RiskPerTrade) || math.IsInf(a.RiskPerTrade, 0) {
 		return sim.Config{}, fmt.Errorf("rpc: assumptions.risk_per_trade must be between 0 and 1")
@@ -429,7 +489,7 @@ func runConfig(spec instrument.Spec, strategy *ir.Strategy, a *assayv1.StudyAssu
 	if a.FillPolicy != "" && a.FillPolicy != "next_open" {
 		return sim.Config{}, fmt.Errorf("rpc: assumptions.fill_policy only supports next_open")
 	}
-	cfg.Risk.InitialEquity = core.Price(a.InitialEquity)
+	cfg.Risk.InitialEquity = core.Price(a.InitialEquity * 100)
 	if a.RiskPerTrade > 0 {
 		cfg.Risk.RiskPerTrade = core.RatioFromFloat(a.RiskPerTrade)
 		cfg.Risk.FixedLots = 0

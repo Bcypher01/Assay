@@ -1,0 +1,20 @@
+{
+  "id": "4de4cb3a8d822e2b640c8d47e5ea44e356e691e1a526a35154bd4ad6043b833f",
+  "strategyHash": "daed4f5acb784133842a589b07619d449a83e3c75a011e4601635f7dc092d8d3",
+  "snapshot": "c9eb4a4aa0b79529a136cb409bd9be8e3aa65f53a647c342b0b9db7e9af9858d",
+  "name": "Liquidity sweep with market-structure confirmation",
+  "scope": {
+    "Instruments": [
+      "DUKAS:EURUSD"
+    ],
+    "Period": "1659312000000-1690848000000"
+  },
+  "createdAt": "2026-08-26T17:27:44.397942Z",
+  "trades": 8,
+  "finalEquity": {
+    "Pessimistic": -4,
+    "Optimistic": 5
+  },
+  "parameters": "bearish-structure={\"swingLookback\":5,\"confirmByClose\":true}, bearish-sweep={\"wickThroughTicks\":1,\"closeBackBars\":3,\"requireStructureShift\":true}, bullish-structure={\"swingLookback\":5,\"confirmByClose\":true}, bullish-sweep={\"wickThroughTicks\":1,\"closeBackBars\":3,\"requireStructureShift\":true}",
+  "tradeListPresent": true
+}

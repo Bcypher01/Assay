@@ -1,0 +1,12 @@
+{
+  "symbol": "DUKAS:GBPUSD",
+  "tf": "d1",
+  "month": "2020-05",
+  "rows": 21,
+  "first": 1588464000000,
+  "last": 1590883200000,
+  "contentHash": "6c2596025d2fb8cc7e36363c65b24c78d50f5af46d1d4cda0537f44a60ed73a4",
+  "source": "venue-router",
+  "buildVersion": "fallback",
+  "schemaVersion": 1
+}

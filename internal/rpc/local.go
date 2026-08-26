@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"math"
 	"strconv"
 
@@ -240,14 +241,19 @@ func runLocal(ctx context.Context, cache *store.LocalStore, registry *instrument
 	summary.Expectancy = metrics.Expectancy.Pessimistic
 	summary.ProfitFactor = metrics.ProfitFactor.Pessimistic
 	if history != nil {
-		study := &analytics.Study{Strategy: &strategy, Snapshot: snapshot, Scope: analytics.Scope{Instruments: append([]string(nil), strategy.Universe.Symbols...), Period: strconv.FormatInt(req.FromMs, 10) + "-" + strconv.FormatInt(req.ToMs, 10)}, Assumptions: effectiveAssumptions(config)}
+		study := &analytics.Study{Strategy: &strategy, Snapshot: snapshot, Scope: analytics.Scope{Instruments: append([]string(nil), strategy.Universe.Symbols...), Period: strconv.FormatInt(req.FromMs, 10) + "-" + strconv.FormatInt(req.ToMs, 10)}, Assumptions: effectiveAssumptions(config), WalkForward: defaultWalkForward(series.Len()), MonteCarlo: analytics.MCConfig{Samples: 1000, BlockLength: 5, Seed: stableSeed(strategy.Hash())}}
 		nearMisses := make([]analytics.NearMiss, 0, len(nearMiss.SlotFailures))
 		for _, condition := range []string{"bias", "poi", "trigger"} {
 			if count := nearMiss.SlotFailures[condition]; count > 0 {
 				nearMisses = append(nearMisses, analytics.NearMiss{Condition: condition, Count: count})
 			}
 		}
-		id, err := history.Put(ctx, study, &analytics.StudyResult{OutOfSample: metrics, InSample: metrics, NearMisses: nearMisses, Unresolved: result.Unresolved})
+		studyResult, err := robustnessResult(ctx, &strategy, series, config, snapshot, result, returns, metrics)
+		if err != nil {
+			return nil, err
+		}
+		studyResult.NearMisses, studyResult.Unresolved = nearMisses, result.Unresolved
+		id, err := history.Put(ctx, study, studyResult)
 		if err != nil {
 			return nil, err
 		}
@@ -261,6 +267,123 @@ func runLocal(ctx context.Context, cache *store.LocalStore, registry *instrument
 		summary.RunId = string(id)
 	}
 	return summary, nil
+}
+
+// robustnessResult makes conservative evidence part of every saved local run.
+// The detector inputs are immutable and engine execution remains deterministic.
+func robustnessResult(ctx context.Context, strategy *ir.Strategy, series *core.Series, cfg sim.Config, snapshot string, result sim.RunResult, returns analytics.Returns, metrics analytics.Metrics) (*analytics.StudyResult, error) {
+	seed := stableSeed(strategy.Hash())
+	distribution, err := analytics.MonteCarlo(returns, analytics.MCConfig{Samples: 1000, BlockLength: 5, Seed: seed})
+	if err != nil {
+		return nil, err
+	}
+	out := &analytics.StudyResult{OutOfSample: metrics, InSample: metrics, Distribution: distribution, CostStress: []analytics.CostStressPoint{{Multiplier: 1, Metrics: metrics}}}
+	for _, multiplier := range []int{2, 3} {
+		stress := scaleCosts(cfg, multiplier)
+		r, _, err := engine.Run(ctx, strategy, engine.Data{Series: series, Config: stress, Snapshot: snapshot})
+		if err != nil {
+			return nil, err
+		}
+		m, err := analytics.MetricsFor(tradeReturns(r.Trades))
+		if err != nil {
+			return nil, err
+		}
+		out.CostStress = append(out.CostStress, analytics.CostStressPoint{Multiplier: multiplier, Metrics: m})
+	}
+	out.Sensitivity, err = costRiskSensitivity(ctx, strategy, series, cfg, snapshot)
+	if err != nil {
+		return nil, err
+	}
+	windows, err := analytics.WalkForwardWindows(series.Len(), defaultWalkForward(series.Len()))
+	if err != nil {
+		return nil, err
+	}
+	for _, window := range windows {
+		windowReturns := analytics.Returns{}
+		for _, trade := range result.Trades {
+			if trade.EntryBar >= window.TestFrom && trade.EntryBar < window.TestTo {
+				windowReturns.Pessimistic = append(windowReturns.Pessimistic, float64(trade.Pessimistic.Net))
+				windowReturns.Optimistic = append(windowReturns.Optimistic, float64(trade.Optimistic.Net))
+			}
+		}
+		m, err := analytics.MetricsFor(windowReturns)
+		if err != nil {
+			return nil, err
+		}
+		out.WalkForward = append(out.WalkForward, analytics.WalkForwardResult{Window: window, Metrics: m})
+	}
+	out.NextActions = nextActions(metrics, out.CostStress, len(out.WalkForward))
+	return out, nil
+}
+
+func costRiskSensitivity(ctx context.Context, strategy *ir.Strategy, series *core.Series, cfg sim.Config, snapshot string) (analytics.Grid, error) {
+	costs, risks := []int{1, 2, 3}, []float64{.5, 1, 2}
+	g := analytics.Grid{X: []string{"1× costs", "2× costs", "3× costs"}, Y: []string{"0.5× risk", "1× risk", "2× risk"}, Cells: make([][]analytics.Metrics, len(risks))}
+	for y, risk := range risks {
+		g.Cells[y] = make([]analytics.Metrics, len(costs))
+		for x, cost := range costs {
+			adjusted := scaleCosts(cfg, cost)
+			if adjusted.Risk.RiskPerTrade > 0 {
+				adjusted.Risk.RiskPerTrade = core.RatioFromFloat(adjusted.Risk.RiskPerTrade.Float64() * risk)
+			} else {
+				adjusted.Risk.FixedLots = core.RatioFromFloat(adjusted.Risk.FixedLots.Float64() * risk)
+			}
+			r, _, err := engine.Run(ctx, strategy, engine.Data{Series: series, Config: adjusted, Snapshot: snapshot})
+			if err != nil {
+				return analytics.Grid{}, err
+			}
+			g.Cells[y][x], err = analytics.MetricsFor(tradeReturns(r.Trades))
+			if err != nil {
+				return analytics.Grid{}, err
+			}
+		}
+	}
+	return g, nil
+}
+
+func tradeReturns(trades []sim.Trade) analytics.Returns {
+	r := analytics.Returns{Pessimistic: make([]float64, len(trades)), Optimistic: make([]float64, len(trades))}
+	for i, t := range trades {
+		r.Pessimistic[i], r.Optimistic[i] = float64(t.Pessimistic.Net), float64(t.Optimistic.Net)
+	}
+	return r
+}
+func scaleCosts(cfg sim.Config, multiplier int) sim.Config {
+	cfg.Spec.Costs.SpreadTicks *= int64(multiplier)
+	cfg.Spec.Costs.CommissionFlat *= int64(multiplier)
+	cfg.Spec.Costs.CommissionBps = core.RatioFromFloat(cfg.Spec.Costs.CommissionBps.Float64() * float64(multiplier))
+	cfg.Spec.Costs.SlippageTicks *= int64(multiplier)
+	if cfg.Slippage.Enabled {
+		cfg.Slippage.Ticks *= core.Price(multiplier)
+	}
+	return cfg
+}
+func defaultWalkForward(n int) analytics.WFConfig {
+	train := n / 2
+	test := n / 4
+	if train < 1 {
+		train = 1
+	}
+	if test < 1 {
+		test = 1
+	}
+	return analytics.WFConfig{Train: train, Test: test, Step: test, Anchored: true}
+}
+func stableSeed(s string) uint64 { h := fnv.New64a(); _, _ = h.Write([]byte(s)); return h.Sum64() }
+func nextActions(m analytics.Metrics, stress []analytics.CostStressPoint, windows int) []analytics.NextAction {
+	if m.Trades < 30 {
+		return []analytics.NextAction{{Kind: "simplify_rules", Reason: "The study has fewer than 30 trades."}}
+	}
+	if len(stress) > 0 && stress[len(stress)-1].Metrics.Expectancy.Pessimistic <= 0 {
+		return []analytics.NextAction{{Kind: "retest_higher_costs", Reason: "The edge does not survive 3× execution costs."}}
+	}
+	if windows == 0 {
+		return []analytics.NextAction{{Kind: "extend_history", Reason: "The selected period is too short for a held-out window."}}
+	}
+	if m.Expectancy.Pessimistic <= 0 {
+		return []analytics.NextAction{{Kind: "discard_or_rewrite", Reason: "Unseen conservative expectancy is not positive."}}
+	}
+	return []analytics.NextAction{{Kind: "paper_trade", Reason: "Conservative results remain positive; validate this exact version live without changing it."}}
 }
 
 func effectiveAssumptions(cfg sim.Config) analytics.Assumptions {

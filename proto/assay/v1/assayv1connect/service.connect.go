@@ -67,6 +67,10 @@ const (
 	RunServiceListRunsProcedure = "/assay.v1.RunService/ListRuns"
 	// RunServiceGetRunProcedure is the fully-qualified name of the RunService's GetRun RPC.
 	RunServiceGetRunProcedure = "/assay.v1.RunService/GetRun"
+	// RunServiceGetDetailsProcedure is the fully-qualified name of the RunService's GetDetails RPC.
+	RunServiceGetDetailsProcedure = "/assay.v1.RunService/GetDetails"
+	// RunServiceGetTradesProcedure is the fully-qualified name of the RunService's GetTrades RPC.
+	RunServiceGetTradesProcedure = "/assay.v1.RunService/GetTrades"
 	// RunServiceCompareProcedure is the fully-qualified name of the RunService's Compare RPC.
 	RunServiceCompareProcedure = "/assay.v1.RunService/Compare"
 )
@@ -485,6 +489,8 @@ func (UnimplementedTemplateServiceHandler) ListTemplates(context.Context, *conne
 type RunServiceClient interface {
 	ListRuns(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.ListRunsResponse], error)
 	GetRun(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.RunSummary], error)
+	GetDetails(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.GetRunDetailsResponse], error)
+	GetTrades(context.Context, *connect.Request[v1.GetRunTradesRequest]) (*connect.Response[v1.GetRunTradesResponse], error)
 	Compare(context.Context, *connect.Request[v1.CompareRunsRequest]) (*connect.Response[v1.CompareRunsResponse], error)
 }
 
@@ -511,6 +517,18 @@ func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(runServiceMethods.ByName("GetRun")),
 			connect.WithClientOptions(opts...),
 		),
+		getDetails: connect.NewClient[v1.GetRunRequest, v1.GetRunDetailsResponse](
+			httpClient,
+			baseURL+RunServiceGetDetailsProcedure,
+			connect.WithSchema(runServiceMethods.ByName("GetDetails")),
+			connect.WithClientOptions(opts...),
+		),
+		getTrades: connect.NewClient[v1.GetRunTradesRequest, v1.GetRunTradesResponse](
+			httpClient,
+			baseURL+RunServiceGetTradesProcedure,
+			connect.WithSchema(runServiceMethods.ByName("GetTrades")),
+			connect.WithClientOptions(opts...),
+		),
 		compare: connect.NewClient[v1.CompareRunsRequest, v1.CompareRunsResponse](
 			httpClient,
 			baseURL+RunServiceCompareProcedure,
@@ -522,9 +540,11 @@ func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 
 // runServiceClient implements RunServiceClient.
 type runServiceClient struct {
-	listRuns *connect.Client[v1.Empty, v1.ListRunsResponse]
-	getRun   *connect.Client[v1.GetRunRequest, v1.RunSummary]
-	compare  *connect.Client[v1.CompareRunsRequest, v1.CompareRunsResponse]
+	listRuns   *connect.Client[v1.Empty, v1.ListRunsResponse]
+	getRun     *connect.Client[v1.GetRunRequest, v1.RunSummary]
+	getDetails *connect.Client[v1.GetRunRequest, v1.GetRunDetailsResponse]
+	getTrades  *connect.Client[v1.GetRunTradesRequest, v1.GetRunTradesResponse]
+	compare    *connect.Client[v1.CompareRunsRequest, v1.CompareRunsResponse]
 }
 
 // ListRuns calls assay.v1.RunService.ListRuns.
@@ -537,6 +557,16 @@ func (c *runServiceClient) GetRun(ctx context.Context, req *connect.Request[v1.G
 	return c.getRun.CallUnary(ctx, req)
 }
 
+// GetDetails calls assay.v1.RunService.GetDetails.
+func (c *runServiceClient) GetDetails(ctx context.Context, req *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.GetRunDetailsResponse], error) {
+	return c.getDetails.CallUnary(ctx, req)
+}
+
+// GetTrades calls assay.v1.RunService.GetTrades.
+func (c *runServiceClient) GetTrades(ctx context.Context, req *connect.Request[v1.GetRunTradesRequest]) (*connect.Response[v1.GetRunTradesResponse], error) {
+	return c.getTrades.CallUnary(ctx, req)
+}
+
 // Compare calls assay.v1.RunService.Compare.
 func (c *runServiceClient) Compare(ctx context.Context, req *connect.Request[v1.CompareRunsRequest]) (*connect.Response[v1.CompareRunsResponse], error) {
 	return c.compare.CallUnary(ctx, req)
@@ -546,6 +576,8 @@ func (c *runServiceClient) Compare(ctx context.Context, req *connect.Request[v1.
 type RunServiceHandler interface {
 	ListRuns(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.ListRunsResponse], error)
 	GetRun(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.RunSummary], error)
+	GetDetails(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.GetRunDetailsResponse], error)
+	GetTrades(context.Context, *connect.Request[v1.GetRunTradesRequest]) (*connect.Response[v1.GetRunTradesResponse], error)
 	Compare(context.Context, *connect.Request[v1.CompareRunsRequest]) (*connect.Response[v1.CompareRunsResponse], error)
 }
 
@@ -568,6 +600,18 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(runServiceMethods.ByName("GetRun")),
 		connect.WithHandlerOptions(opts...),
 	)
+	runServiceGetDetailsHandler := connect.NewUnaryHandler(
+		RunServiceGetDetailsProcedure,
+		svc.GetDetails,
+		connect.WithSchema(runServiceMethods.ByName("GetDetails")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runServiceGetTradesHandler := connect.NewUnaryHandler(
+		RunServiceGetTradesProcedure,
+		svc.GetTrades,
+		connect.WithSchema(runServiceMethods.ByName("GetTrades")),
+		connect.WithHandlerOptions(opts...),
+	)
 	runServiceCompareHandler := connect.NewUnaryHandler(
 		RunServiceCompareProcedure,
 		svc.Compare,
@@ -580,6 +624,10 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 			runServiceListRunsHandler.ServeHTTP(w, r)
 		case RunServiceGetRunProcedure:
 			runServiceGetRunHandler.ServeHTTP(w, r)
+		case RunServiceGetDetailsProcedure:
+			runServiceGetDetailsHandler.ServeHTTP(w, r)
+		case RunServiceGetTradesProcedure:
+			runServiceGetTradesHandler.ServeHTTP(w, r)
 		case RunServiceCompareProcedure:
 			runServiceCompareHandler.ServeHTTP(w, r)
 		default:
@@ -597,6 +645,14 @@ func (UnimplementedRunServiceHandler) ListRuns(context.Context, *connect.Request
 
 func (UnimplementedRunServiceHandler) GetRun(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.RunSummary], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("assay.v1.RunService.GetRun is not implemented"))
+}
+
+func (UnimplementedRunServiceHandler) GetDetails(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.GetRunDetailsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("assay.v1.RunService.GetDetails is not implemented"))
+}
+
+func (UnimplementedRunServiceHandler) GetTrades(context.Context, *connect.Request[v1.GetRunTradesRequest]) (*connect.Response[v1.GetRunTradesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("assay.v1.RunService.GetTrades is not implemented"))
 }
 
 func (UnimplementedRunServiceHandler) Compare(context.Context, *connect.Request[v1.CompareRunsRequest]) (*connect.Response[v1.CompareRunsResponse], error) {

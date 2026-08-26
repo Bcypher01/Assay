@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CompareRunsRequest, CompareRunsResponse, DataStatusResponse, Empty, EnsureDataRequest, EvaluatePrimitiveRequest, EvaluatePrimitiveResponse, GetRunRequest, ListInstrumentsResponse, ListPrimitivesResponse, ListRunsResponse, Progress, RunRequest, RunSummary, RunUpdate, ValidateRequest, ValidateResponse } from "./service_pb.js";
+import { CompareRunsRequest, CompareRunsResponse, DataStatusResponse, DescribeStrategyRequest, DescribeStrategyResponse, Empty, EnsureDataRequest, EvaluatePrimitiveRequest, EvaluatePrimitiveResponse, GetRunDetailsResponse, GetRunRequest, GetRunTradesRequest, GetRunTradesResponse, ListInstrumentsResponse, ListPrimitivesResponse, ListRunsResponse, ListTemplatesResponse, Progress, RunRequest, RunSummary, RunUpdate, ValidateRequest, ValidateResponse } from "./service_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -85,6 +85,15 @@ export const StudyService = {
       kind: MethodKind.Unary,
     },
     /**
+     * @generated from rpc assay.v1.StudyService.Describe
+     */
+    describe: {
+      name: "Describe",
+      I: DescribeStrategyRequest,
+      O: DescribeStrategyResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
      * @generated from rpc assay.v1.StudyService.Run
      */
     run: {
@@ -92,6 +101,24 @@ export const StudyService = {
       I: RunRequest,
       O: RunUpdate,
       kind: MethodKind.ServerStreaming,
+    },
+  }
+} as const;
+
+/**
+ * @generated from service assay.v1.TemplateService
+ */
+export const TemplateService = {
+  typeName: "assay.v1.TemplateService",
+  methods: {
+    /**
+     * @generated from rpc assay.v1.TemplateService.ListTemplates
+     */
+    listTemplates: {
+      name: "ListTemplates",
+      I: Empty,
+      O: ListTemplatesResponse,
+      kind: MethodKind.Unary,
     },
   }
 } as const;
@@ -118,6 +145,24 @@ export const RunService = {
       name: "GetRun",
       I: GetRunRequest,
       O: RunSummary,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc assay.v1.RunService.GetDetails
+     */
+    getDetails: {
+      name: "GetDetails",
+      I: GetRunRequest,
+      O: GetRunDetailsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc assay.v1.RunService.GetTrades
+     */
+    getTrades: {
+      name: "GetTrades",
+      I: GetRunTradesRequest,
+      O: GetRunTradesResponse,
       kind: MethodKind.Unary,
     },
     /**

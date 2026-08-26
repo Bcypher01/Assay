@@ -5,9 +5,20 @@ package assay.v1;
 option go_package = "github.com/Bcypher01/Assay/proto/assay/v1;assayv1";
 
 message Empty {}
-message Instrument { string symbol = 1; string quality_tier = 2; repeated string timeframes = 3; }
-message ListInstrumentsResponse { repeated Instrument instruments = 1; }
-message EnsureDataRequest { string symbol = 1; string timeframe = 2; sint64 from_ms = 3; sint64 to_ms = 4; }
+message Instrument {
+  string symbol = 1;
+  string quality_tier = 2;
+  repeated string timeframes = 3;
+}
+message ListInstrumentsResponse {
+  repeated Instrument instruments = 1;
+}
+message EnsureDataRequest {
+  string symbol = 1;
+  string timeframe = 2;
+  sint64 from_ms = 3;
+  sint64 to_ms = 4;
+}
 enum ProgressStage {
   PROGRESS_STAGE_UNSPECIFIED = 0;
   PROGRESS_STAGE_CHECKING_LOCAL_DATA = 1;
@@ -21,7 +32,14 @@ enum ProgressStage {
   PROGRESS_STAGE_CALCULATING_METRICS = 9;
   PROGRESS_STAGE_SAVING_HISTORY = 10;
 }
-message Progress { uint32 percent = 1; string stage = 2; sint64 bytes_done = 3; sint64 bytes_total = 4; string current_file = 5; ProgressStage stage_code = 6; }
+message Progress {
+  uint32 percent = 1;
+  string stage = 2;
+  sint64 bytes_done = 3;
+  sint64 bytes_total = 4;
+  string current_file = 5;
+  ProgressStage stage_code = 6;
+}
 enum DataReadiness {
   DATA_READINESS_UNSPECIFIED = 0;
   DATA_READINESS_READY = 1;
@@ -52,29 +70,91 @@ message DataStatusResponse {
   string error_code = 11;
   string error = 12;
 }
-service DataService { rpc ListInstruments(Empty) returns (ListInstrumentsResponse); rpc DataStatus(EnsureDataRequest) returns (DataStatusResponse); rpc EnsureData(EnsureDataRequest) returns (stream Progress); }
+service DataService {
+  rpc ListInstruments(Empty) returns (ListInstrumentsResponse);
+  rpc DataStatus(EnsureDataRequest) returns (DataStatusResponse);
+  rpc EnsureData(EnsureDataRequest) returns (stream Progress);
+}
 
-message PrimitiveInfo { string pack = 1; string type = 2; string output_kind = 3; string parameter_schema = 4; bool timeframed = 5; }
-message ListPrimitivesResponse { repeated PrimitiveInfo primitives = 1; }
-message EvaluatePrimitiveRequest { string pack = 1; string type = 2; bytes params_json = 3; string snapshot = 4; }
-message EvaluatePrimitiveResponse { string error = 1; }
-service PrimitiveService { rpc ListPrimitives(Empty) returns (ListPrimitivesResponse); rpc Evaluate(EvaluatePrimitiveRequest) returns (EvaluatePrimitiveResponse); }
+message PrimitiveInfo {
+  string pack = 1;
+  string type = 2;
+  string output_kind = 3;
+  string parameter_schema = 4;
+  bool timeframed = 5;
+}
+message ListPrimitivesResponse {
+  repeated PrimitiveInfo primitives = 1;
+}
+message EvaluatePrimitiveRequest {
+  string pack = 1;
+  string type = 2;
+  bytes params_json = 3;
+  string snapshot = 4;
+}
+message EvaluatePrimitiveResponse {
+  string error = 1;
+}
+service PrimitiveService {
+  rpc ListPrimitives(Empty) returns (ListPrimitivesResponse);
+  rpc Evaluate(EvaluatePrimitiveRequest) returns (EvaluatePrimitiveResponse);
+}
 
-message ValidateRequest { bytes strategy_json = 1; }
-message FieldError { string path = 1; string message = 2; }
-message ValidateResponse { repeated FieldError errors = 1; string hash = 2; }
-message StrategyRule { string branch = 1; string text = 2; bool enabled = 3; }
-message StrategyDescription { string summary = 1; repeated StrategyRule rules = 2; }
-message DescribeStrategyRequest { bytes strategy_json = 1; }
-message DescribeStrategyResponse { StrategyDescription description = 1; }
+message ValidateRequest {
+  bytes strategy_json = 1;
+}
+message FieldError {
+  string path = 1;
+  string message = 2;
+}
+message ValidateResponse {
+  repeated FieldError errors = 1;
+  string hash = 2;
+}
+message StrategyRule {
+  string branch = 1;
+  string text = 2;
+  bool enabled = 3;
+}
+message StrategyDescription {
+  string summary = 1;
+  repeated StrategyRule rules = 2;
+}
+message DescribeStrategyRequest {
+  bytes strategy_json = 1;
+}
+message DescribeStrategyResponse {
+  StrategyDescription description = 1;
+}
 message RunRequest {
   bytes strategy_json = 1;
   string snapshot = 2;
   sint64 from_ms = 3;
   sint64 to_ms = 4;
+  StudyAssumptions assumptions = 5;
 }
-message EquityChunk { repeated sint64 values = 1; }
-message TradeChunk { uint32 count = 1; }
+
+// StudyAssumptions are the user-visible execution choices for one run. All
+// money and price fields use the instrument/account's existing integer units;
+// the UI obtains their display precision from the selected instrument. A zero
+// value means "use the instrument default" except initial_equity, which must
+// be positive when assumptions are supplied.
+message StudyAssumptions {
+  sint64 initial_equity = 1;
+  double risk_per_trade = 2;
+  double fixed_lots = 3;
+  sint64 spread_ticks = 4;
+  double commission_bps = 5;
+  sint64 commission_flat = 6;
+  sint64 slippage_ticks = 7;
+  string fill_policy = 8;
+}
+message EquityChunk {
+  repeated sint64 values = 1;
+}
+message TradeChunk {
+  uint32 count = 1;
+}
 message RunSummary {
   uint32 trades = 1;
   uint32 unresolved = 2;
@@ -89,8 +169,19 @@ message RunSummary {
   double profit_factor = 11;
   string error_code = 12;
 }
-message RunUpdate { oneof payload { Progress progress = 1; EquityChunk equity = 2; TradeChunk trades = 3; RunSummary summary = 4; } }
-service StudyService { rpc Validate(ValidateRequest) returns (ValidateResponse); rpc Describe(DescribeStrategyRequest) returns (DescribeStrategyResponse); rpc Run(RunRequest) returns (stream RunUpdate); }
+message RunUpdate {
+  oneof payload {
+    Progress progress = 1;
+    EquityChunk equity = 2;
+    TradeChunk trades = 3;
+    RunSummary summary = 4;
+  }
+}
+service StudyService {
+  rpc Validate(ValidateRequest) returns (ValidateResponse);
+  rpc Describe(DescribeStrategyRequest) returns (DescribeStrategyResponse);
+  rpc Run(RunRequest) returns (stream RunUpdate);
+}
 
 message StrategyTemplate {
   string id = 1;
@@ -102,13 +193,113 @@ message StrategyTemplate {
   bytes strategy_json = 7;
   StrategyDescription strategy_description = 8;
 }
-message ListTemplatesResponse { repeated StrategyTemplate templates = 1; }
-service TemplateService { rpc ListTemplates(Empty) returns (ListTemplatesResponse); }
+message ListTemplatesResponse {
+  repeated StrategyTemplate templates = 1;
+}
+service TemplateService {
+  rpc ListTemplates(Empty) returns (ListTemplatesResponse);
+}
 
-message ListRunsResponse { repeated string hashes = 1; }
-message GetRunRequest { string hash = 1; }
-message CompareRunsRequest { string left = 1; string right = 2; }
-message ParamChange { string path = 1; string from = 2; string to = 3; }
-message MetricDelta { string name = 1; double pessimistic = 2; double optimistic = 3; }
-message CompareRunsResponse { string error = 1; repeated ParamChange changes = 2; repeated MetricDelta metric_deltas = 3; }
-service RunService { rpc ListRuns(Empty) returns (ListRunsResponse); rpc GetRun(GetRunRequest) returns (RunSummary); rpc Compare(CompareRunsRequest) returns (CompareRunsResponse); }
+message ListRunsResponse {
+  repeated string hashes = 1;
+}
+message GetRunRequest {
+  string hash = 1;
+}
+message BoundedMetric {
+  double pessimistic = 1;
+  double optimistic = 2;
+}
+message ResultMetrics {
+  BoundedMetric final_equity = 1;
+  BoundedMetric max_drawdown = 2;
+  BoundedMetric average_drawdown = 3;
+  BoundedMetric profit_factor = 4;
+  BoundedMetric expectancy = 5;
+  uint32 trades = 6;
+  uint32 wins = 7;
+  uint32 losses = 8;
+  uint32 longest_losing_streak = 9;
+}
+message RunDetails {
+  string run_id = 1;
+  string strategy_hash = 2;
+  string snapshot = 3;
+  string name = 4;
+  string period = 5;
+  repeated string instruments = 6;
+  ResultMetrics out_of_sample = 7;
+  ResultMetrics in_sample = 8;
+  uint32 trials = 9;
+  bool trade_list_present = 10;
+  StudyAssumptions assumptions = 11;
+  uint32 unresolved = 12;
+  repeated PeriodMetrics yearly = 13;
+  repeated PeriodMetrics monthly = 14;
+  repeated NearMissSummary near_misses = 15;
+}
+message PeriodMetrics {
+  string period = 1;
+  BoundedMetric net_pnl = 2;
+  uint32 trades = 3;
+  uint32 wins = 4;
+  uint32 losses = 5;
+}
+message NearMissSummary {
+  string condition = 1;
+  uint32 count = 2;
+}
+message GetRunDetailsResponse {
+  RunDetails details = 1;
+}
+message GetRunTradesRequest {
+  string hash = 1;
+  uint32 page_size = 2;
+  uint32 page_offset = 3;
+}
+message TradeRecord {
+  string side = 1;
+  sint64 entry_time_ms = 2;
+  sint64 exit_time_ms_pessimistic = 3;
+  sint64 exit_time_ms_optimistic = 4;
+  sint64 entry_price = 5;
+  sint64 exit_price_pessimistic = 6;
+  sint64 exit_price_optimistic = 7;
+  sint64 stop = 8;
+  sint64 target = 9;
+  sint64 lots = 10;
+  BoundedMetric net_pnl = 11;
+  BoundedMetric costs = 12;
+  bool ambiguous = 13;
+}
+message GetRunTradesResponse {
+  repeated TradeRecord trades = 1;
+  uint32 total = 2;
+  uint32 next_offset = 3;
+}
+message CompareRunsRequest {
+  string left = 1;
+  string right = 2;
+}
+message ParamChange {
+  string path = 1;
+  string from = 2;
+  string to = 3;
+}
+message MetricDelta {
+  string name = 1;
+  double pessimistic = 2;
+  double optimistic = 3;
+}
+message CompareRunsResponse {
+  string error = 1;
+  repeated ParamChange changes = 2;
+  repeated MetricDelta metric_deltas = 3;
+}
+service RunService {
+  rpc ListRuns(Empty) returns (ListRunsResponse);
+  rpc GetRun(GetRunRequest) returns (RunSummary);
+  rpc GetDetails(GetRunRequest) returns (GetRunDetailsResponse);
+  rpc GetTrades(GetRunTradesRequest) returns (GetRunTradesResponse);
+  rpc Compare(CompareRunsRequest) returns (CompareRunsResponse);
+}

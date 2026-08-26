@@ -26,6 +26,17 @@ with `RunService.Compare`, whose response contains ordered parameter changes and
 bounded metric deltas. The TypeScript client is generated under
 `gen/typescript/src`; run `npm run generate` after a protobuf change.
 
+For the result page, call `RunService.GetDetails` with the `run_id`. It returns
+the persisted strategy/data identity, effective execution assumptions, bounded
+in- and out-of-sample metrics, trial count, monthly/yearly P&L aggregates, and
+near-miss condition counts. It intentionally returns evidence inputs rather
+than a server-generated verdict, so the client can show the fixed rubric and
+trace every conclusion. `RunService.GetTrades` is paginated (100 records by
+default, 500 maximum) and returns entry/exit markers, P&L and cost bounds, and
+the ambiguous-fill flag for the trade inspector. A retained trade list can be
+evicted under history retention; in that case `GetDetails.trade_list_present`
+is false and `GetTrades` returns `failed_precondition`.
+
 Interactive API documentation is available from the local server at `/docs`.
 The corresponding OpenAPI 3.1 document is `/openapi.json`. Streaming endpoints
 are documented there but should be called through the generated ConnectRPC

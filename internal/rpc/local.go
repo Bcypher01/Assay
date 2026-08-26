@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 
 	"github.com/Bcypher01/Assay/internal/analytics"
@@ -187,9 +188,12 @@ func runLocal(ctx context.Context, cache *store.LocalStore, registry *instrument
 	if err := send(progressUpdate(40, "evaluating strategy")); err != nil {
 		return nil, err
 	}
-	config := sim.Config{Spec: *spec, Risk: sim.RiskModel{InitialEquity: 100_000, FixedLots: core.One}}
+	config, err := runConfig(*spec, &strategy, req.Assumptions)
+	if err != nil {
+		return nil, err
+	}
 	snapshot := store.SnapshotHash(manifests)
-	result, _, err := engine.Run(ctx, &strategy, engine.Data{Series: series, Config: config, Snapshot: snapshot})
+	result, nearMiss, err := engine.Run(ctx, &strategy, engine.Data{Series: series, Config: config, Snapshot: snapshot})
 	if err != nil {
 		return nil, err
 	}
@@ -236,8 +240,14 @@ func runLocal(ctx context.Context, cache *store.LocalStore, registry *instrument
 	summary.Expectancy = metrics.Expectancy.Pessimistic
 	summary.ProfitFactor = metrics.ProfitFactor.Pessimistic
 	if history != nil {
-		study := &analytics.Study{Strategy: &strategy, Snapshot: snapshot, Scope: analytics.Scope{Instruments: append([]string(nil), strategy.Universe.Symbols...), Period: strconv.FormatInt(req.FromMs, 10) + "-" + strconv.FormatInt(req.ToMs, 10)}}
-		id, err := history.Put(ctx, study, &analytics.StudyResult{OutOfSample: metrics, InSample: metrics})
+		study := &analytics.Study{Strategy: &strategy, Snapshot: snapshot, Scope: analytics.Scope{Instruments: append([]string(nil), strategy.Universe.Symbols...), Period: strconv.FormatInt(req.FromMs, 10) + "-" + strconv.FormatInt(req.ToMs, 10)}, Assumptions: effectiveAssumptions(config)}
+		nearMisses := make([]analytics.NearMiss, 0, len(nearMiss.SlotFailures))
+		for _, condition := range []string{"bias", "poi", "trigger"} {
+			if count := nearMiss.SlotFailures[condition]; count > 0 {
+				nearMisses = append(nearMisses, analytics.NearMiss{Condition: condition, Count: count})
+			}
+		}
+		id, err := history.Put(ctx, study, &analytics.StudyResult{OutOfSample: metrics, InSample: metrics, NearMisses: nearMisses, Unresolved: result.Unresolved})
 		if err != nil {
 			return nil, err
 		}
@@ -251,6 +261,74 @@ func runLocal(ctx context.Context, cache *store.LocalStore, registry *instrument
 		summary.RunId = string(id)
 	}
 	return summary, nil
+}
+
+func effectiveAssumptions(cfg sim.Config) analytics.Assumptions {
+	a := analytics.Assumptions{InitialEquity: int64(cfg.Risk.InitialEquity), SpreadTicks: cfg.Spec.Costs.SpreadTicks, CommissionFlat: cfg.Spec.Costs.CommissionFlat, FixedLots: cfg.Risk.FixedLots.Float64(), FillPolicy: "next_open"}
+	if cfg.Risk.RiskPerTrade > 0 {
+		a.RiskPerTrade = cfg.Risk.RiskPerTrade.Float64()
+	}
+	if cfg.Spec.Costs.CommissionMode == instrument.CommissionBps {
+		a.CommissionBps = cfg.Spec.Costs.CommissionBps.Float64() * 10000
+	}
+	if cfg.Slippage.Enabled {
+		a.SlippageTicks = int64(cfg.Slippage.Ticks)
+	} else {
+		a.SlippageTicks = cfg.Spec.Costs.SlippageTicks
+	}
+	return a
+}
+
+// runConfig turns the explicit, persisted study assumptions into simulator
+// configuration. Zero overrides intentionally retain the instrument's
+// non-zero defaults; a client therefore cannot accidentally obtain a free-fill
+// backtest by omitting execution fields.
+func runConfig(spec instrument.Spec, strategy *ir.Strategy, a *assayv1.StudyAssumptions) (sim.Config, error) {
+	cfg := sim.Config{Spec: spec, Risk: sim.RiskModel{InitialEquity: 100_000, FixedLots: core.One}}
+	if strategy != nil && strategy.Risk.PerTrade > 0 {
+		cfg.Risk.RiskPerTrade = strategy.Risk.PerTrade
+	}
+	if a == nil {
+		return cfg, nil
+	}
+	if a.InitialEquity <= 0 {
+		return sim.Config{}, fmt.Errorf("rpc: assumptions.initial_equity must be positive")
+	}
+	if a.RiskPerTrade < 0 || a.RiskPerTrade > 1 || math.IsNaN(a.RiskPerTrade) || math.IsInf(a.RiskPerTrade, 0) {
+		return sim.Config{}, fmt.Errorf("rpc: assumptions.risk_per_trade must be between 0 and 1")
+	}
+	if a.FixedLots < 0 || math.IsNaN(a.FixedLots) || math.IsInf(a.FixedLots, 0) {
+		return sim.Config{}, fmt.Errorf("rpc: assumptions.fixed_lots must not be negative")
+	}
+	if a.SpreadTicks < 0 || a.CommissionBps < 0 || a.CommissionFlat < 0 || a.SlippageTicks < 0 {
+		return sim.Config{}, fmt.Errorf("rpc: execution-cost assumptions must not be negative")
+	}
+	if a.FillPolicy != "" && a.FillPolicy != "next_open" {
+		return sim.Config{}, fmt.Errorf("rpc: assumptions.fill_policy only supports next_open")
+	}
+	cfg.Risk.InitialEquity = core.Price(a.InitialEquity)
+	if a.RiskPerTrade > 0 {
+		cfg.Risk.RiskPerTrade = core.RatioFromFloat(a.RiskPerTrade)
+		cfg.Risk.FixedLots = 0
+	} else if a.FixedLots > 0 {
+		cfg.Risk.RiskPerTrade = 0
+		cfg.Risk.FixedLots = core.RatioFromFloat(a.FixedLots)
+	}
+	if a.SpreadTicks > 0 {
+		cfg.Spec.Costs.SpreadTicks = a.SpreadTicks
+	}
+	if a.CommissionBps > 0 {
+		cfg.Spec.Costs.CommissionMode = instrument.CommissionBps
+		cfg.Spec.Costs.CommissionBps = core.RatioFromFloat(a.CommissionBps / 10000)
+	}
+	if a.CommissionFlat > 0 {
+		cfg.Spec.Costs.CommissionMode = instrument.CommissionPerTrade
+		cfg.Spec.Costs.CommissionFlat = a.CommissionFlat
+	}
+	if a.SlippageTicks > 0 {
+		cfg.Slippage = sim.SlippageModel{Enabled: true, Mode: instrument.SlippageFixed, Ticks: core.Price(a.SlippageTicks)}
+	}
+	return cfg, nil
 }
 
 func supportedTimeframes(q instrument.QualityTier) []string {

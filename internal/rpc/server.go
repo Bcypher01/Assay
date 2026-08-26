@@ -9,12 +9,16 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
+	"github.com/Bcypher01/Assay/internal/analytics"
+	"github.com/Bcypher01/Assay/internal/core"
 	"github.com/Bcypher01/Assay/internal/instrument"
 	"github.com/Bcypher01/Assay/internal/ir"
 	"github.com/Bcypher01/Assay/internal/primitive"
 	"github.com/Bcypher01/Assay/internal/runstore"
+	"github.com/Bcypher01/Assay/internal/sim"
 	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
 	"github.com/Bcypher01/Assay/proto/assay/v1/assayv1connect"
 )
@@ -353,6 +357,115 @@ func (s *Server) GetRun(ctx context.Context, req *connect.Request[assayv1.GetRun
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("run %q not found", req.Msg.Hash))
 	}
 	return connect.NewResponse(out), nil
+}
+
+// GetDetails exposes the persisted evidence for a completed run while keeping
+// GetRun's compact streaming-era summary compatible with existing clients.
+func (s *Server) GetDetails(ctx context.Context, req *connect.Request[assayv1.GetRunRequest]) (*connect.Response[assayv1.GetRunDetailsResponse], error) {
+	if s.RunStore == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, ErrNotConfigured)
+	}
+	run, err := s.RunStore.Get(ctx, runstore.RunID(req.Msg.Hash))
+	if err != nil {
+		return nil, asConnectError(err)
+	}
+	trials, err := s.RunStore.Trials(ctx, run.Scope)
+	if err != nil {
+		return nil, asConnectError(err)
+	}
+	d := &assayv1.RunDetails{RunId: string(run.ID), StrategyHash: run.StrategyHash, Snapshot: run.Snapshot, Name: run.Name, Period: run.Scope.Period, Instruments: append([]string(nil), run.Scope.Instruments...), OutOfSample: resultMetrics(run.Result.OutOfSample), InSample: resultMetrics(run.Result.InSample), Trials: uint32(trials), TradeListPresent: run.TradeListPresent, Assumptions: assumptionsMessage(run.Study.Assumptions), Unresolved: uint32(run.Result.Unresolved), Yearly: periodMetrics(run.Trades, "2006"), Monthly: periodMetrics(run.Trades, "2006-01")}
+	for _, miss := range run.Result.NearMisses {
+		d.NearMisses = append(d.NearMisses, &assayv1.NearMissSummary{Condition: miss.Condition, Count: uint32(miss.Count)})
+	}
+	return connect.NewResponse(&assayv1.GetRunDetailsResponse{Details: d}), nil
+}
+
+// GetTrades supplies a bounded, page-addressable trade inspector. A result
+// page must never load an entire retained parquet list merely to render its
+// first viewport.
+func (s *Server) GetTrades(ctx context.Context, req *connect.Request[assayv1.GetRunTradesRequest]) (*connect.Response[assayv1.GetRunTradesResponse], error) {
+	if s.RunStore == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, ErrNotConfigured)
+	}
+	run, err := s.RunStore.Get(ctx, runstore.RunID(req.Msg.Hash))
+	if err != nil {
+		return nil, asConnectError(err)
+	}
+	if !run.TradeListPresent {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("run %q no longer has its retained trade list", req.Msg.Hash))
+	}
+	page := int(req.Msg.PageSize)
+	if page == 0 {
+		page = 100
+	}
+	if page > 500 {
+		page = 500
+	}
+	from := int(req.Msg.PageOffset)
+	if from < 0 || from > len(run.Trades) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("page_offset is outside the trade list"))
+	}
+	to := from + page
+	if to > len(run.Trades) {
+		to = len(run.Trades)
+	}
+	out := &assayv1.GetRunTradesResponse{Total: uint32(len(run.Trades))}
+	for _, trade := range run.Trades[from:to] {
+		out.Trades = append(out.Trades, tradeRecord(trade))
+	}
+	if to < len(run.Trades) {
+		out.NextOffset = uint32(to)
+	}
+	return connect.NewResponse(out), nil
+}
+
+func bounded(v analytics.Bounded) *assayv1.BoundedMetric {
+	return &assayv1.BoundedMetric{Pessimistic: v.Pessimistic, Optimistic: v.Optimistic}
+}
+func resultMetrics(x analytics.Metrics) *assayv1.ResultMetrics {
+	return &assayv1.ResultMetrics{FinalEquity: bounded(x.FinalEquity), MaxDrawdown: bounded(x.MaxDrawdown), AverageDrawdown: bounded(x.AverageDrawdown), ProfitFactor: bounded(x.ProfitFactor), Expectancy: bounded(x.Expectancy), Trades: uint32(x.Trades), Wins: uint32(x.Wins), Losses: uint32(x.Losses), LongestLosingStreak: uint32(x.LongestLosingStreak)}
+}
+func assumptionsMessage(a analytics.Assumptions) *assayv1.StudyAssumptions {
+	return &assayv1.StudyAssumptions{InitialEquity: a.InitialEquity, RiskPerTrade: a.RiskPerTrade, FixedLots: a.FixedLots, SpreadTicks: a.SpreadTicks, CommissionBps: a.CommissionBps, CommissionFlat: a.CommissionFlat, SlippageTicks: a.SlippageTicks, FillPolicy: a.FillPolicy}
+}
+
+func tradeRecord(t sim.Trade) *assayv1.TradeRecord {
+	side := "long"
+	if t.Side == core.SideShort {
+		side = "short"
+	}
+	return &assayv1.TradeRecord{Side: side, EntryTimeMs: t.EntryTime.Millis(), ExitTimeMsPessimistic: t.Pessimistic.ExitTime.Millis(), ExitTimeMsOptimistic: t.Optimistic.ExitTime.Millis(), EntryPrice: int64(t.EntryPrice), ExitPricePessimistic: int64(t.Pessimistic.ExitPrice), ExitPriceOptimistic: int64(t.Optimistic.ExitPrice), Stop: int64(t.Stop), Target: int64(t.Target), Lots: int64(t.Lots), NetPnl: &assayv1.BoundedMetric{Pessimistic: float64(t.Pessimistic.Net), Optimistic: float64(t.Optimistic.Net)}, Costs: &assayv1.BoundedMetric{Pessimistic: float64(t.Pessimistic.Costs), Optimistic: float64(t.Optimistic.Costs)}, Ambiguous: t.Ambiguous}
+}
+
+func periodMetrics(trades []sim.Trade, layout string) []*assayv1.PeriodMetrics {
+	type aggregate struct {
+		period               string
+		p, o                 float64
+		trades, wins, losses uint32
+	}
+	items := make([]aggregate, 0)
+	for _, trade := range trades {
+		period := time.UnixMilli(trade.EntryTime.Millis()).UTC().Format(layout)
+		i := len(items) - 1
+		if i < 0 || items[i].period != period {
+			items = append(items, aggregate{period: period})
+			i++
+		}
+		x := &items[i]
+		x.p += float64(trade.Pessimistic.Net)
+		x.o += float64(trade.Optimistic.Net)
+		x.trades++
+		if trade.Pessimistic.Net > 0 {
+			x.wins++
+		} else if trade.Pessimistic.Net < 0 {
+			x.losses++
+		}
+	}
+	out := make([]*assayv1.PeriodMetrics, len(items))
+	for i, x := range items {
+		out[i] = &assayv1.PeriodMetrics{Period: x.period, NetPnl: &assayv1.BoundedMetric{Pessimistic: x.p, Optimistic: x.o}, Trades: x.trades, Wins: x.wins, Losses: x.losses}
+	}
+	return out
 }
 func (s *Server) Compare(ctx context.Context, req *connect.Request[assayv1.CompareRunsRequest]) (*connect.Response[assayv1.CompareRunsResponse], error) {
 	if s.CompareFn == nil && s.RunStore == nil {

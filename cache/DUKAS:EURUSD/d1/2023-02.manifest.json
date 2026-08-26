@@ -1,0 +1,12 @@
+{
+  "symbol": "DUKAS:EURUSD",
+  "tf": "d1",
+  "month": "2023-02",
+  "rows": 20,
+  "first": 1675209600000,
+  "last": 1677542400000,
+  "contentHash": "7e334bf91819480e2cd24db80f7a3f3782e8ab3cbd6aff26a0624f5c889690fc",
+  "source": "venue-router",
+  "buildVersion": "fallback",
+  "schemaVersion": 1
+}

@@ -1,0 +1,20 @@
+{
+  "id": "bf6a7cdb983d5589a96f76b08d5e13757870da087779bce746637bdc4e3058c2",
+  "strategyHash": "c16c2875e992c458e36bd12471cf2d6e0fa8cd22b9a3a174456f9dd42f93f29a",
+  "snapshot": "c4f32eb221d99586e03c65523f8a1df67cb39742c7c8ce1c1e443e117755b325",
+  "name": "Liquidity sweep with market-structure confirmation — simplify_rules",
+  "scope": {
+    "Instruments": [
+      "DUKAS:GBPUSD"
+    ],
+    "Period": "1577836800000-1640908800000"
+  },
+  "createdAt": "2026-08-26T16:16:37.096247Z",
+  "trades": 18,
+  "finalEquity": {
+    "Pessimistic": -48,
+    "Optimistic": 1491
+  },
+  "parameters": "bearish-structure={\"swingLookback\":5,\"confirmByClose\":true}, bearish-sweep={\"wickThroughTicks\":1,\"closeBackBars\":3,\"requireStructureShift\":true}, bullish-structure={\"swingLookback\":5,\"confirmByClose\":true}, bullish-sweep={\"wickThroughTicks\":1,\"closeBackBars\":3,\"requireStructureShift\":true}",
+  "tradeListPresent": true
+}

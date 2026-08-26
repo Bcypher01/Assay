@@ -1,0 +1,20 @@
+{
+  "id": "244488795a78e2fdb3279d68715e8f488ea1b2d6cde383ed1c1605e6e1c1b492",
+  "strategyHash": "cbed6858d86e0a7043f363e5536c24fdbfa07e128720a2d50038e817788fae26",
+  "snapshot": "c4f32eb221d99586e03c65523f8a1df67cb39742c7c8ce1c1e443e117755b325",
+  "name": "20/50 moving-average crossover",
+  "scope": {
+    "Instruments": [
+      "DUKAS:GBPUSD"
+    ],
+    "Period": "1577836800000-1640908800000"
+  },
+  "createdAt": "2026-08-26T14:42:27.521925Z",
+  "trades": 8,
+  "finalEquity": {
+    "Pessimistic": 489,
+    "Optimistic": 489
+  },
+  "parameters": "bearish-cross={\"fastPeriod\":20,\"slowPeriod\":50}, bullish-cross={\"fastPeriod\":20,\"slowPeriod\":50}",
+  "tradeListPresent": true
+}

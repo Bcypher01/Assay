@@ -1,6 +1,8 @@
 /bin/
 /dist/
 /data/
+/cache/
+/history/
 *.parquet
 *.test
 *.prof

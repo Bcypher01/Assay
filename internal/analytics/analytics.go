@@ -25,6 +25,25 @@ type StudyResult struct {
 	Trials                int
 	Deflated              Metrics
 	CostCurve             []Metrics
+	NearMisses            []NearMiss
+	Unresolved            int
+}
+
+// Assumptions records the effective execution choices used for a study. It is
+// deliberately a value object: a result must remain interpretable even after
+// an instrument's defaults change.
+type Assumptions struct {
+	InitialEquity, SpreadTicks, CommissionFlat, SlippageTicks int64
+	RiskPerTrade, FixedLots, CommissionBps                    float64
+	FillPolicy                                                string
+}
+
+// NearMiss is an aggregate of conditions that prevented entries. Keeping the
+// aggregate instead of every bar makes a saved result useful without turning
+// run history into another bar store.
+type NearMiss struct {
+	Condition string
+	Count     int
 }
 
 // Study is the reproducible input to an analytics run.  Snapshot identifies
@@ -38,6 +57,7 @@ type Study struct {
 	Seed        int64
 	Snapshot    string
 	Scope       Scope
+	Assumptions Assumptions
 }
 
 // Scope deliberately lives with the study document so persistence does not

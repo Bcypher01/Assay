@@ -847,6 +847,172 @@ export class ValidateResponse extends Message<ValidateResponse> {
 }
 
 /**
+ * @generated from message assay.v1.StrategyRule
+ */
+export class StrategyRule extends Message<StrategyRule> {
+  /**
+   * @generated from field: string branch = 1;
+   */
+  branch = "";
+
+  /**
+   * @generated from field: string text = 2;
+   */
+  text = "";
+
+  /**
+   * @generated from field: bool enabled = 3;
+   */
+  enabled = false;
+
+  constructor(data?: PartialMessage<StrategyRule>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.StrategyRule";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "branch", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "text", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "enabled", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): StrategyRule {
+    return new StrategyRule().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): StrategyRule {
+    return new StrategyRule().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): StrategyRule {
+    return new StrategyRule().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: StrategyRule | PlainMessage<StrategyRule> | undefined, b: StrategyRule | PlainMessage<StrategyRule> | undefined): boolean {
+    return proto3.util.equals(StrategyRule, a, b);
+  }
+}
+
+/**
+ * @generated from message assay.v1.StrategyDescription
+ */
+export class StrategyDescription extends Message<StrategyDescription> {
+  /**
+   * @generated from field: string summary = 1;
+   */
+  summary = "";
+
+  /**
+   * @generated from field: repeated assay.v1.StrategyRule rules = 2;
+   */
+  rules: StrategyRule[] = [];
+
+  constructor(data?: PartialMessage<StrategyDescription>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.StrategyDescription";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "summary", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "rules", kind: "message", T: StrategyRule, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): StrategyDescription {
+    return new StrategyDescription().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): StrategyDescription {
+    return new StrategyDescription().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): StrategyDescription {
+    return new StrategyDescription().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: StrategyDescription | PlainMessage<StrategyDescription> | undefined, b: StrategyDescription | PlainMessage<StrategyDescription> | undefined): boolean {
+    return proto3.util.equals(StrategyDescription, a, b);
+  }
+}
+
+/**
+ * @generated from message assay.v1.DescribeStrategyRequest
+ */
+export class DescribeStrategyRequest extends Message<DescribeStrategyRequest> {
+  /**
+   * @generated from field: bytes strategy_json = 1;
+   */
+  strategyJson = new Uint8Array(0);
+
+  constructor(data?: PartialMessage<DescribeStrategyRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.DescribeStrategyRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "strategy_json", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DescribeStrategyRequest {
+    return new DescribeStrategyRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): DescribeStrategyRequest {
+    return new DescribeStrategyRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): DescribeStrategyRequest {
+    return new DescribeStrategyRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: DescribeStrategyRequest | PlainMessage<DescribeStrategyRequest> | undefined, b: DescribeStrategyRequest | PlainMessage<DescribeStrategyRequest> | undefined): boolean {
+    return proto3.util.equals(DescribeStrategyRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message assay.v1.DescribeStrategyResponse
+ */
+export class DescribeStrategyResponse extends Message<DescribeStrategyResponse> {
+  /**
+   * @generated from field: assay.v1.StrategyDescription description = 1;
+   */
+  description?: StrategyDescription;
+
+  constructor(data?: PartialMessage<DescribeStrategyResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.DescribeStrategyResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "description", kind: "message", T: StrategyDescription },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DescribeStrategyResponse {
+    return new DescribeStrategyResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): DescribeStrategyResponse {
+    return new DescribeStrategyResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): DescribeStrategyResponse {
+    return new DescribeStrategyResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: DescribeStrategyResponse | PlainMessage<DescribeStrategyResponse> | undefined, b: DescribeStrategyResponse | PlainMessage<DescribeStrategyResponse> | undefined): boolean {
+    return proto3.util.equals(DescribeStrategyResponse, a, b);
+  }
+}
+
+/**
  * @generated from message assay.v1.RunRequest
  */
 export class RunRequest extends Message<RunRequest> {
@@ -870,6 +1036,11 @@ export class RunRequest extends Message<RunRequest> {
    */
   toMs = protoInt64.zero;
 
+  /**
+   * @generated from field: assay.v1.StudyAssumptions assumptions = 5;
+   */
+  assumptions?: StudyAssumptions;
+
   constructor(data?: PartialMessage<RunRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -882,6 +1053,7 @@ export class RunRequest extends Message<RunRequest> {
     { no: 2, name: "snapshot", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "from_ms", kind: "scalar", T: 18 /* ScalarType.SINT64 */ },
     { no: 4, name: "to_ms", kind: "scalar", T: 18 /* ScalarType.SINT64 */ },
+    { no: 5, name: "assumptions", kind: "message", T: StudyAssumptions },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): RunRequest {
@@ -898,6 +1070,91 @@ export class RunRequest extends Message<RunRequest> {
 
   static equals(a: RunRequest | PlainMessage<RunRequest> | undefined, b: RunRequest | PlainMessage<RunRequest> | undefined): boolean {
     return proto3.util.equals(RunRequest, a, b);
+  }
+}
+
+/**
+ * StudyAssumptions are the user-visible execution choices for one run. All
+ * money and price fields use the instrument/account's existing integer units;
+ * the UI obtains their display precision from the selected instrument. A zero
+ * value means "use the instrument default" except initial_equity, which must
+ * be positive when assumptions are supplied.
+ *
+ * @generated from message assay.v1.StudyAssumptions
+ */
+export class StudyAssumptions extends Message<StudyAssumptions> {
+  /**
+   * @generated from field: sint64 initial_equity = 1;
+   */
+  initialEquity = protoInt64.zero;
+
+  /**
+   * @generated from field: double risk_per_trade = 2;
+   */
+  riskPerTrade = 0;
+
+  /**
+   * @generated from field: double fixed_lots = 3;
+   */
+  fixedLots = 0;
+
+  /**
+   * @generated from field: sint64 spread_ticks = 4;
+   */
+  spreadTicks = protoInt64.zero;
+
+  /**
+   * @generated from field: double commission_bps = 5;
+   */
+  commissionBps = 0;
+
+  /**
+   * @generated from field: sint64 commission_flat = 6;
+   */
+  commissionFlat = protoInt64.zero;
+
+  /**
+   * @generated from field: sint64 slippage_ticks = 7;
+   */
+  slippageTicks = protoInt64.zero;
+
+  /**
+   * @generated from field: string fill_policy = 8;
+   */
+  fillPolicy = "";
+
+  constructor(data?: PartialMessage<StudyAssumptions>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.StudyAssumptions";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "initial_equity", kind: "scalar", T: 18 /* ScalarType.SINT64 */ },
+    { no: 2, name: "risk_per_trade", kind: "scalar", T: 1 /* ScalarType.DOUBLE */ },
+    { no: 3, name: "fixed_lots", kind: "scalar", T: 1 /* ScalarType.DOUBLE */ },
+    { no: 4, name: "spread_ticks", kind: "scalar", T: 18 /* ScalarType.SINT64 */ },
+    { no: 5, name: "commission_bps", kind: "scalar", T: 1 /* ScalarType.DOUBLE */ },
+    { no: 6, name: "commission_flat", kind: "scalar", T: 18 /* ScalarType.SINT64 */ },
+    { no: 7, name: "slippage_ticks", kind: "scalar", T: 18 /* ScalarType.SINT64 */ },
+    { no: 8, name: "fill_policy", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): StudyAssumptions {
+    return new StudyAssumptions().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): StudyAssumptions {
+    return new StudyAssumptions().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): StudyAssumptions {
+    return new StudyAssumptions().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: StudyAssumptions | PlainMessage<StudyAssumptions> | undefined, b: StudyAssumptions | PlainMessage<StudyAssumptions> | undefined): boolean {
+    return proto3.util.equals(StudyAssumptions, a, b);
   }
 }
 
@@ -1143,6 +1400,122 @@ export class RunUpdate extends Message<RunUpdate> {
 }
 
 /**
+ * @generated from message assay.v1.StrategyTemplate
+ */
+export class StrategyTemplate extends Message<StrategyTemplate> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  /**
+   * @generated from field: uint32 version = 2;
+   */
+  version = 0;
+
+  /**
+   * @generated from field: string name = 3;
+   */
+  name = "";
+
+  /**
+   * @generated from field: string family = 4;
+   */
+  family = "";
+
+  /**
+   * @generated from field: string description = 5;
+   */
+  description = "";
+
+  /**
+   * @generated from field: string expected_frequency = 6;
+   */
+  expectedFrequency = "";
+
+  /**
+   * @generated from field: bytes strategy_json = 7;
+   */
+  strategyJson = new Uint8Array(0);
+
+  /**
+   * @generated from field: assay.v1.StrategyDescription strategy_description = 8;
+   */
+  strategyDescription?: StrategyDescription;
+
+  constructor(data?: PartialMessage<StrategyTemplate>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.StrategyTemplate";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "version", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 3, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "family", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "description", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "expected_frequency", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "strategy_json", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
+    { no: 8, name: "strategy_description", kind: "message", T: StrategyDescription },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): StrategyTemplate {
+    return new StrategyTemplate().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): StrategyTemplate {
+    return new StrategyTemplate().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): StrategyTemplate {
+    return new StrategyTemplate().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: StrategyTemplate | PlainMessage<StrategyTemplate> | undefined, b: StrategyTemplate | PlainMessage<StrategyTemplate> | undefined): boolean {
+    return proto3.util.equals(StrategyTemplate, a, b);
+  }
+}
+
+/**
+ * @generated from message assay.v1.ListTemplatesResponse
+ */
+export class ListTemplatesResponse extends Message<ListTemplatesResponse> {
+  /**
+   * @generated from field: repeated assay.v1.StrategyTemplate templates = 1;
+   */
+  templates: StrategyTemplate[] = [];
+
+  constructor(data?: PartialMessage<ListTemplatesResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.ListTemplatesResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "templates", kind: "message", T: StrategyTemplate, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ListTemplatesResponse {
+    return new ListTemplatesResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ListTemplatesResponse {
+    return new ListTemplatesResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ListTemplatesResponse {
+    return new ListTemplatesResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: ListTemplatesResponse | PlainMessage<ListTemplatesResponse> | undefined, b: ListTemplatesResponse | PlainMessage<ListTemplatesResponse> | undefined): boolean {
+    return proto3.util.equals(ListTemplatesResponse, a, b);
+  }
+}
+
+/**
  * @generated from message assay.v1.ListRunsResponse
  */
 export class ListRunsResponse extends Message<ListRunsResponse> {
@@ -1213,6 +1586,603 @@ export class GetRunRequest extends Message<GetRunRequest> {
 
   static equals(a: GetRunRequest | PlainMessage<GetRunRequest> | undefined, b: GetRunRequest | PlainMessage<GetRunRequest> | undefined): boolean {
     return proto3.util.equals(GetRunRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message assay.v1.BoundedMetric
+ */
+export class BoundedMetric extends Message<BoundedMetric> {
+  /**
+   * @generated from field: double pessimistic = 1;
+   */
+  pessimistic = 0;
+
+  /**
+   * @generated from field: double optimistic = 2;
+   */
+  optimistic = 0;
+
+  constructor(data?: PartialMessage<BoundedMetric>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.BoundedMetric";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "pessimistic", kind: "scalar", T: 1 /* ScalarType.DOUBLE */ },
+    { no: 2, name: "optimistic", kind: "scalar", T: 1 /* ScalarType.DOUBLE */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): BoundedMetric {
+    return new BoundedMetric().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): BoundedMetric {
+    return new BoundedMetric().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): BoundedMetric {
+    return new BoundedMetric().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: BoundedMetric | PlainMessage<BoundedMetric> | undefined, b: BoundedMetric | PlainMessage<BoundedMetric> | undefined): boolean {
+    return proto3.util.equals(BoundedMetric, a, b);
+  }
+}
+
+/**
+ * @generated from message assay.v1.ResultMetrics
+ */
+export class ResultMetrics extends Message<ResultMetrics> {
+  /**
+   * @generated from field: assay.v1.BoundedMetric final_equity = 1;
+   */
+  finalEquity?: BoundedMetric;
+
+  /**
+   * @generated from field: assay.v1.BoundedMetric max_drawdown = 2;
+   */
+  maxDrawdown?: BoundedMetric;
+
+  /**
+   * @generated from field: assay.v1.BoundedMetric average_drawdown = 3;
+   */
+  averageDrawdown?: BoundedMetric;
+
+  /**
+   * @generated from field: assay.v1.BoundedMetric profit_factor = 4;
+   */
+  profitFactor?: BoundedMetric;
+
+  /**
+   * @generated from field: assay.v1.BoundedMetric expectancy = 5;
+   */
+  expectancy?: BoundedMetric;
+
+  /**
+   * @generated from field: uint32 trades = 6;
+   */
+  trades = 0;
+
+  /**
+   * @generated from field: uint32 wins = 7;
+   */
+  wins = 0;
+
+  /**
+   * @generated from field: uint32 losses = 8;
+   */
+  losses = 0;
+
+  /**
+   * @generated from field: uint32 longest_losing_streak = 9;
+   */
+  longestLosingStreak = 0;
+
+  constructor(data?: PartialMessage<ResultMetrics>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.ResultMetrics";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "final_equity", kind: "message", T: BoundedMetric },
+    { no: 2, name: "max_drawdown", kind: "message", T: BoundedMetric },
+    { no: 3, name: "average_drawdown", kind: "message", T: BoundedMetric },
+    { no: 4, name: "profit_factor", kind: "message", T: BoundedMetric },
+    { no: 5, name: "expectancy", kind: "message", T: BoundedMetric },
+    { no: 6, name: "trades", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 7, name: "wins", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 8, name: "losses", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 9, name: "longest_losing_streak", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ResultMetrics {
+    return new ResultMetrics().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ResultMetrics {
+    return new ResultMetrics().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ResultMetrics {
+    return new ResultMetrics().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: ResultMetrics | PlainMessage<ResultMetrics> | undefined, b: ResultMetrics | PlainMessage<ResultMetrics> | undefined): boolean {
+    return proto3.util.equals(ResultMetrics, a, b);
+  }
+}
+
+/**
+ * @generated from message assay.v1.RunDetails
+ */
+export class RunDetails extends Message<RunDetails> {
+  /**
+   * @generated from field: string run_id = 1;
+   */
+  runId = "";
+
+  /**
+   * @generated from field: string strategy_hash = 2;
+   */
+  strategyHash = "";
+
+  /**
+   * @generated from field: string snapshot = 3;
+   */
+  snapshot = "";
+
+  /**
+   * @generated from field: string name = 4;
+   */
+  name = "";
+
+  /**
+   * @generated from field: string period = 5;
+   */
+  period = "";
+
+  /**
+   * @generated from field: repeated string instruments = 6;
+   */
+  instruments: string[] = [];
+
+  /**
+   * @generated from field: assay.v1.ResultMetrics out_of_sample = 7;
+   */
+  outOfSample?: ResultMetrics;
+
+  /**
+   * @generated from field: assay.v1.ResultMetrics in_sample = 8;
+   */
+  inSample?: ResultMetrics;
+
+  /**
+   * @generated from field: uint32 trials = 9;
+   */
+  trials = 0;
+
+  /**
+   * @generated from field: bool trade_list_present = 10;
+   */
+  tradeListPresent = false;
+
+  /**
+   * @generated from field: assay.v1.StudyAssumptions assumptions = 11;
+   */
+  assumptions?: StudyAssumptions;
+
+  /**
+   * @generated from field: uint32 unresolved = 12;
+   */
+  unresolved = 0;
+
+  /**
+   * @generated from field: repeated assay.v1.PeriodMetrics yearly = 13;
+   */
+  yearly: PeriodMetrics[] = [];
+
+  /**
+   * @generated from field: repeated assay.v1.PeriodMetrics monthly = 14;
+   */
+  monthly: PeriodMetrics[] = [];
+
+  /**
+   * @generated from field: repeated assay.v1.NearMissSummary near_misses = 15;
+   */
+  nearMisses: NearMissSummary[] = [];
+
+  constructor(data?: PartialMessage<RunDetails>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.RunDetails";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "run_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "strategy_hash", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "snapshot", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "period", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "instruments", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 7, name: "out_of_sample", kind: "message", T: ResultMetrics },
+    { no: 8, name: "in_sample", kind: "message", T: ResultMetrics },
+    { no: 9, name: "trials", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 10, name: "trade_list_present", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 11, name: "assumptions", kind: "message", T: StudyAssumptions },
+    { no: 12, name: "unresolved", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 13, name: "yearly", kind: "message", T: PeriodMetrics, repeated: true },
+    { no: 14, name: "monthly", kind: "message", T: PeriodMetrics, repeated: true },
+    { no: 15, name: "near_misses", kind: "message", T: NearMissSummary, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): RunDetails {
+    return new RunDetails().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): RunDetails {
+    return new RunDetails().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): RunDetails {
+    return new RunDetails().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: RunDetails | PlainMessage<RunDetails> | undefined, b: RunDetails | PlainMessage<RunDetails> | undefined): boolean {
+    return proto3.util.equals(RunDetails, a, b);
+  }
+}
+
+/**
+ * @generated from message assay.v1.PeriodMetrics
+ */
+export class PeriodMetrics extends Message<PeriodMetrics> {
+  /**
+   * @generated from field: string period = 1;
+   */
+  period = "";
+
+  /**
+   * @generated from field: assay.v1.BoundedMetric net_pnl = 2;
+   */
+  netPnl?: BoundedMetric;
+
+  /**
+   * @generated from field: uint32 trades = 3;
+   */
+  trades = 0;
+
+  /**
+   * @generated from field: uint32 wins = 4;
+   */
+  wins = 0;
+
+  /**
+   * @generated from field: uint32 losses = 5;
+   */
+  losses = 0;
+
+  constructor(data?: PartialMessage<PeriodMetrics>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.PeriodMetrics";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "period", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "net_pnl", kind: "message", T: BoundedMetric },
+    { no: 3, name: "trades", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 4, name: "wins", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 5, name: "losses", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): PeriodMetrics {
+    return new PeriodMetrics().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): PeriodMetrics {
+    return new PeriodMetrics().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): PeriodMetrics {
+    return new PeriodMetrics().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: PeriodMetrics | PlainMessage<PeriodMetrics> | undefined, b: PeriodMetrics | PlainMessage<PeriodMetrics> | undefined): boolean {
+    return proto3.util.equals(PeriodMetrics, a, b);
+  }
+}
+
+/**
+ * @generated from message assay.v1.NearMissSummary
+ */
+export class NearMissSummary extends Message<NearMissSummary> {
+  /**
+   * @generated from field: string condition = 1;
+   */
+  condition = "";
+
+  /**
+   * @generated from field: uint32 count = 2;
+   */
+  count = 0;
+
+  constructor(data?: PartialMessage<NearMissSummary>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.NearMissSummary";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "condition", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): NearMissSummary {
+    return new NearMissSummary().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): NearMissSummary {
+    return new NearMissSummary().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): NearMissSummary {
+    return new NearMissSummary().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: NearMissSummary | PlainMessage<NearMissSummary> | undefined, b: NearMissSummary | PlainMessage<NearMissSummary> | undefined): boolean {
+    return proto3.util.equals(NearMissSummary, a, b);
+  }
+}
+
+/**
+ * @generated from message assay.v1.GetRunDetailsResponse
+ */
+export class GetRunDetailsResponse extends Message<GetRunDetailsResponse> {
+  /**
+   * @generated from field: assay.v1.RunDetails details = 1;
+   */
+  details?: RunDetails;
+
+  constructor(data?: PartialMessage<GetRunDetailsResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.GetRunDetailsResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "details", kind: "message", T: RunDetails },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetRunDetailsResponse {
+    return new GetRunDetailsResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetRunDetailsResponse {
+    return new GetRunDetailsResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetRunDetailsResponse {
+    return new GetRunDetailsResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: GetRunDetailsResponse | PlainMessage<GetRunDetailsResponse> | undefined, b: GetRunDetailsResponse | PlainMessage<GetRunDetailsResponse> | undefined): boolean {
+    return proto3.util.equals(GetRunDetailsResponse, a, b);
+  }
+}
+
+/**
+ * @generated from message assay.v1.GetRunTradesRequest
+ */
+export class GetRunTradesRequest extends Message<GetRunTradesRequest> {
+  /**
+   * @generated from field: string hash = 1;
+   */
+  hash = "";
+
+  /**
+   * @generated from field: uint32 page_size = 2;
+   */
+  pageSize = 0;
+
+  /**
+   * @generated from field: uint32 page_offset = 3;
+   */
+  pageOffset = 0;
+
+  constructor(data?: PartialMessage<GetRunTradesRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.GetRunTradesRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "hash", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "page_size", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 3, name: "page_offset", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetRunTradesRequest {
+    return new GetRunTradesRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetRunTradesRequest {
+    return new GetRunTradesRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetRunTradesRequest {
+    return new GetRunTradesRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: GetRunTradesRequest | PlainMessage<GetRunTradesRequest> | undefined, b: GetRunTradesRequest | PlainMessage<GetRunTradesRequest> | undefined): boolean {
+    return proto3.util.equals(GetRunTradesRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message assay.v1.TradeRecord
+ */
+export class TradeRecord extends Message<TradeRecord> {
+  /**
+   * @generated from field: string side = 1;
+   */
+  side = "";
+
+  /**
+   * @generated from field: sint64 entry_time_ms = 2;
+   */
+  entryTimeMs = protoInt64.zero;
+
+  /**
+   * @generated from field: sint64 exit_time_ms_pessimistic = 3;
+   */
+  exitTimeMsPessimistic = protoInt64.zero;
+
+  /**
+   * @generated from field: sint64 exit_time_ms_optimistic = 4;
+   */
+  exitTimeMsOptimistic = protoInt64.zero;
+
+  /**
+   * @generated from field: sint64 entry_price = 5;
+   */
+  entryPrice = protoInt64.zero;
+
+  /**
+   * @generated from field: sint64 exit_price_pessimistic = 6;
+   */
+  exitPricePessimistic = protoInt64.zero;
+
+  /**
+   * @generated from field: sint64 exit_price_optimistic = 7;
+   */
+  exitPriceOptimistic = protoInt64.zero;
+
+  /**
+   * @generated from field: sint64 stop = 8;
+   */
+  stop = protoInt64.zero;
+
+  /**
+   * @generated from field: sint64 target = 9;
+   */
+  target = protoInt64.zero;
+
+  /**
+   * @generated from field: sint64 lots = 10;
+   */
+  lots = protoInt64.zero;
+
+  /**
+   * @generated from field: assay.v1.BoundedMetric net_pnl = 11;
+   */
+  netPnl?: BoundedMetric;
+
+  /**
+   * @generated from field: assay.v1.BoundedMetric costs = 12;
+   */
+  costs?: BoundedMetric;
+
+  /**
+   * @generated from field: bool ambiguous = 13;
+   */
+  ambiguous = false;
+
+  constructor(data?: PartialMessage<TradeRecord>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.TradeRecord";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "side", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "entry_time_ms", kind: "scalar", T: 18 /* ScalarType.SINT64 */ },
+    { no: 3, name: "exit_time_ms_pessimistic", kind: "scalar", T: 18 /* ScalarType.SINT64 */ },
+    { no: 4, name: "exit_time_ms_optimistic", kind: "scalar", T: 18 /* ScalarType.SINT64 */ },
+    { no: 5, name: "entry_price", kind: "scalar", T: 18 /* ScalarType.SINT64 */ },
+    { no: 6, name: "exit_price_pessimistic", kind: "scalar", T: 18 /* ScalarType.SINT64 */ },
+    { no: 7, name: "exit_price_optimistic", kind: "scalar", T: 18 /* ScalarType.SINT64 */ },
+    { no: 8, name: "stop", kind: "scalar", T: 18 /* ScalarType.SINT64 */ },
+    { no: 9, name: "target", kind: "scalar", T: 18 /* ScalarType.SINT64 */ },
+    { no: 10, name: "lots", kind: "scalar", T: 18 /* ScalarType.SINT64 */ },
+    { no: 11, name: "net_pnl", kind: "message", T: BoundedMetric },
+    { no: 12, name: "costs", kind: "message", T: BoundedMetric },
+    { no: 13, name: "ambiguous", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): TradeRecord {
+    return new TradeRecord().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): TradeRecord {
+    return new TradeRecord().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): TradeRecord {
+    return new TradeRecord().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: TradeRecord | PlainMessage<TradeRecord> | undefined, b: TradeRecord | PlainMessage<TradeRecord> | undefined): boolean {
+    return proto3.util.equals(TradeRecord, a, b);
+  }
+}
+
+/**
+ * @generated from message assay.v1.GetRunTradesResponse
+ */
+export class GetRunTradesResponse extends Message<GetRunTradesResponse> {
+  /**
+   * @generated from field: repeated assay.v1.TradeRecord trades = 1;
+   */
+  trades: TradeRecord[] = [];
+
+  /**
+   * @generated from field: uint32 total = 2;
+   */
+  total = 0;
+
+  /**
+   * @generated from field: uint32 next_offset = 3;
+   */
+  nextOffset = 0;
+
+  constructor(data?: PartialMessage<GetRunTradesResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "assay.v1.GetRunTradesResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "trades", kind: "message", T: TradeRecord, repeated: true },
+    { no: 2, name: "total", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 3, name: "next_offset", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetRunTradesResponse {
+    return new GetRunTradesResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetRunTradesResponse {
+    return new GetRunTradesResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetRunTradesResponse {
+    return new GetRunTradesResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: GetRunTradesResponse | PlainMessage<GetRunTradesResponse> | undefined, b: GetRunTradesResponse | PlainMessage<GetRunTradesResponse> | undefined): boolean {
+    return proto3.util.equals(GetRunTradesResponse, a, b);
   }
 }
 

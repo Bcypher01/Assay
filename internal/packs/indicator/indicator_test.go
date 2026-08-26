@@ -82,3 +82,71 @@ func TestMACrossDirectionalVariants(t *testing.T) {
 		})
 	}
 }
+
+func TestDonchianBoundsExcludeCurrentBar(t *testing.T) {
+	s := core.NewSeries("X", core.TFM1, 5)
+	for i, bar := range []struct{ high, low core.Price }{{5, 1}, {4, 2}, {6, 3}, {7, 0}, {3, 2}} {
+		s.Append(core.Time(int64(i)*core.TFM1.Millis()), bar.low, bar.high, bar.low, bar.low, 0)
+	}
+	cases := []struct {
+		typ  string
+		want []core.Price
+	}{
+		{typ: "donchian_high", want: []core.Price{0, 0, 5, 6, 7}},
+		{typ: "donchian_low", want: []core.Price{0, 0, 1, 2, 0}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.typ, func(t *testing.T) {
+			p, err := primitive.DefaultRegistry.Get("indicator", tc.typ)
+			if err != nil {
+				t.Fatal(err)
+			}
+			v, _, err := primitive.Evaluate(context.Background(), p, &assayv1.PeriodParams{Period: 2}, core.TFM1, s, "fixture", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i, want := range tc.want {
+				if got := v.Level[i]; got != want || v.Valid.Get(i) != (i >= 2) {
+					t.Fatalf("bar %d level=%d valid=%t, want level=%d valid=%t", i, got, v.Valid.Get(i), want, i >= 2)
+				}
+			}
+		})
+	}
+}
+
+func TestBollingerBandEdgesMatchZone(t *testing.T) {
+	s := testSeries()
+	params := &assayv1.BollingerBandsParams{Period: 3, WidthMilli: 2000}
+	zonePrimitive, err := primitive.DefaultRegistry.Get("indicator", "bollinger_bands")
+	if err != nil {
+		t.Fatal(err)
+	}
+	zones, _, err := primitive.Evaluate(context.Background(), zonePrimitive, params, core.TFM1, s, "fixture", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		typ   string
+		upper bool
+	}{{"bollinger_upper", true}, {"bollinger_lower", false}} {
+		t.Run(tc.typ, func(t *testing.T) {
+			p, err := primitive.DefaultRegistry.Get("indicator", tc.typ)
+			if err != nil {
+				t.Fatal(err)
+			}
+			levels, _, err := primitive.Evaluate(context.Background(), p, params, core.TFM1, s, "fixture", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := 0; i < s.Len(); i++ {
+				want := zones.Zone[i].Low
+				if tc.upper {
+					want = zones.Zone[i].High
+				}
+				if levels.Level[i] != want || levels.Valid.Get(i) != zones.Valid.Get(i) {
+					t.Fatalf("bar %d = (%d, %t), want (%d, %t)", i, levels.Level[i], levels.Valid.Get(i), want, zones.Valid.Get(i))
+				}
+			}
+		})
+	}
+}

@@ -75,8 +75,50 @@ func TestLiquiditySweepConfirmsOnKnownClose(t *testing.T) {
 	}
 }
 
+func TestDirectionalLiquiditySweepFiltersByReversalSide(t *testing.T) {
+	params := &assayv1.SweepParams{WickThroughTicks: 2, CloseBackBars: 2}
+	bearish, err := LiquiditySweepBearish{}.New(params, core.TFM1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := bearish.Eval(&primitive.EvalCtx{}, series([][4]core.Price{{10, 12, 8, 10}, {10, 15, 10, 14}, {14, 14, 9, 11}}))
+	if err != nil || !v.Bool.Get(2) {
+		t.Fatalf("bearish sweep = %#v, %v", v.Bool, err)
+	}
+
+	bullish, err := LiquiditySweepBullish{}.New(params, core.TFM1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err = bullish.Eval(&primitive.EvalCtx{}, series([][4]core.Price{{10, 12, 8, 10}, {10, 10, 5, 6}, {6, 11, 6, 9}}))
+	if err != nil || !v.Bool.Get(2) {
+		t.Fatalf("bullish sweep = %#v, %v", v.Bool, err)
+	}
+}
+
+func TestDirectionalMarketStructureFiltersByBreakSide(t *testing.T) {
+	params := &assayv1.MarketStructureParams{SwingLookback: 1}
+	bullish, err := MarketStructureBullish{}.New(params, core.TFM1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := bullish.Eval(&primitive.EvalCtx{}, series([][4]core.Price{{9, 10, 8, 9}, {10, 12, 9, 11}, {11, 11, 9, 10}, {12, 13, 10, 12}}))
+	if err != nil || !v.Bool.Get(3) {
+		t.Fatalf("bullish structure = %#v, %v", v.Bool, err)
+	}
+
+	bearish, err := MarketStructureBearish{}.New(params, core.TFM1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err = bearish.Eval(&primitive.EvalCtx{}, series([][4]core.Price{{9, 10, 8, 9}, {8, 9, 6, 7}, {7, 9, 7, 8}, {6, 7, 5, 6}}))
+	if err != nil || !v.Bool.Get(3) {
+		t.Fatalf("bearish structure = %#v, %v", v.Bool, err)
+	}
+}
+
 func TestPackRegistersAllImplementedPrimitives(t *testing.T) {
-	for _, name := range []string{"market_structure", "displacement", "fair_value_gap", "order_block", "breaker", "liquidity_pool", "liquidity_sweep", "premium_discount"} {
+	for _, name := range []string{"market_structure", "market_structure_bullish", "market_structure_bearish", "displacement", "fair_value_gap", "order_block", "breaker", "liquidity_pool", "liquidity_sweep", "liquidity_sweep_bullish", "liquidity_sweep_bearish", "premium_discount"} {
 		if _, err := primitive.DefaultRegistry.Get("smc", name); err != nil {
 			t.Errorf("%s not registered: %v", name, err)
 		}

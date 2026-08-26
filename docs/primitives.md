@@ -10,12 +10,16 @@
   optional tick tolerance. `ma_cross` marks either-direction SMA crossing;
   `ma_cross_bullish` and `ma_cross_bearish` mark only a fast-SMA cross above or
   below the slow SMA, respectively.
+- `donchian_high` and `donchian_low` emit the highest high and lowest low,
+  respectively, of the preceding period. The current bar is excluded, so an
+  entry can cross a stable channel boundary without look-ahead.
 - `rsi` uses Wilder smoothing and is first valid at `period`.
 - `macd` emits the fast EMA minus slow EMA line. The signal period is retained
   in the schema for IR compatibility; signal/histogram are separate outputs in
   a later multi-value primitive revision.
 - `bollinger_bands` emits an inclusive zone around SMA using population
-  standard deviation and a width in thousandths.
+  standard deviation and a width in thousandths. `bollinger_upper` and
+  `bollinger_lower` expose the corresponding band edges as levels.
 - `atr` uses Wilder true-range smoothing and first becomes valid at `period`.
 - `adx` is a directional-strength percentage over a Wilder-style lookback and
   is valid after two periods. `stochastic` is %K over high/low/close.
@@ -25,7 +29,8 @@
 ## Price-action pack
 
 `swing_high` and `swing_low` are strict symmetric fractals. `engulfing` uses
-real bodies; `inside_bar` uses the prior high-low range. `pin_bar` and `doji`
+real bodies; `engulfing_bullish` and `engulfing_bearish` select its direction.
+`inside_bar` uses the prior high-low range. `pin_bar` and `doji`
 use body and wick/range ratios in thousandths. `consolidation` marks a rolling
 range with a width under the tick threshold. `measured_move` projects the
 current close by the rolling range in the candle direction.
@@ -37,6 +42,8 @@ midnight. `day_of_week` uses UTC weekdays. `bar_of_session` emits the one-based
 bar index within the configured session and zero outside it. Named exchange
 sessions are intentionally deferred until `primitive.EvalCtx` carries the
 instrument calendar, so the package never silently hardcodes DST behaviour.
+`session_high` and `session_low` expose the completed configured-session range
+only after that session ends; they are invalid while the next range is forming.
 
 ## SMC pack
 

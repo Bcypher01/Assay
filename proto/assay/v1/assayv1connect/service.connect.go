@@ -27,6 +27,8 @@ const (
 	PrimitiveServiceName = "assay.v1.PrimitiveService"
 	// StudyServiceName is the fully-qualified name of the StudyService service.
 	StudyServiceName = "assay.v1.StudyService"
+	// TemplateServiceName is the fully-qualified name of the TemplateService service.
+	TemplateServiceName = "assay.v1.TemplateService"
 	// RunServiceName is the fully-qualified name of the RunService service.
 	RunServiceName = "assay.v1.RunService"
 )
@@ -54,12 +56,21 @@ const (
 	PrimitiveServiceEvaluateProcedure = "/assay.v1.PrimitiveService/Evaluate"
 	// StudyServiceValidateProcedure is the fully-qualified name of the StudyService's Validate RPC.
 	StudyServiceValidateProcedure = "/assay.v1.StudyService/Validate"
+	// StudyServiceDescribeProcedure is the fully-qualified name of the StudyService's Describe RPC.
+	StudyServiceDescribeProcedure = "/assay.v1.StudyService/Describe"
 	// StudyServiceRunProcedure is the fully-qualified name of the StudyService's Run RPC.
 	StudyServiceRunProcedure = "/assay.v1.StudyService/Run"
+	// TemplateServiceListTemplatesProcedure is the fully-qualified name of the TemplateService's
+	// ListTemplates RPC.
+	TemplateServiceListTemplatesProcedure = "/assay.v1.TemplateService/ListTemplates"
 	// RunServiceListRunsProcedure is the fully-qualified name of the RunService's ListRuns RPC.
 	RunServiceListRunsProcedure = "/assay.v1.RunService/ListRuns"
 	// RunServiceGetRunProcedure is the fully-qualified name of the RunService's GetRun RPC.
 	RunServiceGetRunProcedure = "/assay.v1.RunService/GetRun"
+	// RunServiceGetDetailsProcedure is the fully-qualified name of the RunService's GetDetails RPC.
+	RunServiceGetDetailsProcedure = "/assay.v1.RunService/GetDetails"
+	// RunServiceGetTradesProcedure is the fully-qualified name of the RunService's GetTrades RPC.
+	RunServiceGetTradesProcedure = "/assay.v1.RunService/GetTrades"
 	// RunServiceCompareProcedure is the fully-qualified name of the RunService's Compare RPC.
 	RunServiceCompareProcedure = "/assay.v1.RunService/Compare"
 )
@@ -285,6 +296,7 @@ func (UnimplementedPrimitiveServiceHandler) Evaluate(context.Context, *connect.R
 // StudyServiceClient is a client for the assay.v1.StudyService service.
 type StudyServiceClient interface {
 	Validate(context.Context, *connect.Request[v1.ValidateRequest]) (*connect.Response[v1.ValidateResponse], error)
+	Describe(context.Context, *connect.Request[v1.DescribeStrategyRequest]) (*connect.Response[v1.DescribeStrategyResponse], error)
 	Run(context.Context, *connect.Request[v1.RunRequest]) (*connect.ServerStreamForClient[v1.RunUpdate], error)
 }
 
@@ -305,6 +317,12 @@ func NewStudyServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(studyServiceMethods.ByName("Validate")),
 			connect.WithClientOptions(opts...),
 		),
+		describe: connect.NewClient[v1.DescribeStrategyRequest, v1.DescribeStrategyResponse](
+			httpClient,
+			baseURL+StudyServiceDescribeProcedure,
+			connect.WithSchema(studyServiceMethods.ByName("Describe")),
+			connect.WithClientOptions(opts...),
+		),
 		run: connect.NewClient[v1.RunRequest, v1.RunUpdate](
 			httpClient,
 			baseURL+StudyServiceRunProcedure,
@@ -317,12 +335,18 @@ func NewStudyServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 // studyServiceClient implements StudyServiceClient.
 type studyServiceClient struct {
 	validate *connect.Client[v1.ValidateRequest, v1.ValidateResponse]
+	describe *connect.Client[v1.DescribeStrategyRequest, v1.DescribeStrategyResponse]
 	run      *connect.Client[v1.RunRequest, v1.RunUpdate]
 }
 
 // Validate calls assay.v1.StudyService.Validate.
 func (c *studyServiceClient) Validate(ctx context.Context, req *connect.Request[v1.ValidateRequest]) (*connect.Response[v1.ValidateResponse], error) {
 	return c.validate.CallUnary(ctx, req)
+}
+
+// Describe calls assay.v1.StudyService.Describe.
+func (c *studyServiceClient) Describe(ctx context.Context, req *connect.Request[v1.DescribeStrategyRequest]) (*connect.Response[v1.DescribeStrategyResponse], error) {
+	return c.describe.CallUnary(ctx, req)
 }
 
 // Run calls assay.v1.StudyService.Run.
@@ -333,6 +357,7 @@ func (c *studyServiceClient) Run(ctx context.Context, req *connect.Request[v1.Ru
 // StudyServiceHandler is an implementation of the assay.v1.StudyService service.
 type StudyServiceHandler interface {
 	Validate(context.Context, *connect.Request[v1.ValidateRequest]) (*connect.Response[v1.ValidateResponse], error)
+	Describe(context.Context, *connect.Request[v1.DescribeStrategyRequest]) (*connect.Response[v1.DescribeStrategyResponse], error)
 	Run(context.Context, *connect.Request[v1.RunRequest], *connect.ServerStream[v1.RunUpdate]) error
 }
 
@@ -349,6 +374,12 @@ func NewStudyServiceHandler(svc StudyServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(studyServiceMethods.ByName("Validate")),
 		connect.WithHandlerOptions(opts...),
 	)
+	studyServiceDescribeHandler := connect.NewUnaryHandler(
+		StudyServiceDescribeProcedure,
+		svc.Describe,
+		connect.WithSchema(studyServiceMethods.ByName("Describe")),
+		connect.WithHandlerOptions(opts...),
+	)
 	studyServiceRunHandler := connect.NewServerStreamHandler(
 		StudyServiceRunProcedure,
 		svc.Run,
@@ -359,6 +390,8 @@ func NewStudyServiceHandler(svc StudyServiceHandler, opts ...connect.HandlerOpti
 		switch r.URL.Path {
 		case StudyServiceValidateProcedure:
 			studyServiceValidateHandler.ServeHTTP(w, r)
+		case StudyServiceDescribeProcedure:
+			studyServiceDescribeHandler.ServeHTTP(w, r)
 		case StudyServiceRunProcedure:
 			studyServiceRunHandler.ServeHTTP(w, r)
 		default:
@@ -374,14 +407,90 @@ func (UnimplementedStudyServiceHandler) Validate(context.Context, *connect.Reque
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("assay.v1.StudyService.Validate is not implemented"))
 }
 
+func (UnimplementedStudyServiceHandler) Describe(context.Context, *connect.Request[v1.DescribeStrategyRequest]) (*connect.Response[v1.DescribeStrategyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("assay.v1.StudyService.Describe is not implemented"))
+}
+
 func (UnimplementedStudyServiceHandler) Run(context.Context, *connect.Request[v1.RunRequest], *connect.ServerStream[v1.RunUpdate]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("assay.v1.StudyService.Run is not implemented"))
+}
+
+// TemplateServiceClient is a client for the assay.v1.TemplateService service.
+type TemplateServiceClient interface {
+	ListTemplates(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.ListTemplatesResponse], error)
+}
+
+// NewTemplateServiceClient constructs a client for the assay.v1.TemplateService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewTemplateServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) TemplateServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	templateServiceMethods := v1.File_proto_assay_v1_service_proto.Services().ByName("TemplateService").Methods()
+	return &templateServiceClient{
+		listTemplates: connect.NewClient[v1.Empty, v1.ListTemplatesResponse](
+			httpClient,
+			baseURL+TemplateServiceListTemplatesProcedure,
+			connect.WithSchema(templateServiceMethods.ByName("ListTemplates")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// templateServiceClient implements TemplateServiceClient.
+type templateServiceClient struct {
+	listTemplates *connect.Client[v1.Empty, v1.ListTemplatesResponse]
+}
+
+// ListTemplates calls assay.v1.TemplateService.ListTemplates.
+func (c *templateServiceClient) ListTemplates(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.ListTemplatesResponse], error) {
+	return c.listTemplates.CallUnary(ctx, req)
+}
+
+// TemplateServiceHandler is an implementation of the assay.v1.TemplateService service.
+type TemplateServiceHandler interface {
+	ListTemplates(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.ListTemplatesResponse], error)
+}
+
+// NewTemplateServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewTemplateServiceHandler(svc TemplateServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	templateServiceMethods := v1.File_proto_assay_v1_service_proto.Services().ByName("TemplateService").Methods()
+	templateServiceListTemplatesHandler := connect.NewUnaryHandler(
+		TemplateServiceListTemplatesProcedure,
+		svc.ListTemplates,
+		connect.WithSchema(templateServiceMethods.ByName("ListTemplates")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/assay.v1.TemplateService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case TemplateServiceListTemplatesProcedure:
+			templateServiceListTemplatesHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedTemplateServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedTemplateServiceHandler struct{}
+
+func (UnimplementedTemplateServiceHandler) ListTemplates(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.ListTemplatesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("assay.v1.TemplateService.ListTemplates is not implemented"))
 }
 
 // RunServiceClient is a client for the assay.v1.RunService service.
 type RunServiceClient interface {
 	ListRuns(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.ListRunsResponse], error)
 	GetRun(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.RunSummary], error)
+	GetDetails(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.GetRunDetailsResponse], error)
+	GetTrades(context.Context, *connect.Request[v1.GetRunTradesRequest]) (*connect.Response[v1.GetRunTradesResponse], error)
 	Compare(context.Context, *connect.Request[v1.CompareRunsRequest]) (*connect.Response[v1.CompareRunsResponse], error)
 }
 
@@ -408,6 +517,18 @@ func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(runServiceMethods.ByName("GetRun")),
 			connect.WithClientOptions(opts...),
 		),
+		getDetails: connect.NewClient[v1.GetRunRequest, v1.GetRunDetailsResponse](
+			httpClient,
+			baseURL+RunServiceGetDetailsProcedure,
+			connect.WithSchema(runServiceMethods.ByName("GetDetails")),
+			connect.WithClientOptions(opts...),
+		),
+		getTrades: connect.NewClient[v1.GetRunTradesRequest, v1.GetRunTradesResponse](
+			httpClient,
+			baseURL+RunServiceGetTradesProcedure,
+			connect.WithSchema(runServiceMethods.ByName("GetTrades")),
+			connect.WithClientOptions(opts...),
+		),
 		compare: connect.NewClient[v1.CompareRunsRequest, v1.CompareRunsResponse](
 			httpClient,
 			baseURL+RunServiceCompareProcedure,
@@ -419,9 +540,11 @@ func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 
 // runServiceClient implements RunServiceClient.
 type runServiceClient struct {
-	listRuns *connect.Client[v1.Empty, v1.ListRunsResponse]
-	getRun   *connect.Client[v1.GetRunRequest, v1.RunSummary]
-	compare  *connect.Client[v1.CompareRunsRequest, v1.CompareRunsResponse]
+	listRuns   *connect.Client[v1.Empty, v1.ListRunsResponse]
+	getRun     *connect.Client[v1.GetRunRequest, v1.RunSummary]
+	getDetails *connect.Client[v1.GetRunRequest, v1.GetRunDetailsResponse]
+	getTrades  *connect.Client[v1.GetRunTradesRequest, v1.GetRunTradesResponse]
+	compare    *connect.Client[v1.CompareRunsRequest, v1.CompareRunsResponse]
 }
 
 // ListRuns calls assay.v1.RunService.ListRuns.
@@ -434,6 +557,16 @@ func (c *runServiceClient) GetRun(ctx context.Context, req *connect.Request[v1.G
 	return c.getRun.CallUnary(ctx, req)
 }
 
+// GetDetails calls assay.v1.RunService.GetDetails.
+func (c *runServiceClient) GetDetails(ctx context.Context, req *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.GetRunDetailsResponse], error) {
+	return c.getDetails.CallUnary(ctx, req)
+}
+
+// GetTrades calls assay.v1.RunService.GetTrades.
+func (c *runServiceClient) GetTrades(ctx context.Context, req *connect.Request[v1.GetRunTradesRequest]) (*connect.Response[v1.GetRunTradesResponse], error) {
+	return c.getTrades.CallUnary(ctx, req)
+}
+
 // Compare calls assay.v1.RunService.Compare.
 func (c *runServiceClient) Compare(ctx context.Context, req *connect.Request[v1.CompareRunsRequest]) (*connect.Response[v1.CompareRunsResponse], error) {
 	return c.compare.CallUnary(ctx, req)
@@ -443,6 +576,8 @@ func (c *runServiceClient) Compare(ctx context.Context, req *connect.Request[v1.
 type RunServiceHandler interface {
 	ListRuns(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.ListRunsResponse], error)
 	GetRun(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.RunSummary], error)
+	GetDetails(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.GetRunDetailsResponse], error)
+	GetTrades(context.Context, *connect.Request[v1.GetRunTradesRequest]) (*connect.Response[v1.GetRunTradesResponse], error)
 	Compare(context.Context, *connect.Request[v1.CompareRunsRequest]) (*connect.Response[v1.CompareRunsResponse], error)
 }
 
@@ -465,6 +600,18 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(runServiceMethods.ByName("GetRun")),
 		connect.WithHandlerOptions(opts...),
 	)
+	runServiceGetDetailsHandler := connect.NewUnaryHandler(
+		RunServiceGetDetailsProcedure,
+		svc.GetDetails,
+		connect.WithSchema(runServiceMethods.ByName("GetDetails")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runServiceGetTradesHandler := connect.NewUnaryHandler(
+		RunServiceGetTradesProcedure,
+		svc.GetTrades,
+		connect.WithSchema(runServiceMethods.ByName("GetTrades")),
+		connect.WithHandlerOptions(opts...),
+	)
 	runServiceCompareHandler := connect.NewUnaryHandler(
 		RunServiceCompareProcedure,
 		svc.Compare,
@@ -477,6 +624,10 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 			runServiceListRunsHandler.ServeHTTP(w, r)
 		case RunServiceGetRunProcedure:
 			runServiceGetRunHandler.ServeHTTP(w, r)
+		case RunServiceGetDetailsProcedure:
+			runServiceGetDetailsHandler.ServeHTTP(w, r)
+		case RunServiceGetTradesProcedure:
+			runServiceGetTradesHandler.ServeHTTP(w, r)
 		case RunServiceCompareProcedure:
 			runServiceCompareHandler.ServeHTTP(w, r)
 		default:
@@ -494,6 +645,14 @@ func (UnimplementedRunServiceHandler) ListRuns(context.Context, *connect.Request
 
 func (UnimplementedRunServiceHandler) GetRun(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.RunSummary], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("assay.v1.RunService.GetRun is not implemented"))
+}
+
+func (UnimplementedRunServiceHandler) GetDetails(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.GetRunDetailsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("assay.v1.RunService.GetDetails is not implemented"))
+}
+
+func (UnimplementedRunServiceHandler) GetTrades(context.Context, *connect.Request[v1.GetRunTradesRequest]) (*connect.Response[v1.GetRunTradesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("assay.v1.RunService.GetTrades is not implemented"))
 }
 
 func (UnimplementedRunServiceHandler) Compare(context.Context, *connect.Request[v1.CompareRunsRequest]) (*connect.Response[v1.CompareRunsResponse], error) {

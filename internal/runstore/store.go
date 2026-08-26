@@ -440,16 +440,22 @@ func atomicWrite(path string, b []byte) error {
 }
 
 type tradeRow struct {
-	Side       int32 `parquet:"side"`
-	EntryTime  int64 `parquet:"entry_time"`
-	EntryBar   int64 `parquet:"entry_bar"`
-	EntryPrice int64 `parquet:"entry_price"`
-	Stop       int64 `parquet:"stop"`
-	Target     int64 `parquet:"target"`
-	Lots       int64 `parquet:"lots"`
-	PessNet    int64 `parquet:"pess_net"`
-	OptNet     int64 `parquet:"opt_net"`
-	Ambiguous  bool  `parquet:"ambiguous"`
+	Side          int32 `parquet:"side"`
+	EntryTime     int64 `parquet:"entry_time"`
+	EntryBar      int64 `parquet:"entry_bar"`
+	EntryPrice    int64 `parquet:"entry_price"`
+	Stop          int64 `parquet:"stop"`
+	Target        int64 `parquet:"target"`
+	Lots          int64 `parquet:"lots"`
+	PessNet       int64 `parquet:"pess_net"`
+	OptNet        int64 `parquet:"opt_net"`
+	Ambiguous     bool  `parquet:"ambiguous"`
+	PessExitTime  int64 `parquet:"pess_exit_time"`
+	OptExitTime   int64 `parquet:"opt_exit_time"`
+	PessExitPrice int64 `parquet:"pess_exit_price"`
+	OptExitPrice  int64 `parquet:"opt_exit_price"`
+	PessCosts     int64 `parquet:"pess_costs"`
+	OptCosts      int64 `parquet:"opt_costs"`
 }
 
 func writeTrades(path string, trades []sim.Trade) error {
@@ -457,7 +463,7 @@ func writeTrades(path string, trades []sim.Trade) error {
 	w := parquet.NewGenericWriter[tradeRow](&b)
 	rows := make([]tradeRow, len(trades))
 	for i, t := range trades {
-		rows[i] = tradeRow{int32(t.Side), int64(t.EntryTime), int64(t.EntryBar), int64(t.EntryPrice), int64(t.Stop), int64(t.Target), int64(t.Lots), int64(t.Pessimistic.Net), int64(t.Optimistic.Net), t.Ambiguous}
+		rows[i] = tradeRow{Side: int32(t.Side), EntryTime: int64(t.EntryTime), EntryBar: int64(t.EntryBar), EntryPrice: int64(t.EntryPrice), Stop: int64(t.Stop), Target: int64(t.Target), Lots: int64(t.Lots), PessNet: int64(t.Pessimistic.Net), OptNet: int64(t.Optimistic.Net), Ambiguous: t.Ambiguous, PessExitTime: int64(t.Pessimistic.ExitTime), OptExitTime: int64(t.Optimistic.ExitTime), PessExitPrice: int64(t.Pessimistic.ExitPrice), OptExitPrice: int64(t.Optimistic.ExitPrice), PessCosts: int64(t.Pessimistic.Costs), OptCosts: int64(t.Optimistic.Costs)}
 	}
 	if _, e := w.Write(rows); e != nil {
 		return e
@@ -489,7 +495,7 @@ func readTrades(path string) ([]sim.Trade, error) {
 	}
 	out := make([]sim.Trade, len(rows))
 	for i, x := range rows {
-		out[i] = sim.Trade{Side: core.Side(x.Side), EntryTime: core.Time(x.EntryTime), EntryBar: int(x.EntryBar), EntryPrice: core.Price(x.EntryPrice), Stop: core.Price(x.Stop), Target: core.Price(x.Target), Lots: core.Ratio(x.Lots), Pessimistic: sim.Outcome{Net: core.Price(x.PessNet)}, Optimistic: sim.Outcome{Net: core.Price(x.OptNet)}, Ambiguous: x.Ambiguous}
+		out[i] = sim.Trade{Side: core.Side(x.Side), EntryTime: core.Time(x.EntryTime), EntryBar: int(x.EntryBar), EntryPrice: core.Price(x.EntryPrice), Stop: core.Price(x.Stop), Target: core.Price(x.Target), Lots: core.Ratio(x.Lots), Pessimistic: sim.Outcome{ExitTime: core.Time(x.PessExitTime), ExitPrice: core.Price(x.PessExitPrice), Net: core.Price(x.PessNet), Costs: core.Price(x.PessCosts)}, Optimistic: sim.Outcome{ExitTime: core.Time(x.OptExitTime), ExitPrice: core.Price(x.OptExitPrice), Net: core.Price(x.OptNet), Costs: core.Price(x.OptCosts)}, Ambiguous: x.Ambiguous}
 	}
 	return out, nil
 }

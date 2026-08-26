@@ -9,7 +9,11 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/Bcypher01/Assay/internal/analytics"
 	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/Bcypher01/Assay/internal/ir"
+	"github.com/Bcypher01/Assay/internal/runstore"
+	"github.com/Bcypher01/Assay/internal/sim"
 	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
 	"github.com/Bcypher01/Assay/proto/assay/v1/assayv1connect"
 )
@@ -55,6 +59,31 @@ func TestHandlerHasEmbeddedInstrumentCatalogueByDefault(t *testing.T) {
 	}
 	if res.Msg.Instruments[0].Symbol == "" {
 		t.Fatal("default handler returned a blank instrument symbol")
+	}
+}
+
+func TestTemplateCatalogueAndDescriptionRoundTrip(t *testing.T) {
+	srv := httptest.NewServer(NewHandler(&Server{}))
+	defer srv.Close()
+	templates := assayv1connect.NewTemplateServiceClient(srv.Client(), srv.URL)
+	listed, err := templates.ListTemplates(context.Background(), connect.NewRequest(&assayv1.Empty{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Msg.Templates) != 6 {
+		t.Fatalf("templates = %d, want 6", len(listed.Msg.Templates))
+	}
+	first := listed.Msg.Templates[0]
+	if first.Id != "moving-average-crossover" || first.StrategyDescription.GetSummary() == "" || len(first.StrategyJson) == 0 {
+		t.Fatalf("first template = %#v", first)
+	}
+	study := assayv1connect.NewStudyServiceClient(srv.Client(), srv.URL)
+	description, err := study.Describe(context.Background(), connect.NewRequest(&assayv1.DescribeStrategyRequest{StrategyJson: first.StrategyJson}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if description.Msg.Description.GetSummary() != first.StrategyDescription.GetSummary() || len(description.Msg.Description.Rules) != 2 {
+		t.Fatalf("description = %#v", description.Msg.Description)
 	}
 }
 
@@ -178,5 +207,43 @@ func TestDownsampleViewportPreservesBucketExtremes(t *testing.T) {
 	}
 	if !high || !low {
 		t.Fatalf("extremes retained: high=%v low=%v", high, low)
+	}
+}
+
+func TestRunDetailsAndPaginatedTradesExposePersistedEvidence(t *testing.T) {
+	history, err := runstore.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	study := &analytics.Study{Strategy: &ir.Strategy{Name: "evidence", Universe: ir.Universe{Symbols: []string{"EURUSD"}}}, Snapshot: "snapshot", Scope: analytics.Scope{Instruments: []string{"EURUSD"}, Period: "2024"}, Assumptions: analytics.Assumptions{InitialEquity: 100_000, SpreadTicks: 2, FillPolicy: "next_open"}}
+	result := &analytics.StudyResult{OutOfSample: analytics.Metrics{Trades: 2, FinalEquity: analytics.Bounded{Pessimistic: 10, Optimistic: 20}}, InSample: analytics.Metrics{Trades: 2}, NearMisses: []analytics.NearMiss{{Condition: "trigger", Count: 7}}, Unresolved: 1}
+	id, err := history.Put(context.Background(), study, result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	trades := []sim.Trade{
+		{Side: core.SideLong, EntryTime: core.MustParseTime("2024-01-02T00:00:00Z"), EntryPrice: 10, Pessimistic: sim.Outcome{ExitTime: core.MustParseTime("2024-01-03T00:00:00Z"), ExitPrice: 12, Net: 5, Costs: 1}, Optimistic: sim.Outcome{ExitTime: core.MustParseTime("2024-01-03T00:00:00Z"), ExitPrice: 13, Net: 8, Costs: 1}},
+		{Side: core.SideShort, EntryTime: core.MustParseTime("2024-02-02T00:00:00Z"), EntryPrice: 20, Pessimistic: sim.Outcome{Net: -3, Costs: 2}, Optimistic: sim.Outcome{Net: 2, Costs: 2}, Ambiguous: true},
+	}
+	if err := history.PutTrades(context.Background(), id, trades); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(NewHandler(&Server{RunStore: history}))
+	defer srv.Close()
+	runs := assayv1connect.NewRunServiceClient(srv.Client(), srv.URL)
+	details, err := runs.GetDetails(context.Background(), connect.NewRequest(&assayv1.GetRunRequest{Hash: string(id)}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := details.Msg.Details
+	if got.GetAssumptions().GetInitialEquity() != 100_000 || got.GetUnresolved() != 1 || len(got.GetMonthly()) != 2 || got.GetNearMisses()[0].GetCount() != 7 {
+		t.Fatalf("details = %#v", got)
+	}
+	page, err := runs.GetTrades(context.Background(), connect.NewRequest(&assayv1.GetRunTradesRequest{Hash: string(id), PageSize: 1}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Msg.GetTotal() != 2 || len(page.Msg.GetTrades()) != 1 || page.Msg.GetNextOffset() != 1 || page.Msg.GetTrades()[0].GetCosts().GetPessimistic() != 1 {
+		t.Fatalf("trades page = %#v", page.Msg)
 	}
 }

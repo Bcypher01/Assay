@@ -10,7 +10,11 @@ import (
 )
 
 func init() {
-	for _, p := range []primitive.Primitive{MarketStructure{}, Displacement{}, FairValueGap{}, OrderBlock{}, Breaker{}, LiquidityPool{}, LiquiditySweep{}, PremiumDiscount{}} {
+	for _, p := range []primitive.Primitive{
+		MarketStructure{}, MarketStructureBullish{}, MarketStructureBearish{},
+		Displacement{}, FairValueGap{}, OrderBlock{}, Breaker{}, LiquidityPool{},
+		LiquiditySweep{}, LiquiditySweepBullish{}, LiquiditySweepBearish{}, PremiumDiscount{},
+	} {
 		primitive.MustRegister(p)
 	}
 }
@@ -19,15 +23,39 @@ func spec(name string, out primitive.Kind, p proto.Message) primitive.Spec {
 	return primitive.Spec{Pack: "smc", Type: name, Out: out, Params: p.ProtoReflect().Descriptor(), Timeframed: true}
 }
 
-// MarketStructure marks a close/wick break of the latest confirmed symmetric
-// swing. It intentionally emits both BOS and CHoCH as a single boolean stream:
-// direction is visible in the overlay and consumers choose their bias rule.
+// MarketStructure marks either direction of a close/wick break of the latest
+// confirmed symmetric swing. Use its directional variants when a strategy must
+// distinguish bullish and bearish structure breaks.
 type MarketStructure struct{}
 
 func (MarketStructure) Spec() primitive.Spec {
 	return spec("market_structure", primitive.KindBool, (*assayv1.MarketStructureParams)(nil))
 }
 func (MarketStructure) New(p proto.Message, _ core.TF) (primitive.Instance, error) {
+	return newMarketStructure(p, 0)
+}
+
+// MarketStructureBullish marks only upward breaks of confirmed swing highs.
+type MarketStructureBullish struct{}
+
+func (MarketStructureBullish) Spec() primitive.Spec {
+	return spec("market_structure_bullish", primitive.KindBool, (*assayv1.MarketStructureParams)(nil))
+}
+func (MarketStructureBullish) New(p proto.Message, _ core.TF) (primitive.Instance, error) {
+	return newMarketStructure(p, core.SideLong)
+}
+
+// MarketStructureBearish marks only downward breaks of confirmed swing lows.
+type MarketStructureBearish struct{}
+
+func (MarketStructureBearish) Spec() primitive.Spec {
+	return spec("market_structure_bearish", primitive.KindBool, (*assayv1.MarketStructureParams)(nil))
+}
+func (MarketStructureBearish) New(p proto.Message, _ core.TF) (primitive.Instance, error) {
+	return newMarketStructure(p, core.SideShort)
+}
+
+func newMarketStructure(p proto.Message, side core.Side) (primitive.Instance, error) {
 	x, ok := p.(*assayv1.MarketStructureParams)
 	if !ok || x.SwingLookback == 0 {
 		return nil, fmt.Errorf("smc: swing lookback must be positive")
@@ -36,7 +64,7 @@ func (MarketStructure) New(p proto.Message, _ core.TF) (primitive.Instance, erro
 	if internal == 0 {
 		internal = 1
 	}
-	return &marketStructure{n: int(x.SwingLookback), internalN: internal, trackInternal: x.TrackInternal, close: x.ConfirmByClose, tolerance: core.Price(x.EqualLevelToleranceTicks)}, nil
+	return &marketStructure{n: int(x.SwingLookback), internalN: internal, trackInternal: x.TrackInternal, close: x.ConfirmByClose, tolerance: core.Price(x.EqualLevelToleranceTicks), side: side}, nil
 }
 
 type marketStructure struct {
@@ -44,6 +72,7 @@ type marketStructure struct {
 	trackInternal bool
 	close         bool
 	tolerance     core.Price
+	side          core.Side
 	overlays      []primitive.Overlay
 }
 
@@ -84,18 +113,23 @@ func (x *marketStructure) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.
 			up, down = s.Close[i], s.Close[i]
 		}
 		if haveHigh && up > high+x.tolerance {
-			b.Set(i)
+			if x.matches(core.SideLong) {
+				b.Set(i)
+			}
 			x.overlays = append(x.overlays, primitive.Overlay{Kind: primitive.OverlayMarker, From: s.Time[i], To: s.Time[i], Price: high, Text: "BOS up"})
 			haveHigh = false
 		}
 		if haveLow && down < low-x.tolerance {
-			b.Set(i)
+			if x.matches(core.SideShort) {
+				b.Set(i)
+			}
 			x.overlays = append(x.overlays, primitive.Overlay{Kind: primitive.OverlayMarker, From: s.Time[i], To: s.Time[i], Price: low, Text: "BOS down"})
 			haveLow = false
 		}
 	}
 	return primitive.Value{Kind: primitive.KindBool, Bool: b, Valid: v}, nil
 }
+func (x *marketStructure) matches(side core.Side) bool { return x.side == 0 || x.side == side }
 func (x *marketStructure) Overlays(from, to core.Time) []primitive.Overlay {
 	return clip(x.overlays, from, to)
 }
@@ -454,17 +488,44 @@ func (LiquiditySweep) Spec() primitive.Spec {
 	return spec("liquidity_sweep", primitive.KindBool, (*assayv1.SweepParams)(nil))
 }
 func (LiquiditySweep) New(p proto.Message, _ core.TF) (primitive.Instance, error) {
+	return newLiquiditySweep(p, 0)
+}
+
+// LiquiditySweepBullish marks sweeps below a prior low that subsequently close
+// back above that low (and any configured structure-shift confirmation).
+type LiquiditySweepBullish struct{}
+
+func (LiquiditySweepBullish) Spec() primitive.Spec {
+	return spec("liquidity_sweep_bullish", primitive.KindBool, (*assayv1.SweepParams)(nil))
+}
+func (LiquiditySweepBullish) New(p proto.Message, _ core.TF) (primitive.Instance, error) {
+	return newLiquiditySweep(p, core.SideLong)
+}
+
+// LiquiditySweepBearish marks sweeps above a prior high that subsequently
+// close back below that high (and any configured structure-shift confirmation).
+type LiquiditySweepBearish struct{}
+
+func (LiquiditySweepBearish) Spec() primitive.Spec {
+	return spec("liquidity_sweep_bearish", primitive.KindBool, (*assayv1.SweepParams)(nil))
+}
+func (LiquiditySweepBearish) New(p proto.Message, _ core.TF) (primitive.Instance, error) {
+	return newLiquiditySweep(p, core.SideShort)
+}
+
+func newLiquiditySweep(p proto.Message, side core.Side) (primitive.Instance, error) {
 	x, ok := p.(*assayv1.SweepParams)
 	if !ok || x.CloseBackBars == 0 {
 		return nil, fmt.Errorf("smc: invalid sweep parameters")
 	}
-	return &liquiditySweep{depth: core.Price(x.WickThroughTicks), closeBars: int(x.CloseBackBars), requireShift: x.RequireStructureShift}, nil
+	return &liquiditySweep{depth: core.Price(x.WickThroughTicks), closeBars: int(x.CloseBackBars), requireShift: x.RequireStructureShift, side: side}, nil
 }
 
 type liquiditySweep struct {
 	depth        core.Price
 	closeBars    int
 	requireShift bool
+	side         core.Side
 	overlays     []primitive.Overlay
 }
 
@@ -485,7 +546,9 @@ func (x *liquiditySweep) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.V
 			inside := (p.side == core.SideShort && s.Close[i] < p.level) || (p.side == core.SideLong && s.Close[i] > p.level)
 			shifted := !x.requireShift || (p.side == core.SideShort && s.Close[i] < p.shift) || (p.side == core.SideLong && s.Close[i] > p.shift)
 			if inside && shifted {
-				b.Set(i)
+				if x.matches(p.side) {
+					b.Set(i)
+				}
 				x.overlays = append(x.overlays, primitive.Overlay{Kind: primitive.OverlayMarker, From: s.Time[i], To: s.Time[i], Price: p.level, Text: "liquidity sweep"})
 				pending = append(pending[:j], pending[j+1:]...)
 				continue
@@ -501,13 +564,17 @@ func (x *liquiditySweep) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.V
 		// A same-bar close-back is fully known at this close and needs no future
 		// confirmation; process it immediately without backdating the signal.
 		if highSweep && s.Close[i] < hi && !x.requireShift {
-			b.Set(i)
+			if x.matches(core.SideShort) {
+				b.Set(i)
+			}
 			x.overlays = append(x.overlays, primitive.Overlay{Kind: primitive.OverlayMarker, From: s.Time[i], To: s.Time[i], Price: hi, Text: "liquidity sweep"})
 		} else if highSweep {
 			pending = append(pending, pendingSweep{side: core.SideShort, level: hi, shift: lo, expires: i + x.closeBars})
 		}
 		if lowSweep && s.Close[i] > lo && !x.requireShift {
-			b.Set(i)
+			if x.matches(core.SideLong) {
+				b.Set(i)
+			}
 			x.overlays = append(x.overlays, primitive.Overlay{Kind: primitive.OverlayMarker, From: s.Time[i], To: s.Time[i], Price: lo, Text: "liquidity sweep"})
 		} else if lowSweep {
 			pending = append(pending, pendingSweep{side: core.SideLong, level: lo, shift: hi, expires: i + x.closeBars})
@@ -515,6 +582,7 @@ func (x *liquiditySweep) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.V
 	}
 	return primitive.Value{Kind: primitive.KindBool, Bool: b, Valid: v}, nil
 }
+func (x *liquiditySweep) matches(side core.Side) bool { return x.side == 0 || x.side == side }
 func (x *liquiditySweep) Overlays(from, to core.Time) []primitive.Overlay {
 	return clip(x.overlays, from, to)
 }

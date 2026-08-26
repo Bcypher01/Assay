@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/parquet-go/parquet-go"
+	_ "modernc.org/sqlite"
 
 	"github.com/Bcypher01/Assay/internal/analytics"
 	"github.com/Bcypher01/Assay/internal/core"
@@ -75,12 +77,13 @@ type Store interface {
 	Export(context.Context, RunID, io.Writer) error
 }
 
-// LocalStore is a small, crash-safe file store. Index records are retained even
-// when retention removes a trade parquet file, preserving trial disclosure.
+// LocalStore keeps queryable run history in SQLite and stores the larger,
+// immutable study, result, and trade artifacts as files beside it.
 type LocalStore struct {
 	root     string
 	maxBytes int64
 	mu       sync.Mutex
+	db       *sql.DB
 }
 type Option func(*LocalStore)
 
@@ -93,16 +96,116 @@ func Open(root string, options ...Option) (*LocalStore, error) {
 	if err := os.MkdirAll(filepath.Join(root, "runs"), 0o755); err != nil {
 		return nil, err
 	}
-	if _, err := os.Stat(s.indexPath()); errors.Is(err, os.ErrNotExist) {
-		if err := atomicWrite(s.indexPath(), []byte("[]\n")); err != nil {
-			return nil, err
-		}
+	db, err := sql.Open("sqlite", filepath.Join(root, "history.db"))
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(1)
+	s.db = db
+	if err := s.initDB(); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if err := s.migrateLegacyIndex(); err != nil {
+		_ = db.Close()
+		return nil, err
 	}
 	return s, nil
 }
 func New(root string, options ...Option) (*LocalStore, error) { return Open(root, options...) }
 func (s *LocalStore) indexPath() string                       { return filepath.Join(s.root, "index.json") }
 func (s *LocalStore) runDir(id RunID) string                  { return filepath.Join(s.root, "runs", string(id)) }
+
+func (s *LocalStore) Close() error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	return s.db.Close()
+}
+
+func (s *LocalStore) initDB() error {
+	_, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS runs (
+			id TEXT PRIMARY KEY,
+			strategy_hash TEXT NOT NULL,
+			snapshot TEXT NOT NULL,
+			name TEXT NOT NULL,
+			scope_json TEXT NOT NULL,
+			created_at_ms INTEGER NOT NULL,
+			trades INTEGER NOT NULL,
+			final_equity_pess REAL NOT NULL,
+			final_equity_opt REAL NOT NULL,
+			parameters TEXT NOT NULL,
+			trade_list_present INTEGER NOT NULL DEFAULT 0,
+			study_json BLOB,
+			result_json BLOB
+		);
+		CREATE INDEX IF NOT EXISTS runs_created_at ON runs(created_at_ms DESC);
+		CREATE INDEX IF NOT EXISTS runs_strategy_scope ON runs(strategy_hash, scope_json);
+	`)
+	if err != nil {
+		return err
+	}
+	return s.ensureDocumentColumns()
+}
+
+func (s *LocalStore) ensureDocumentColumns() error {
+	rows, err := s.db.Query("PRAGMA table_info(runs)")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	columns := map[string]bool{}
+	for rows.Next() {
+		var cid, notNull, pk int
+		var name, typ string
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
+			return err
+		}
+		columns[name] = true
+	}
+	for _, column := range []string{"study_json", "result_json"} {
+		if !columns[column] {
+			if _, err := s.db.Exec("ALTER TABLE runs ADD COLUMN " + column + " BLOB"); err != nil {
+				return err
+			}
+		}
+	}
+	return rows.Err()
+}
+
+// migrateLegacyIndex imports the former JSON index once, without deleting it.
+// The original run documents remain intact, so an interrupted upgrade is safe
+// to retry and users retain a straightforward recovery path.
+func (s *LocalStore) migrateLegacyIndex() error {
+	var count int
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM runs").Scan(&count); err != nil || count != 0 {
+		return err
+	}
+	items, err := s.readLegacyIndex()
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, item := range items {
+		study, result, err := s.legacyDocuments(item.ID)
+		if err != nil {
+			return err
+		}
+		if err := s.insertRun(tx, item, study, result); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
 
 func (s *LocalStore) Put(ctx context.Context, study *analytics.Study, result *analytics.StudyResult) (RunID, error) {
 	if err := ctx.Err(); err != nil {
@@ -119,14 +222,13 @@ func (s *LocalStore) Put(ctx context.Context, study *analytics.Study, result *an
 	id := runID(strategyHash, snapshot)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	items, err := s.readIndex()
-	if err != nil {
-		return "", err
+	var exists int
+	err := s.db.QueryRowContext(ctx, "SELECT 1 FROM runs WHERE id = ?", string(id)).Scan(&exists)
+	if err == nil {
+		return id, nil
 	}
-	for _, item := range items {
-		if item.ID == id {
-			return id, nil
-		}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", err
 	}
 	if err := ctx.Err(); err != nil {
 		return "", err
@@ -135,22 +237,19 @@ func (s *LocalStore) Put(ctx context.Context, study *analytics.Study, result *an
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	// JSON is intentionally the canonical document and result representation.
-	if err := writeJSON(filepath.Join(dir, "study.json"), study); err != nil {
+	studyJSON, err := json.Marshal(study)
+	if err != nil {
 		return "", err
 	}
-	if err := writeJSON(filepath.Join(dir, "result.json"), result); err != nil {
+	resultJSON, err := json.Marshal(result)
+	if err != nil {
 		return "", err
 	}
 	summary := makeSummary(id, strategyHash, study, result)
-	if err := writeJSON(filepath.Join(dir, "summary.json"), summary); err != nil {
+	if err := s.insertRun(s.db, summary, studyJSON, resultJSON); err != nil {
 		return "", err
 	}
-	items = append(items, summary)
-	if err := s.writeIndex(items); err != nil {
-		return "", err
-	}
-	if err := s.enforceRetention(items); err != nil {
+	if err := s.enforceRetention(); err != nil {
 		return "", err
 	}
 	return id, nil
@@ -164,31 +263,21 @@ func (s *LocalStore) PutTrades(ctx context.Context, id RunID, trades []sim.Trade
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	items, err := s.readIndex()
+	var exists int
+	err := s.db.QueryRowContext(ctx, "SELECT 1 FROM runs WHERE id = ?", string(id)).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
 	if err != nil {
 		return err
-	}
-	found := -1
-	for i := range items {
-		if items[i].ID == id {
-			found = i
-			break
-		}
-	}
-	if found < 0 {
-		return ErrNotFound
 	}
 	if err := writeTrades(filepath.Join(s.runDir(id), "trades.parquet"), trades); err != nil {
 		return err
 	}
-	items[found].TradeListPresent = true
-	if err := writeJSON(filepath.Join(s.runDir(id), "summary.json"), items[found]); err != nil {
+	if _, err := s.db.ExecContext(ctx, "UPDATE runs SET trade_list_present = 1 WHERE id = ?", string(id)); err != nil {
 		return err
 	}
-	if err := s.writeIndex(items); err != nil {
-		return err
-	}
-	return s.enforceRetention(items)
+	return s.enforceRetention()
 }
 func (s *LocalStore) Get(ctx context.Context, id RunID) (*Run, error) {
 	if err := ctx.Err(); err != nil {
@@ -196,18 +285,28 @@ func (s *LocalStore) Get(ctx context.Context, id RunID) (*Run, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var summary RunSummary
-	if err := readJSON(filepath.Join(s.runDir(id), "summary.json"), &summary); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, ErrNotFound
-		}
+	summary, err := s.summaryByID(ctx, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
 		return nil, err
+	}
+	studyJSON, resultJSON, err := s.documentsByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if len(studyJSON) == 0 || len(resultJSON) == 0 {
+		studyJSON, resultJSON, err = s.legacyDocuments(id)
+		if err != nil {
+			return nil, err
+		}
 	}
 	r := &Run{RunSummary: summary, Study: &analytics.Study{}, Result: &analytics.StudyResult{}}
-	if err := readJSON(filepath.Join(s.runDir(id), "study.json"), r.Study); err != nil {
+	if err := json.Unmarshal(studyJSON, r.Study); err != nil {
 		return nil, err
 	}
-	if err := readJSON(filepath.Join(s.runDir(id), "result.json"), r.Result); err != nil {
+	if err := json.Unmarshal(resultJSON, r.Result); err != nil {
 		return nil, err
 	}
 	if summary.TradeListPresent {
@@ -221,7 +320,7 @@ func (s *LocalStore) List(ctx context.Context, f Filter) ([]RunSummary, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	items, err := s.readIndex()
+	items, err := s.listSummaries(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +354,7 @@ func (s *LocalStore) Trials(ctx context.Context, scope Scope) (int, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	items, err := s.readIndex()
+	items, err := s.listSummaries(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -371,15 +470,96 @@ func strategyParams(s *ir.Strategy) map[string]string {
 func delta(a, b analytics.Bounded) analytics.Bounded {
 	return analytics.Bounded{Pessimistic: b.Pessimistic - a.Pessimistic, Optimistic: b.Optimistic - a.Optimistic}
 }
-func (s *LocalStore) readIndex() ([]RunSummary, error) {
+func (s *LocalStore) readLegacyIndex() ([]RunSummary, error) {
 	var out []RunSummary
 	err := readJSON(s.indexPath(), &out)
 	return out, err
 }
-func (s *LocalStore) writeIndex(v []RunSummary) error { return writeJSON(s.indexPath(), v) }
-func (s *LocalStore) enforceRetention(items []RunSummary) error {
+func (s *LocalStore) insertRun(exec interface {
+	Exec(string, ...any) (sql.Result, error)
+}, item RunSummary, study, result []byte) error {
+	scope, err := json.Marshal(canonicalScope(item.Scope, nil))
+	if err != nil {
+		return err
+	}
+	_, err = exec.Exec(`INSERT OR IGNORE INTO runs (
+		id, strategy_hash, snapshot, name, scope_json, created_at_ms, trades,
+		final_equity_pess, final_equity_opt, parameters, trade_list_present, study_json, result_json
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		string(item.ID), item.StrategyHash, item.Snapshot, item.Name, string(scope), item.CreatedAt.UnixMilli(), item.Trades,
+		item.FinalEquity.Pessimistic, item.FinalEquity.Optimistic, item.Parameters, item.TradeListPresent, study, result)
+	return err
+}
+
+func (s *LocalStore) legacyDocuments(id RunID) ([]byte, []byte, error) {
+	study, err := os.ReadFile(filepath.Join(s.runDir(id), "study.json"))
+	if err != nil {
+		return nil, nil, err
+	}
+	result, err := os.ReadFile(filepath.Join(s.runDir(id), "result.json"))
+	if err != nil {
+		return nil, nil, err
+	}
+	return study, result, nil
+}
+
+func (s *LocalStore) listSummaries(ctx context.Context) ([]RunSummary, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, strategy_hash, snapshot, name, scope_json, created_at_ms, trades,
+		final_equity_pess, final_equity_opt, parameters, trade_list_present FROM runs`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []RunSummary
+	for rows.Next() {
+		item, err := scanSummary(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func (s *LocalStore) summaryByID(ctx context.Context, id RunID) (RunSummary, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT id, strategy_hash, snapshot, name, scope_json, created_at_ms, trades,
+		final_equity_pess, final_equity_opt, parameters, trade_list_present FROM runs WHERE id = ?`, string(id))
+	return scanSummary(row)
+}
+
+func (s *LocalStore) documentsByID(ctx context.Context, id RunID) ([]byte, []byte, error) {
+	var study, result []byte
+	err := s.db.QueryRowContext(ctx, "SELECT study_json, result_json FROM runs WHERE id = ?", string(id)).Scan(&study, &result)
+	return study, result, err
+}
+
+type summaryScanner interface{ Scan(...any) error }
+
+func scanSummary(scanner summaryScanner) (RunSummary, error) {
+	var item RunSummary
+	var scope string
+	var created int64
+	var present int
+	err := scanner.Scan(&item.ID, &item.StrategyHash, &item.Snapshot, &item.Name, &scope, &created, &item.Trades,
+		&item.FinalEquity.Pessimistic, &item.FinalEquity.Optimistic, &item.Parameters, &present)
+	if err != nil {
+		return RunSummary{}, err
+	}
+	if err := json.Unmarshal([]byte(scope), &item.Scope); err != nil {
+		return RunSummary{}, err
+	}
+	item.CreatedAt = time.UnixMilli(created).UTC()
+	item.TradeListPresent = present != 0
+	return item, nil
+}
+
+func (s *LocalStore) enforceRetention() error {
 	if s.maxBytes <= 0 {
 		return nil
+	}
+	items, err := s.listSummaries(context.Background())
+	if err != nil {
+		return err
 	}
 	var size int64
 	type victim struct {
@@ -411,11 +591,13 @@ func (s *LocalStore) enforceRetention(items []RunSummary) error {
 		for i := range items {
 			if items[i].ID == v.id {
 				items[i].TradeListPresent = false
-				_ = writeJSON(filepath.Join(s.runDir(v.id), "summary.json"), items[i])
+				if _, err := s.db.Exec("UPDATE runs SET trade_list_present = 0 WHERE id = ?", string(v.id)); err != nil {
+					return err
+				}
 			}
 		}
 	}
-	return s.writeIndex(items)
+	return nil
 }
 func writeJSON(path string, v any) error {
 	b, e := json.MarshalIndent(v, "", "  ")

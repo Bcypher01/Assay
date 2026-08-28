@@ -463,19 +463,20 @@ func effectiveAssumptions(cfg sim.Config) analytics.Assumptions {
 // non-zero defaults; a client therefore cannot accidentally obtain a free-fill
 // backtest by omitting execution fields.
 func runConfig(spec instrument.Spec, strategy *ir.Strategy, a *assayv1.StudyAssumptions) (sim.Config, error) {
-	// Internally account values are USD cents. The user-facing request accepts
-	// whole USD so entering 50 always means a $50 account, not fifty cents.
-	// A $100 default is paired with the strategy's percentage-risk setting,
+	// Account values use USD cents end to end. Keeping the request in the same
+	// unit as streamed and persisted money prevents clients from being scaled
+	// by 100 at the simulator boundary. A $10,000 default is paired with the
+	// strategy's percentage-risk setting,
 	// never an implicit one-lot position.
-	cfg := sim.Config{Spec: spec, Risk: sim.RiskModel{InitialEquity: 10_000, RiskPerTrade: core.RatioFromFloat(.01)}}
+	cfg := sim.Config{Spec: spec, Risk: sim.RiskModel{InitialEquity: 1_000_000, RiskPerTrade: core.RatioFromFloat(.01)}}
 	if strategy != nil && strategy.Risk.PerTrade > 0 {
 		cfg.Risk.RiskPerTrade = strategy.Risk.PerTrade
 	}
 	if a == nil {
 		return cfg, nil
 	}
-	if a.InitialEquity <= 0 || a.InitialEquity > math.MaxInt64/100 {
-		return sim.Config{}, fmt.Errorf("rpc: assumptions.initial_equity must be a positive whole USD amount")
+	if a.InitialEquity <= 0 {
+		return sim.Config{}, fmt.Errorf("rpc: assumptions.initial_equity must be a positive USD-cent amount")
 	}
 	if a.RiskPerTrade < 0 || a.RiskPerTrade > 1 || math.IsNaN(a.RiskPerTrade) || math.IsInf(a.RiskPerTrade, 0) {
 		return sim.Config{}, fmt.Errorf("rpc: assumptions.risk_per_trade must be between 0 and 1")
@@ -489,7 +490,7 @@ func runConfig(spec instrument.Spec, strategy *ir.Strategy, a *assayv1.StudyAssu
 	if a.FillPolicy != "" && a.FillPolicy != "next_open" {
 		return sim.Config{}, fmt.Errorf("rpc: assumptions.fill_policy only supports next_open")
 	}
-	cfg.Risk.InitialEquity = core.Price(a.InitialEquity * 100)
+	cfg.Risk.InitialEquity = core.Price(a.InitialEquity)
 	if a.RiskPerTrade > 0 {
 		cfg.Risk.RiskPerTrade = core.RatioFromFloat(a.RiskPerTrade)
 		cfg.Risk.FixedLots = 0

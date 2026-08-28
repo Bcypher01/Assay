@@ -121,13 +121,13 @@ func testStrategyJSON(t *testing.T) []byte {
 func TestRunConfigAppliesExplicitAssumptions(t *testing.T) {
 	strategy := ir.NewMovingAverageCrossover()
 	cfg, err := runConfig(instrument.Spec{Costs: instrument.CostModel{SpreadTicks: 2}}, strategy, &assayv1.StudyAssumptions{
-		InitialEquity: 50, RiskPerTrade: 0.01, SpreadTicks: 4,
+		InitialEquity: 1_000_000, RiskPerTrade: 0.01, SpreadTicks: 4,
 		CommissionBps: 10, SlippageTicks: 3, FillPolicy: "next_open",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Risk.InitialEquity != 5_000 || cfg.Spec.Costs.SpreadTicks != 4 || cfg.Slippage.Ticks != 3 {
+	if cfg.Risk.InitialEquity != 1_000_000 || cfg.Spec.Costs.SpreadTicks != 4 || cfg.Slippage.Ticks != 3 {
 		t.Fatalf("config = %#v", cfg)
 	}
 	if cfg.Spec.Costs.CommissionMode != instrument.CommissionBps {

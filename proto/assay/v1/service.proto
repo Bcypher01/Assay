@@ -135,9 +135,9 @@ message RunRequest {
 }
 
 // StudyAssumptions are the user-visible execution choices for one run.
-// initial_equity is a positive whole USD amount: 50 means $50. EquityChunk,
-// net_pnl, commission_flat, and persisted result money values are integer USD
-// cents. Price and spread/slippage fields remain instrument ticks.
+// initial_equity, EquityChunk, net_pnl, commission_flat, and persisted result
+// money values are integer USD cents: 1,000,000 means $10,000. Price and
+// spread/slippage fields remain instrument ticks.
 message StudyAssumptions {
   sint64 initial_equity = 1;
   double risk_per_trade = 2;

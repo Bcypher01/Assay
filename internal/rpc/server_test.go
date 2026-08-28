@@ -70,8 +70,8 @@ func TestTemplateCatalogueAndDescriptionRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(listed.Msg.Templates) != 6 {
-		t.Fatalf("templates = %d, want 6", len(listed.Msg.Templates))
+	if len(listed.Msg.Templates) != 9 {
+		t.Fatalf("templates = %d, want 9", len(listed.Msg.Templates))
 	}
 	first := listed.Msg.Templates[0]
 	if first.Id != "moving-average-crossover" || first.StrategyDescription.GetSummary() == "" || len(first.StrategyJson) == 0 {

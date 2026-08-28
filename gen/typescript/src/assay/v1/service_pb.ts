@@ -1074,11 +1074,10 @@ export class RunRequest extends Message<RunRequest> {
 }
 
 /**
- * StudyAssumptions are the user-visible execution choices for one run. All
- * money and price fields use the instrument/account's existing integer units;
- * the UI obtains their display precision from the selected instrument. A zero
- * value means "use the instrument default" except initial_equity, which must
- * be positive when assumptions are supplied.
+ * StudyAssumptions are the user-visible execution choices for one run.
+ * initial_equity and all other account-money fields use integer USD cents;
+ * 1,000,000 means $10,000. Price and spread/slippage fields remain instrument
+ * ticks.
  *
  * @generated from message assay.v1.StudyAssumptions
  */
@@ -2760,4 +2759,3 @@ export class CompareRunsResponse extends Message<CompareRunsResponse> {
     return proto3.util.equals(CompareRunsResponse, a, b);
   }
 }
-

@@ -9,6 +9,7 @@ import (
 	"github.com/Bcypher01/Assay/internal/ir"
 	_ "github.com/Bcypher01/Assay/internal/packs/indicator"
 	_ "github.com/Bcypher01/Assay/internal/packs/priceaction"
+	_ "github.com/Bcypher01/Assay/internal/packs/semantic"
 	_ "github.com/Bcypher01/Assay/internal/packs/smc"
 	_ "github.com/Bcypher01/Assay/internal/packs/timeofday"
 	"github.com/Bcypher01/Assay/internal/primitive"
@@ -16,6 +17,7 @@ import (
 	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type Data struct {
@@ -344,6 +346,8 @@ func parameterMessage(name string) (proto.Message, error) {
 		return &assayv1.SweepParams{}, nil
 	case "assay.v1.PremiumDiscountParams":
 		return &assayv1.PremiumDiscountParams{}, nil
+	case "google.protobuf.Struct":
+		return &structpb.Struct{}, nil
 	default:
 		return nil, fmt.Errorf("engine: unsupported parameter schema %q", name)
 	}

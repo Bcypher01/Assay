@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/Bcypher01/Assay/internal/event"
 	"github.com/Bcypher01/Assay/internal/instrument"
 	"github.com/Bcypher01/Assay/internal/library"
 	"github.com/Bcypher01/Assay/internal/rpc"
@@ -21,6 +22,7 @@ func main() {
 	cacheDir := flag.String("cache-dir", "cache", "local bar-cache directory")
 	cacheMaxMB := flag.Int64("cache-max-mb", 5120, "maximum local bar-cache size in MiB; zero disables eviction")
 	historyDir := flag.String("history-dir", "history", "persistent study history directory")
+	eventDir := flag.String("event-dir", "event-data", "immutable event-snapshot directory")
 	libraryURL := flag.String("library-url", "", "public read-only R2/CDN library URL")
 	metricsDir := flag.String("metrics-dir", "", "opt-in local-only product metrics directory; no telemetry is recorded when empty")
 	flag.Parse()
@@ -46,7 +48,7 @@ func main() {
 	}}
 	loader := library.New(cache, objects, fallback)
 	loader.Registry = registry
-	server, err := rpc.NewLocalServerWithServices(cache, registry, loader, history)
+	server, err := rpc.NewLocalServerWithEventServices(cache, registry, loader, history, event.NewStore(*eventDir))
 	if err != nil {
 		log.Fatal(err)
 	}

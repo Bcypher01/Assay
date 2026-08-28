@@ -17,10 +17,15 @@ cmd/pipeline     bar library builder, runs on a schedule, ships to nobody
 internal/core        fixed-point prices, time, timeframes, series, bitsets
 internal/instrument  instrument specs, calendars, cost models
 internal/store       Parquet bar format, manifests, local cache
+internal/event       immutable structured-event snapshots and query model
+internal/eventsource reviewed event-source adapters (curated catalogue first)
+internal/eventpipeline imports event sources into local snapshots
 internal/library     library fetch + direct-from-venue fallback
 internal/venue/*     per-venue download and decode
 internal/primitive   primitive interface, registry, memoisation cache
 internal/packs/*     indicator, price-action, time and SMC detectors
+internal/packs/semantic chart-drawing setup detectors
+internal/setuptest    semantic drawing -> IR compilation and preview
 internal/sim         trade simulation, costs, ambiguity bounding
 internal/ir          strategy document, validation, content hashing
 internal/engine      IR execution: primitives -> signals -> trades
@@ -43,6 +48,22 @@ make race
 make lint
 make bench
 ```
+
+To import ten years of official BLS CPI and Employment Situation releases:
+
+```
+go run ./cmd/event-pipeline -provider bls -dir event-data -build-version v1
+```
+
+The checked-in curated catalogue remains available only for offline fixtures:
+`-provider curated`.
+
+The **Setup Test** chart lives in the Assay UI (`assay-ui`, the `/setup`
+screen) and talks to this server over the `/api/setup/*` endpoints. It lets a
+trader label and test break-and-retest, order-block, and breaker-block drawings
+without treating the drawing's absolute price as a historical rule. This server
+serves no interface of its own. See
+[the Setup Test contract](docs/setup-test.md).
 
 ## Where to start reading
 

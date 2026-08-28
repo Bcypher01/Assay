@@ -14,11 +14,13 @@ import (
 	"connectrpc.com/connect"
 	"github.com/Bcypher01/Assay/internal/analytics"
 	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/Bcypher01/Assay/internal/event"
 	"github.com/Bcypher01/Assay/internal/instrument"
 	"github.com/Bcypher01/Assay/internal/ir"
 	"github.com/Bcypher01/Assay/internal/onboarding"
 	"github.com/Bcypher01/Assay/internal/primitive"
 	"github.com/Bcypher01/Assay/internal/runstore"
+	"github.com/Bcypher01/Assay/internal/setuptest"
 	"github.com/Bcypher01/Assay/internal/sim"
 	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
 	"github.com/Bcypher01/Assay/proto/assay/v1/assayv1connect"
@@ -31,6 +33,12 @@ var ErrNotConfigured = errors.New("rpc: backend not configured")
 type EnsureDataFunc func(context.Context, *assayv1.EnsureDataRequest, func(*assayv1.Progress) error) error
 type DataStatusFunc func(context.Context, *assayv1.EnsureDataRequest) (*assayv1.DataStatusResponse, error)
 type EvaluateFunc func(context.Context, *assayv1.EvaluatePrimitiveRequest) (*assayv1.EvaluatePrimitiveResponse, error)
+type QueryEventsFunc func(context.Context, *assayv1.QueryEventsRequest) (*assayv1.QueryEventsResponse, error)
+type RunEventStudyFunc func(context.Context, *assayv1.EventStudyRequest) (*assayv1.EventStudyResponse, error)
+type ListEventSnapshotsFunc func(context.Context) ([]event.SnapshotMetadata, error)
+type SetupChartFunc func(context.Context, setuptest.ChartRequest) (setuptest.Chart, error)
+type SetupPreviewFunc func(context.Context, setuptest.PreviewRequest) (setuptest.Preview, error)
+type SetupRunFunc func(context.Context, setuptest.RunRequest) (*assayv1.RunSummary, error)
 
 // RunFunc returns the one terminal summary. Updates supplied to send must be
 // non-terminal updates, which keeps exactly-once terminal delivery enforceable
@@ -49,10 +57,16 @@ type Server struct {
 	Registry    *primitive.Registry
 	Instruments []*assayv1.Instrument
 
-	EnsureDataFn EnsureDataFunc
-	DataStatusFn DataStatusFunc
-	EvaluateFn   EvaluateFunc
-	RunFn        RunFunc
+	EnsureDataFn         EnsureDataFunc
+	DataStatusFn         DataStatusFunc
+	EvaluateFn           EvaluateFunc
+	QueryEventsFn        QueryEventsFunc
+	RunEventStudyFn      RunEventStudyFunc
+	ListEventSnapshotsFn ListEventSnapshotsFunc
+	RunFn                RunFunc
+	SetupChartFn         SetupChartFunc
+	SetupPreviewFn       SetupPreviewFunc
+	SetupRunFn           SetupRunFunc
 	// RunStore is the production history backend. The function fields remain
 	// available for small embedding applications and transport tests.
 	RunStore   runstore.Store
@@ -80,9 +94,39 @@ func NewHandler(s *Server) http.Handler {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/onboarding.json", onboardingHandler)
+	mux.HandleFunc("/event-snapshots", s.eventSnapshotsHandler)
 	mux.HandleFunc("/openapi.json", openAPIHandler)
 	mux.HandleFunc("/docs", swaggerHandler)
+	mux.HandleFunc("/api/setup/chart", s.setupChartHandler)
+	mux.HandleFunc("/api/setup/preview", s.setupPreviewHandler)
+	mux.HandleFunc("/api/setup/run", s.setupRunHandler)
+	// The server ships no interface of its own. Assay's UI is a separate
+	// application that talks to this process over ConnectRPC and the setup
+	// JSON endpoints above; embedding a second, divergent copy of the same
+	// screens here is how the two drift apart. Root answers with the entry
+	// points a client needs rather than redirecting to a page that no longer
+	// exists.
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(struct {
+			Service string   `json:"service"`
+			Docs    string   `json:"docs"`
+			OpenAPI string   `json:"openapi"`
+			Setup   []string `json:"setup"`
+		}{
+			Service: "assay",
+			Docs:    "/docs",
+			OpenAPI: "/openapi.json",
+			Setup:   []string{"/api/setup/chart", "/api/setup/preview", "/api/setup/run"},
+		})
+	})
 	path, h := assayv1connect.NewDataServiceHandler(s)
+	mux.Handle(path, h)
+	path, h = assayv1connect.NewEventStudyServiceHandler(s)
 	mux.Handle(path, h)
 	path, h = assayv1connect.NewPrimitiveServiceHandler(s)
 	mux.Handle(path, h)
@@ -93,6 +137,138 @@ func NewHandler(s *Server) http.Handler {
 	path, h = assayv1connect.NewRunServiceHandler(s)
 	mux.Handle(path, h)
 	return withEmptyJSON(mux)
+}
+
+func (s *Server) setupChartHandler(w http.ResponseWriter, r *http.Request) {
+	if s.SetupChartFn == nil {
+		writeSetupError(w, ErrNotConfigured, http.StatusNotImplemented)
+		return
+	}
+	var req setuptest.ChartRequest
+	if !decodeSetupRequest(w, r, &req) {
+		return
+	}
+	out, err := s.SetupChartFn(r.Context(), req)
+	if err != nil {
+		writeSetupError(w, err, http.StatusBadRequest)
+		return
+	}
+	writeSetupJSON(w, out)
+}
+
+func (s *Server) setupPreviewHandler(w http.ResponseWriter, r *http.Request) {
+	if s.SetupPreviewFn == nil {
+		writeSetupError(w, ErrNotConfigured, http.StatusNotImplemented)
+		return
+	}
+	var req setuptest.PreviewRequest
+	if !decodeSetupRequest(w, r, &req) {
+		return
+	}
+	out, err := s.SetupPreviewFn(r.Context(), req)
+	if err != nil {
+		writeSetupError(w, err, http.StatusBadRequest)
+		return
+	}
+	writeSetupJSON(w, out)
+}
+
+func (s *Server) setupRunHandler(w http.ResponseWriter, r *http.Request) {
+	if s.SetupRunFn == nil {
+		writeSetupError(w, ErrNotConfigured, http.StatusNotImplemented)
+		return
+	}
+	var req setuptest.RunRequest
+	if !decodeSetupRequest(w, r, &req) {
+		return
+	}
+	out, err := s.SetupRunFn(r.Context(), req)
+	if err != nil {
+		writeSetupError(w, err, http.StatusBadRequest)
+		return
+	}
+	writeSetupJSON(w, out)
+}
+
+func decodeSetupRequest(w http.ResponseWriter, r *http.Request, out any) bool {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		writeSetupError(w, fmt.Errorf("method not allowed"), http.StatusMethodNotAllowed)
+		return false
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(out); err != nil {
+		writeSetupError(w, fmt.Errorf("decode setup request: %w", err), http.StatusBadRequest)
+		return false
+	}
+	return true
+}
+
+func writeSetupError(w http.ResponseWriter, err error, status int) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(struct {
+		Error string `json:"error"`
+	}{Error: err.Error()})
+}
+
+func writeSetupJSON(w http.ResponseWriter, value any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(value)
+}
+
+// eventSnapshotsHandler is deliberately ordinary read-only JSON: the static
+// client can populate its event-snapshot picker before it constructs a
+// ConnectRPC client. The detailed event records remain available only through
+// QueryEvents, which requires an explicit content hash.
+func (s *Server) eventSnapshotsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.ListEventSnapshotsFn == nil {
+		http.Error(w, ErrNotConfigured.Error(), http.StatusNotImplemented)
+		return
+	}
+	items, err := s.ListEventSnapshotsFn(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(struct {
+		Snapshots []event.SnapshotMetadata `json:"snapshots"`
+	}{Snapshots: items})
+}
+
+func (s *Server) QueryEvents(ctx context.Context, req *connect.Request[assayv1.QueryEventsRequest]) (*connect.Response[assayv1.QueryEventsResponse], error) {
+	if s.QueryEventsFn == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, ErrNotConfigured)
+	}
+	out, err := s.QueryEventsFn(ctx, req.Msg)
+	if err != nil {
+		return nil, asConnectError(err)
+	}
+	if out == nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("rpc: event query returned nil response"))
+	}
+	return connect.NewResponse(out), nil
+}
+
+func (s *Server) RunEventStudy(ctx context.Context, req *connect.Request[assayv1.EventStudyRequest]) (*connect.Response[assayv1.EventStudyResponse], error) {
+	if s.RunEventStudyFn == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, ErrNotConfigured)
+	}
+	out, err := s.RunEventStudyFn(ctx, req.Msg)
+	if err != nil {
+		return nil, asConnectError(err)
+	}
+	if out == nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("rpc: event study returned nil response"))
+	}
+	return connect.NewResponse(out), nil
 }
 
 // onboardingHandler is intentionally a small ordinary JSON document so a

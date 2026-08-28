@@ -54,19 +54,28 @@ The corresponding OpenAPI 3.1 document is `/openapi.json`. Streaming endpoints
 are documented there but should be called through the generated ConnectRPC
 client, which handles the streaming protocol.
 
+## Semantic drawing setup test
+
+The bundled local chart surface is `/setup/`. It calls the strict JSON setup
+boundary documented in [setup-test.md](setup-test.md): chart preparation,
+cache-only semantic preview, then full-run handoff. A client must not enable the
+full backtest action merely because a drawing exists; show `sampleMatched` and
+its warning first, because the selected candle may not satisfy the confirmed
+repeatable rule.
+
 ## Account-value display contract
 
 All money returned for a run is an integer number of **USD cents**. This
 includes streamed `EquityChunk.values`, `RunSummary.net_pnl`, trade `net_pnl`
 / `costs`, and all persisted P&L and drawdown metrics. Format them as USD
 (`value / 100`) and label the curve **Balance (USD)**; never render them as
-points or instrument prices. `StudyAssumptions.initial_equity` is the one
-exception: it is a positive whole USD amount, so `50` means **$50.00**.
+points or instrument prices. `StudyAssumptions.initial_equity` is an input in
+this same unit: it is a positive USD-cent amount, so `5000` means **$50.00**.
 
 The service values every currently listed instrument in USD: EUR/USD, GBP/USD,
 XAU/USD and USDT crypto use their quoted value (USDT is treated at USD parity);
 USD/JPY converts realized JPY P&L at the trade's closing USD/JPY price. Send a
-positive whole-dollar `initial_equity`—`100` means **$100.00**. Pair it with a
+positive USD-cent `initial_equity`—`10000` means **$100.00**. Pair it with a
 non-zero `risk_per_trade` (for example `0.01` for 1%) so lot size compounds
 with the balance. Do not rely on `fixed_lots` for small accounts unless the
 user explicitly chose that exposure.

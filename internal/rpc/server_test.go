@@ -1,7 +1,9 @@
 package rpc
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -13,10 +15,54 @@ import (
 	"github.com/Bcypher01/Assay/internal/core"
 	"github.com/Bcypher01/Assay/internal/ir"
 	"github.com/Bcypher01/Assay/internal/runstore"
+	"github.com/Bcypher01/Assay/internal/setuptest"
 	"github.com/Bcypher01/Assay/internal/sim"
 	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
 	"github.com/Bcypher01/Assay/proto/assay/v1/assayv1connect"
 )
+
+func TestSetupJSONBoundary(t *testing.T) {
+	handler := NewHandler(&Server{SetupChartFn: func(_ context.Context, req setuptest.ChartRequest) (setuptest.Chart, error) {
+		return setuptest.Chart{Symbol: req.Symbol, Timeframe: req.Timeframe, Snapshot: "fixed", Bars: []setuptest.Bar{{TimeMS: 1, Open: 10, High: 12, Low: 9, Close: 11}}}, nil
+	}})
+
+	// The server serves no interface. Root advertises the API entry points and
+	// nothing else; a redirect to an embedded page here would be a second copy
+	// of the UI waiting to diverge from the real one.
+	rootResponse := httptest.NewRecorder()
+	handler.ServeHTTP(rootResponse, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rootResponse.Code != http.StatusOK || !strings.Contains(rootResponse.Body.String(), `"service":"assay"`) {
+		t.Fatalf("root status=%d body=%q", rootResponse.Code, rootResponse.Body.String())
+	}
+	uiResponse := httptest.NewRecorder()
+	handler.ServeHTTP(uiResponse, httptest.NewRequest(http.MethodGet, "/setup/", nil))
+	if uiResponse.Code != http.StatusNotFound {
+		t.Fatalf("embedded setup UI is still mounted: status=%d", uiResponse.Code)
+	}
+
+	body, err := json.Marshal(setuptest.ChartRequest{Symbol: "DUKAS:EURUSD", Timeframe: "d1", FromMS: 1, ToMS: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	apiRequest := httptest.NewRequest(http.MethodPost, "/api/setup/chart", bytes.NewReader(body))
+	apiResponse := httptest.NewRecorder()
+	handler.ServeHTTP(apiResponse, apiRequest)
+	if apiResponse.Code != http.StatusOK || !strings.Contains(apiResponse.Body.String(), `"snapshot":"fixed"`) {
+		t.Fatalf("setup API status=%d body=%q", apiResponse.Code, apiResponse.Body.String())
+	}
+}
+
+func TestSetupBoundaryRejectsUnknownFields(t *testing.T) {
+	handler := NewHandler(&Server{SetupChartFn: func(context.Context, setuptest.ChartRequest) (setuptest.Chart, error) {
+		return setuptest.Chart{}, nil
+	}})
+	request := httptest.NewRequest(http.MethodPost, "/api/setup/chart", strings.NewReader(`{"symbol":"DUKAS:EURUSD","unknown":true}`))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "unknown field") {
+		t.Fatalf("status=%d body=%q", response.Code, response.Body.String())
+	}
+}
 
 func TestOpenAPIAndSwaggerEndpoints(t *testing.T) {
 	srv := httptest.NewServer(NewHandler(&Server{}))
@@ -70,8 +116,8 @@ func TestTemplateCatalogueAndDescriptionRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(listed.Msg.Templates) != 6 {
-		t.Fatalf("templates = %d, want 6", len(listed.Msg.Templates))
+	if len(listed.Msg.Templates) != 9 {
+		t.Fatalf("templates = %d, want 9", len(listed.Msg.Templates))
 	}
 	first := listed.Msg.Templates[0]
 	if first.Id != "moving-average-crossover" || first.StrategyDescription.GetSummary() == "" || len(first.StrategyJson) == 0 {

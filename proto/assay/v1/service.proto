@@ -76,6 +76,39 @@ service DataService {
   rpc EnsureData(EnsureDataRequest) returns (stream Progress);
 }
 
+message EventFilter {
+  sint64 from_ms = 1;
+  sint64 to_ms = 2;
+  sint64 as_of_ms = 3;
+  repeated string kinds = 4;
+  repeated string currencies = 5;
+  string minimum_impact = 6;
+}
+message EventRecord {
+  string id = 1;
+  sint64 occurred_at_ms = 2;
+  sint64 knowledge_at_ms = 3;
+  string precision = 4;
+  string kind = 5;
+  string title = 6;
+  string jurisdiction = 7;
+  repeated string currencies = 8;
+  string impact = 9;
+  string status = 10;
+  string source = 11;
+}
+message QueryEventsRequest { string snapshot = 1; EventFilter filter = 2; }
+message QueryEventsResponse { string snapshot = 1; repeated EventRecord events = 2; }
+message EventStudyRequest { string snapshot = 1; string symbol = 2; string timeframe = 3; EventFilter filter = 4; repeated string windows = 5; }
+message EventObservation { string event_id = 1; sint64 occurred_at_ms = 2; sint64 aligned_bar_ms = 3; map<string, double> returns = 4; }
+message EventExclusion { string event_id = 1; string reason = 2; }
+message EventWindowSummary { string window = 1; uint32 count = 2; double mean = 3; double median = 4; }
+message EventStudyResponse { string event_snapshot = 1; string bar_snapshot = 2; string methodology_version = 3; repeated EventObservation eligible_events = 4; repeated EventExclusion excluded_events = 5; repeated EventWindowSummary windows = 6; }
+service EventStudyService {
+  rpc QueryEvents(QueryEventsRequest) returns (QueryEventsResponse);
+  rpc RunEventStudy(EventStudyRequest) returns (EventStudyResponse);
+}
+
 message PrimitiveInfo {
   string pack = 1;
   string type = 2;
@@ -135,9 +168,9 @@ message RunRequest {
 }
 
 // StudyAssumptions are the user-visible execution choices for one run.
-// initial_equity is a positive whole USD amount: 50 means $50. EquityChunk,
-// net_pnl, commission_flat, and persisted result money values are integer USD
-// cents. Price and spread/slippage fields remain instrument ticks.
+// initial_equity, EquityChunk, net_pnl, commission_flat, and persisted result
+// money values are integer USD cents: 1,000,000 means $10,000. Price and
+// spread/slippage fields remain instrument ticks.
 message StudyAssumptions {
   sint64 initial_equity = 1;
   double risk_per_trade = 2;

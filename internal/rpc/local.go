@@ -12,10 +12,13 @@ import (
 	"github.com/Bcypher01/Assay/internal/analytics"
 	"github.com/Bcypher01/Assay/internal/core"
 	"github.com/Bcypher01/Assay/internal/engine"
+	"github.com/Bcypher01/Assay/internal/event"
+	"github.com/Bcypher01/Assay/internal/eventstudy"
 	"github.com/Bcypher01/Assay/internal/instrument"
 	"github.com/Bcypher01/Assay/internal/ir"
 	"github.com/Bcypher01/Assay/internal/library"
 	"github.com/Bcypher01/Assay/internal/runstore"
+	"github.com/Bcypher01/Assay/internal/setuptest"
 	"github.com/Bcypher01/Assay/internal/sim"
 	"github.com/Bcypher01/Assay/internal/store"
 	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
@@ -104,7 +107,201 @@ func NewLocalServerWithServices(cache *store.LocalStore, registry *instrument.Re
 		}
 		return runLocal(ctx, cache, registry, history, req, send)
 	}
+	s.SetupChartFn = func(ctx context.Context, req setuptest.ChartRequest) (setuptest.Chart, error) {
+		if req.FromMS >= req.ToMS {
+			return setuptest.Chart{}, fmt.Errorf("setup chart: fromMs must be before toMs")
+		}
+		tf, err := core.ParseTF(req.Timeframe)
+		if err != nil {
+			return setuptest.Chart{}, err
+		}
+		spec, err := registry.Get(req.Symbol)
+		if err != nil {
+			return setuptest.Chart{}, err
+		}
+		if req.Prepare {
+			if loader == nil {
+				return setuptest.Chart{}, fmt.Errorf("setup chart: data preparation is not configured")
+			}
+			request, err := loader.DeriveRequest([]string{req.Symbol}, []core.TF{tf}, core.Time(req.FromMS), core.Time(req.ToMS))
+			if err != nil {
+				return setuptest.Chart{}, err
+			}
+			if err := loader.Ensure(ctx, request, nil); err != nil {
+				return setuptest.Chart{}, err
+			}
+		}
+		series, manifests, err := cache.Load(ctx, req.Symbol, tf, core.Time(req.FromMS), core.Time(req.ToMS))
+		if err != nil {
+			return setuptest.Chart{}, err
+		}
+		if len(manifests) == 0 || series.Len() == 0 {
+			return setuptest.Chart{}, fmt.Errorf("setup chart: no prepared bars for the requested window")
+		}
+		maxBars := req.MaxBars
+		if maxBars <= 0 || maxBars > 1000 {
+			maxBars = 300
+		}
+		from := 0
+		if series.Len() > maxBars {
+			from = series.Len() - maxBars
+		}
+		out := setuptest.Chart{Symbol: req.Symbol, Timeframe: tf.String(), TickSize: spec.TickSize, PipTicks: spec.PipTicks, Snapshot: store.SnapshotHash(manifests), Bars: make([]setuptest.Bar, 0, series.Len()-from)}
+		for i := from; i < series.Len(); i++ {
+			out.Bars = append(out.Bars, setuptest.Bar{TimeMS: series.Time[i].Millis(), Open: series.Open[i], High: series.High[i], Low: series.Low[i], Close: series.Close[i], Volume: series.Volume[i]})
+		}
+		out.FromMS, out.ToMS = out.Bars[0].TimeMS, out.Bars[len(out.Bars)-1].TimeMS+tf.Millis()
+		return out, nil
+	}
+	s.SetupPreviewFn = func(ctx context.Context, req setuptest.PreviewRequest) (setuptest.Preview, error) {
+		if req.FromMS >= req.ToMS {
+			return setuptest.Preview{}, fmt.Errorf("setup preview: fromMs must be before toMs")
+		}
+		tf, err := core.ParseTF(req.Drawing.Timeframe)
+		if err != nil {
+			return setuptest.Preview{}, err
+		}
+		series, manifests, err := cache.Load(ctx, req.Drawing.Symbol, tf, core.Time(req.FromMS), core.Time(req.ToMS))
+		if err != nil {
+			return setuptest.Preview{}, err
+		}
+		if len(manifests) == 0 || series.Len() == 0 {
+			return setuptest.Preview{}, fmt.Errorf("setup preview: prepare the requested historical window first")
+		}
+		spec, err := registry.Get(req.Drawing.Symbol)
+		if err != nil {
+			return setuptest.Preview{}, err
+		}
+		return setuptest.Evaluate(ctx, req.Drawing, series, *spec, store.SnapshotHash(manifests))
+	}
+	s.SetupRunFn = func(ctx context.Context, req setuptest.RunRequest) (*assayv1.RunSummary, error) {
+		strategy, err := setuptest.Compile(req.Drawing)
+		if err != nil {
+			return nil, err
+		}
+		strategyJSON, err := json.Marshal(strategy)
+		if err != nil {
+			return nil, fmt.Errorf("setup run: encode strategy: %w", err)
+		}
+		initialEquity := req.Assumptions.InitialEquity
+		if initialEquity <= 0 {
+			initialEquity = 1_000_000
+		}
+		risk := req.Assumptions.RiskPerTrade
+		if risk <= 0 {
+			risk = req.Drawing.RiskPerTrade
+		}
+		return s.RunFn(ctx, &assayv1.RunRequest{
+			StrategyJson: strategyJSON, FromMs: req.FromMS, ToMs: req.ToMS,
+			Assumptions: &assayv1.StudyAssumptions{InitialEquity: initialEquity, RiskPerTrade: risk, SpreadTicks: req.Assumptions.SpreadTicks, SlippageTicks: req.Assumptions.SlippageTicks, FillPolicy: "next_open"},
+		}, func(*assayv1.RunUpdate) error { return nil })
+	}
 	return s, nil
+}
+
+// NewLocalServerWithEventServices adds snapshot-backed event exploration and
+// studies to the standard local server. Event requests are cache-only: missing
+// bars or an unknown snapshot are errors, never silently treated as no events.
+func NewLocalServerWithEventServices(cache *store.LocalStore, registry *instrument.Registry, loader *library.Loader, history runstore.Store, events *event.Store) (*Server, error) {
+	s, err := NewLocalServerWithServices(cache, registry, loader, history)
+	if err != nil {
+		return nil, err
+	}
+	if events == nil {
+		return s, nil
+	}
+	s.ListEventSnapshotsFn = events.List
+	load := func(ctx context.Context, hash string) (event.Snapshot, error) {
+		if hash == "" {
+			return event.Snapshot{}, fmt.Errorf("rpc: event snapshot is required")
+		}
+		return events.Load(ctx, hash)
+	}
+	s.QueryEventsFn = func(ctx context.Context, req *assayv1.QueryEventsRequest) (*assayv1.QueryEventsResponse, error) {
+		snapshot, err := load(ctx, req.Snapshot)
+		if err != nil {
+			return nil, err
+		}
+		filter, err := eventFilter(req.Filter)
+		if err != nil {
+			return nil, err
+		}
+		out := &assayv1.QueryEventsResponse{Snapshot: snapshot.Manifest.ContentHash}
+		for _, e := range snapshot.Query(filter) {
+			out.Events = append(out.Events, eventRecord(e))
+		}
+		return out, nil
+	}
+	s.RunEventStudyFn = func(ctx context.Context, req *assayv1.EventStudyRequest) (*assayv1.EventStudyResponse, error) {
+		if req.Symbol == "" || req.Timeframe == "" {
+			return nil, fmt.Errorf("rpc: event study symbol and timeframe are required")
+		}
+		snapshot, err := load(ctx, req.Snapshot)
+		if err != nil {
+			return nil, err
+		}
+		filter, err := eventFilter(req.Filter)
+		if err != nil {
+			return nil, err
+		}
+		if filter.From == 0 || filter.To == 0 || filter.To <= filter.From {
+			return nil, fmt.Errorf("rpc: event study filter requires a valid from_ms and to_ms")
+		}
+		tf, err := core.ParseTF(req.Timeframe)
+		if err != nil {
+			return nil, err
+		}
+		windows := make([]core.TF, 0, len(req.Windows))
+		for _, raw := range req.Windows {
+			w, err := core.ParseTF(raw)
+			if err != nil {
+				return nil, err
+			}
+			windows = append(windows, w)
+		}
+		series, manifests, err := cache.Load(ctx, req.Symbol, tf, filter.From, filter.To)
+		if err != nil {
+			return nil, err
+		}
+		if len(manifests) == 0 {
+			return nil, fmt.Errorf("rpc: event study bars are not prepared locally")
+		}
+		result, err := eventstudy.Run(eventstudy.Request{Events: snapshot, Series: series, Filter: filter, Windows: windows, BarSnapshot: store.SnapshotHash(manifests)})
+		if err != nil {
+			return nil, err
+		}
+		out := &assayv1.EventStudyResponse{EventSnapshot: result.EventSnapshot, BarSnapshot: result.BarSnapshot, MethodologyVersion: result.MethodologyVersion}
+		for _, o := range result.Eligible {
+			out.EligibleEvents = append(out.EligibleEvents, &assayv1.EventObservation{EventId: o.EventID, OccurredAtMs: int64(o.OccurredAt), AlignedBarMs: int64(o.AlignedBar), Returns: o.Returns})
+		}
+		for _, x := range result.Excluded {
+			out.ExcludedEvents = append(out.ExcludedEvents, &assayv1.EventExclusion{EventId: x.EventID, Reason: x.Reason})
+		}
+		for _, w := range result.Windows {
+			out.Windows = append(out.Windows, &assayv1.EventWindowSummary{Window: w.Window, Count: uint32(w.Count), Mean: w.Mean, Median: w.Median})
+		}
+		return out, nil
+	}
+	return s, nil
+}
+
+func eventFilter(in *assayv1.EventFilter) (event.Filter, error) {
+	if in == nil {
+		return event.Filter{}, nil
+	}
+	out := event.Filter{From: core.Time(in.FromMs), To: core.Time(in.ToMs), AsOf: core.Time(in.AsOfMs), MinimumImpact: event.Impact(in.MinimumImpact)}
+	for _, k := range in.Kinds {
+		kind := event.Kind(k)
+		if !event.IsKnownKind(kind) {
+			return out, fmt.Errorf("rpc: unknown event kind %q", k)
+		}
+		out.Kinds = append(out.Kinds, kind)
+	}
+	out.Currencies = append(out.Currencies, in.Currencies...)
+	return out, nil
+}
+func eventRecord(e event.Event) *assayv1.EventRecord {
+	return &assayv1.EventRecord{Id: e.ID, OccurredAtMs: int64(e.OccurredAt), KnowledgeAtMs: int64(e.KnowledgeAt), Precision: string(e.Precision), Kind: string(e.Kind), Title: e.Title, Jurisdiction: e.Jurisdiction, Currencies: append([]string(nil), e.Currencies...), Impact: string(e.Impact), Status: string(e.Status), Source: e.Source.Provider}
 }
 
 // runCostFree reports the effective simulator configuration, not merely wire
@@ -296,7 +493,10 @@ func runLocal(ctx context.Context, cache *store.LocalStore, registry *instrument
 	if history != nil {
 		study := &analytics.Study{Strategy: &strategy, Snapshot: snapshot, Scope: analytics.Scope{Instruments: append([]string(nil), strategy.Universe.Symbols...), Period: strconv.FormatInt(req.FromMs, 10) + "-" + strconv.FormatInt(req.ToMs, 10)}, Assumptions: effectiveAssumptions(config), WalkForward: defaultWalkForward(series.Len()), MonteCarlo: analytics.MCConfig{Samples: 1000, BlockLength: 5, Seed: stableSeed(strategy.Hash())}}
 		nearMisses := make([]analytics.NearMiss, 0, len(nearMiss.SlotFailures))
-		for _, condition := range []string{"bias", "poi", "trigger"} {
+		// V1 uses bias/poi/trigger while V2 and semantic drawings use explicit
+		// long/short branches. Preserve both diagnostic vocabularies so a setup
+		// test never loses its "why no trade?" evidence when persisted.
+		for _, condition := range []string{"bias", "poi", "trigger", "long", "short", "entry_conflict"} {
 			if count := nearMiss.SlotFailures[condition]; count > 0 {
 				nearMisses = append(nearMisses, analytics.NearMiss{Condition: condition, Count: count})
 			}
@@ -463,19 +663,20 @@ func effectiveAssumptions(cfg sim.Config) analytics.Assumptions {
 // non-zero defaults; a client therefore cannot accidentally obtain a free-fill
 // backtest by omitting execution fields.
 func runConfig(spec instrument.Spec, strategy *ir.Strategy, a *assayv1.StudyAssumptions) (sim.Config, error) {
-	// Internally account values are USD cents. The user-facing request accepts
-	// whole USD so entering 50 always means a $50 account, not fifty cents.
-	// A $100 default is paired with the strategy's percentage-risk setting,
+	// Account values use USD cents end to end. Keeping the request in the same
+	// unit as streamed and persisted money prevents clients from being scaled
+	// by 100 at the simulator boundary. A $10,000 default is paired with the
+	// strategy's percentage-risk setting,
 	// never an implicit one-lot position.
-	cfg := sim.Config{Spec: spec, Risk: sim.RiskModel{InitialEquity: 10_000, RiskPerTrade: core.RatioFromFloat(.01)}}
+	cfg := sim.Config{Spec: spec, Risk: sim.RiskModel{InitialEquity: 1_000_000, RiskPerTrade: core.RatioFromFloat(.01)}}
 	if strategy != nil && strategy.Risk.PerTrade > 0 {
 		cfg.Risk.RiskPerTrade = strategy.Risk.PerTrade
 	}
 	if a == nil {
 		return cfg, nil
 	}
-	if a.InitialEquity <= 0 || a.InitialEquity > math.MaxInt64/100 {
-		return sim.Config{}, fmt.Errorf("rpc: assumptions.initial_equity must be a positive whole USD amount")
+	if a.InitialEquity <= 0 {
+		return sim.Config{}, fmt.Errorf("rpc: assumptions.initial_equity must be a positive USD-cent amount")
 	}
 	if a.RiskPerTrade < 0 || a.RiskPerTrade > 1 || math.IsNaN(a.RiskPerTrade) || math.IsInf(a.RiskPerTrade, 0) {
 		return sim.Config{}, fmt.Errorf("rpc: assumptions.risk_per_trade must be between 0 and 1")
@@ -489,7 +690,7 @@ func runConfig(spec instrument.Spec, strategy *ir.Strategy, a *assayv1.StudyAssu
 	if a.FillPolicy != "" && a.FillPolicy != "next_open" {
 		return sim.Config{}, fmt.Errorf("rpc: assumptions.fill_policy only supports next_open")
 	}
-	cfg.Risk.InitialEquity = core.Price(a.InitialEquity * 100)
+	cfg.Risk.InitialEquity = core.Price(a.InitialEquity)
 	if a.RiskPerTrade > 0 {
 		cfg.Risk.RiskPerTrade = core.RatioFromFloat(a.RiskPerTrade)
 		cfg.Risk.FixedLots = 0

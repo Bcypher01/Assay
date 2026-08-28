@@ -23,6 +23,8 @@ const _ = connect.IsAtLeastVersion1_13_0
 const (
 	// DataServiceName is the fully-qualified name of the DataService service.
 	DataServiceName = "assay.v1.DataService"
+	// EventStudyServiceName is the fully-qualified name of the EventStudyService service.
+	EventStudyServiceName = "assay.v1.EventStudyService"
 	// PrimitiveServiceName is the fully-qualified name of the PrimitiveService service.
 	PrimitiveServiceName = "assay.v1.PrimitiveService"
 	// StudyServiceName is the fully-qualified name of the StudyService service.
@@ -48,6 +50,12 @@ const (
 	DataServiceDataStatusProcedure = "/assay.v1.DataService/DataStatus"
 	// DataServiceEnsureDataProcedure is the fully-qualified name of the DataService's EnsureData RPC.
 	DataServiceEnsureDataProcedure = "/assay.v1.DataService/EnsureData"
+	// EventStudyServiceQueryEventsProcedure is the fully-qualified name of the EventStudyService's
+	// QueryEvents RPC.
+	EventStudyServiceQueryEventsProcedure = "/assay.v1.EventStudyService/QueryEvents"
+	// EventStudyServiceRunEventStudyProcedure is the fully-qualified name of the EventStudyService's
+	// RunEventStudy RPC.
+	EventStudyServiceRunEventStudyProcedure = "/assay.v1.EventStudyService/RunEventStudy"
 	// PrimitiveServiceListPrimitivesProcedure is the fully-qualified name of the PrimitiveService's
 	// ListPrimitives RPC.
 	PrimitiveServiceListPrimitivesProcedure = "/assay.v1.PrimitiveService/ListPrimitives"
@@ -195,6 +203,102 @@ func (UnimplementedDataServiceHandler) DataStatus(context.Context, *connect.Requ
 
 func (UnimplementedDataServiceHandler) EnsureData(context.Context, *connect.Request[v1.EnsureDataRequest], *connect.ServerStream[v1.Progress]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("assay.v1.DataService.EnsureData is not implemented"))
+}
+
+// EventStudyServiceClient is a client for the assay.v1.EventStudyService service.
+type EventStudyServiceClient interface {
+	QueryEvents(context.Context, *connect.Request[v1.QueryEventsRequest]) (*connect.Response[v1.QueryEventsResponse], error)
+	RunEventStudy(context.Context, *connect.Request[v1.EventStudyRequest]) (*connect.Response[v1.EventStudyResponse], error)
+}
+
+// NewEventStudyServiceClient constructs a client for the assay.v1.EventStudyService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewEventStudyServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) EventStudyServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	eventStudyServiceMethods := v1.File_proto_assay_v1_service_proto.Services().ByName("EventStudyService").Methods()
+	return &eventStudyServiceClient{
+		queryEvents: connect.NewClient[v1.QueryEventsRequest, v1.QueryEventsResponse](
+			httpClient,
+			baseURL+EventStudyServiceQueryEventsProcedure,
+			connect.WithSchema(eventStudyServiceMethods.ByName("QueryEvents")),
+			connect.WithClientOptions(opts...),
+		),
+		runEventStudy: connect.NewClient[v1.EventStudyRequest, v1.EventStudyResponse](
+			httpClient,
+			baseURL+EventStudyServiceRunEventStudyProcedure,
+			connect.WithSchema(eventStudyServiceMethods.ByName("RunEventStudy")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// eventStudyServiceClient implements EventStudyServiceClient.
+type eventStudyServiceClient struct {
+	queryEvents   *connect.Client[v1.QueryEventsRequest, v1.QueryEventsResponse]
+	runEventStudy *connect.Client[v1.EventStudyRequest, v1.EventStudyResponse]
+}
+
+// QueryEvents calls assay.v1.EventStudyService.QueryEvents.
+func (c *eventStudyServiceClient) QueryEvents(ctx context.Context, req *connect.Request[v1.QueryEventsRequest]) (*connect.Response[v1.QueryEventsResponse], error) {
+	return c.queryEvents.CallUnary(ctx, req)
+}
+
+// RunEventStudy calls assay.v1.EventStudyService.RunEventStudy.
+func (c *eventStudyServiceClient) RunEventStudy(ctx context.Context, req *connect.Request[v1.EventStudyRequest]) (*connect.Response[v1.EventStudyResponse], error) {
+	return c.runEventStudy.CallUnary(ctx, req)
+}
+
+// EventStudyServiceHandler is an implementation of the assay.v1.EventStudyService service.
+type EventStudyServiceHandler interface {
+	QueryEvents(context.Context, *connect.Request[v1.QueryEventsRequest]) (*connect.Response[v1.QueryEventsResponse], error)
+	RunEventStudy(context.Context, *connect.Request[v1.EventStudyRequest]) (*connect.Response[v1.EventStudyResponse], error)
+}
+
+// NewEventStudyServiceHandler builds an HTTP handler from the service implementation. It returns
+// the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewEventStudyServiceHandler(svc EventStudyServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	eventStudyServiceMethods := v1.File_proto_assay_v1_service_proto.Services().ByName("EventStudyService").Methods()
+	eventStudyServiceQueryEventsHandler := connect.NewUnaryHandler(
+		EventStudyServiceQueryEventsProcedure,
+		svc.QueryEvents,
+		connect.WithSchema(eventStudyServiceMethods.ByName("QueryEvents")),
+		connect.WithHandlerOptions(opts...),
+	)
+	eventStudyServiceRunEventStudyHandler := connect.NewUnaryHandler(
+		EventStudyServiceRunEventStudyProcedure,
+		svc.RunEventStudy,
+		connect.WithSchema(eventStudyServiceMethods.ByName("RunEventStudy")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/assay.v1.EventStudyService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case EventStudyServiceQueryEventsProcedure:
+			eventStudyServiceQueryEventsHandler.ServeHTTP(w, r)
+		case EventStudyServiceRunEventStudyProcedure:
+			eventStudyServiceRunEventStudyHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedEventStudyServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedEventStudyServiceHandler struct{}
+
+func (UnimplementedEventStudyServiceHandler) QueryEvents(context.Context, *connect.Request[v1.QueryEventsRequest]) (*connect.Response[v1.QueryEventsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("assay.v1.EventStudyService.QueryEvents is not implemented"))
+}
+
+func (UnimplementedEventStudyServiceHandler) RunEventStudy(context.Context, *connect.Request[v1.EventStudyRequest]) (*connect.Response[v1.EventStudyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("assay.v1.EventStudyService.RunEventStudy is not implemented"))
 }
 
 // PrimitiveServiceClient is a client for the assay.v1.PrimitiveService service.

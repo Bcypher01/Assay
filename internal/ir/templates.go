@@ -10,6 +10,8 @@ import (
 // label. A template is executable input, so using "EUR/USD" here would leave a
 // new installation unable to resolve its instrument or prepare its data.
 const exampleSymbol = "DUKAS:EURUSD"
+const bitcoinSymbol = "BINANCE:BTCUSDT"
+const ethereumSymbol = "BINANCE:ETHUSDT"
 
 const (
 	MovingAverageCrossoverTemplateID       = "moving-average-crossover"
@@ -24,6 +26,12 @@ const (
 	SessionBreakoutTemplateVersion         = 1
 	LiquiditySweepStructureTemplateID      = "liquidity-sweep-structure-confirmation"
 	LiquiditySweepStructureTemplateVersion = 1
+	BitcoinPullbackTemplateID              = "bitcoin-pullback-20sma"
+	BitcoinPullbackTemplateVersion         = 1
+	EthereumBreakoutTemplateID             = "ethereum-range-breakout"
+	EthereumBreakoutTemplateVersion        = 1
+	BitcoinSweepShiftTemplateID            = "bitcoin-sweep-structure-shift"
+	BitcoinSweepShiftTemplateVersion       = 1
 )
 
 // TemplateDefinition is stable catalogue metadata for a strategy that can be
@@ -49,6 +57,9 @@ func PopularTemplates() []TemplateDefinition {
 		{BollingerReversionTemplateID, BollingerReversionTemplateVersion, "Bollinger-band mean reversion", "Mean reversion", "Looks for price to return inside a stretched Bollinger band.", "High", NewBollingerReversion},
 		{SessionBreakoutTemplateID, SessionBreakoutTemplateVersion, "London session breakout", "Price action", "Trades a break of a completed session range using an explicit UTC window.", "Medium", NewSessionBreakout},
 		{LiquiditySweepStructureTemplateID, LiquiditySweepStructureTemplateVersion, "Liquidity sweep with market-structure confirmation", "SMC workflow", "Waits for a sweep and a later directional structure confirmation.", "Low", NewLiquiditySweepStructure},
+		{BitcoinPullbackTemplateID, BitcoinPullbackTemplateVersion, "Bitcoin pullback to the 20-period average", "Crypto trend following", "Waits for BTC to pull back to its 20-period average before entering in the trend direction.", "Medium", NewBitcoinPullback},
+		{EthereumBreakoutTemplateID, EthereumBreakoutTemplateVersion, "Ethereum range compression breakout", "Crypto price action", "Enters when ETH leaves a tight range with a decisive close.", "Medium", NewEthereumRangeBreakout},
+		{BitcoinSweepShiftTemplateID, BitcoinSweepShiftTemplateVersion, "Bitcoin liquidity sweep, then structure shift", "Crypto SMC workflow", "Waits for BTC to sweep a prior extreme and confirm a directional structure shift.", "Low", NewBitcoinSweepShift},
 	}
 }
 
@@ -261,6 +272,79 @@ func NewLiquiditySweepStructure() *Strategy {
 			Short: EntryBranch{Enabled: true, Name: "Bearish sweep followed by bearish structure", When: Expression{After: &OccursAfter{
 				Event: Expression{Node: "bearish-structure"}, Predecessor: Expression{Node: "bearish-sweep"}, WithinBars: 5,
 			}}},
+		},
+		Nodes: []Node{
+			{ID: "bullish-sweep", Pack: "smc", Type: "liquidity_sweep_bullish", Params: sweepParams(), Timeframe: core.TFH1},
+			{ID: "bearish-sweep", Pack: "smc", Type: "liquidity_sweep_bearish", Params: sweepParams(), Timeframe: core.TFH1},
+			{ID: "bullish-structure", Pack: "smc", Type: "market_structure_bullish", Params: structureParams(), Timeframe: core.TFH1},
+			{ID: "bearish-structure", Pack: "smc", Type: "market_structure_bearish", Params: structureParams(), Timeframe: core.TFH1},
+		},
+	}
+}
+
+func cryptoRisk(stop, target float64) Risk {
+	return Risk{
+		Stop:     core.Distance{Unit: core.UnitPercent, Value: core.RatioFromFloat(stop)},
+		Target:   core.Distance{Unit: core.UnitPercent, Value: core.RatioFromFloat(target)},
+		PerTrade: core.RatioFromFloat(0.005),
+	}
+}
+
+// NewBitcoinPullback uses percentage exits because BTC's price scale makes FX
+// pip distances misleading. It retains the same two-sided structure as the
+// rest of the catalogue so both directional conditions are explicit.
+func NewBitcoinPullback() *Strategy {
+	return &Strategy{
+		Schema: SchemaV2, Name: "Bitcoin pullback to the 20-period average",
+		Universe:   Universe{Symbols: []string{bitcoinSymbol}},
+		Timeframes: map[string]core.TF{"bias": core.TFH4, "poi": core.TFH4, "entry": core.TFH4},
+		Risk:       cryptoRisk(1.5, 3.0),
+		Template:   Template{ID: BitcoinPullbackTemplateID, Version: BitcoinPullbackTemplateVersion},
+		Entries: Entries{Timing: EntryTimingNextOpen,
+			Long: EntryBranch{Enabled: true, Name: "Bullish 20-period average pullback", When: Expression{All: []Expression{
+				{Price: &PriceLevelPredicate{Node: "trend", Source: PriceClose, Relation: PriceAbove}},
+				{Price: &PriceLevelPredicate{Node: "average", Source: PriceClose, Relation: PriceCrossesAbove}},
+			}}},
+			Short: EntryBranch{Enabled: true, Name: "Bearish 20-period average pullback", When: Expression{All: []Expression{
+				{Price: &PriceLevelPredicate{Node: "trend", Source: PriceClose, Relation: PriceBelow}},
+				{Price: &PriceLevelPredicate{Node: "average", Source: PriceClose, Relation: PriceCrossesBelow}},
+			}}},
+		},
+		Nodes: []Node{
+			{ID: "trend", Pack: "indicator", Type: "sma", Params: json.RawMessage(`{"period":50}`), Timeframe: core.TFH4},
+			{ID: "average", Pack: "indicator", Type: "sma", Params: json.RawMessage(`{"period":20}`), Timeframe: core.TFH4},
+		},
+	}
+}
+
+func NewEthereumRangeBreakout() *Strategy {
+	return &Strategy{
+		Schema: SchemaV2, Name: "Ethereum range compression breakout",
+		Universe:   Universe{Symbols: []string{ethereumSymbol}},
+		Timeframes: map[string]core.TF{"bias": core.TFH1, "poi": core.TFH1, "entry": core.TFH1},
+		Risk:       cryptoRisk(1.2, 2.4),
+		Template:   Template{ID: EthereumBreakoutTemplateID, Version: EthereumBreakoutTemplateVersion},
+		Entries: Entries{Timing: EntryTimingNextOpen,
+			Long:  EntryBranch{Enabled: true, Name: "Close crosses above the 20-bar high", When: Expression{Price: &PriceLevelPredicate{Node: "channel-high", Source: PriceClose, Relation: PriceCrossesAbove}}},
+			Short: EntryBranch{Enabled: true, Name: "Close crosses below the 20-bar low", When: Expression{Price: &PriceLevelPredicate{Node: "channel-low", Source: PriceClose, Relation: PriceCrossesBelow}}},
+		},
+		Nodes: []Node{
+			{ID: "channel-high", Pack: "indicator", Type: "donchian_high", Params: json.RawMessage(`{"period":20}`), Timeframe: core.TFH1},
+			{ID: "channel-low", Pack: "indicator", Type: "donchian_low", Params: json.RawMessage(`{"period":20}`), Timeframe: core.TFH1},
+		},
+	}
+}
+
+func NewBitcoinSweepShift() *Strategy {
+	return &Strategy{
+		Schema: SchemaV2, Name: "Bitcoin liquidity sweep, then structure shift",
+		Universe:   Universe{Symbols: []string{bitcoinSymbol}},
+		Timeframes: map[string]core.TF{"bias": core.TFH1, "poi": core.TFH1, "entry": core.TFH1},
+		Risk:       cryptoRisk(1.0, 2.5),
+		Template:   Template{ID: BitcoinSweepShiftTemplateID, Version: BitcoinSweepShiftTemplateVersion},
+		Entries: Entries{Timing: EntryTimingNextOpen,
+			Long:  EntryBranch{Enabled: true, Name: "Bullish sweep followed by bullish structure", When: Expression{After: &OccursAfter{Event: Expression{Node: "bullish-structure"}, Predecessor: Expression{Node: "bullish-sweep"}, WithinBars: 5}}},
+			Short: EntryBranch{Enabled: true, Name: "Bearish sweep followed by bearish structure", When: Expression{After: &OccursAfter{Event: Expression{Node: "bearish-structure"}, Predecessor: Expression{Node: "bearish-sweep"}, WithinBars: 5}}},
 		},
 		Nodes: []Node{
 			{ID: "bullish-sweep", Pack: "smc", Type: "liquidity_sweep_bullish", Params: sweepParams(), Timeframe: core.TFH1},

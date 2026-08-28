@@ -14,6 +14,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/Bcypher01/Assay/internal/analytics"
 	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/Bcypher01/Assay/internal/event"
 	"github.com/Bcypher01/Assay/internal/instrument"
 	"github.com/Bcypher01/Assay/internal/ir"
 	"github.com/Bcypher01/Assay/internal/onboarding"
@@ -31,6 +32,9 @@ var ErrNotConfigured = errors.New("rpc: backend not configured")
 type EnsureDataFunc func(context.Context, *assayv1.EnsureDataRequest, func(*assayv1.Progress) error) error
 type DataStatusFunc func(context.Context, *assayv1.EnsureDataRequest) (*assayv1.DataStatusResponse, error)
 type EvaluateFunc func(context.Context, *assayv1.EvaluatePrimitiveRequest) (*assayv1.EvaluatePrimitiveResponse, error)
+type QueryEventsFunc func(context.Context, *assayv1.QueryEventsRequest) (*assayv1.QueryEventsResponse, error)
+type RunEventStudyFunc func(context.Context, *assayv1.EventStudyRequest) (*assayv1.EventStudyResponse, error)
+type ListEventSnapshotsFunc func(context.Context) ([]event.SnapshotMetadata, error)
 
 // RunFunc returns the one terminal summary. Updates supplied to send must be
 // non-terminal updates, which keeps exactly-once terminal delivery enforceable
@@ -49,10 +53,13 @@ type Server struct {
 	Registry    *primitive.Registry
 	Instruments []*assayv1.Instrument
 
-	EnsureDataFn EnsureDataFunc
-	DataStatusFn DataStatusFunc
-	EvaluateFn   EvaluateFunc
-	RunFn        RunFunc
+	EnsureDataFn         EnsureDataFunc
+	DataStatusFn         DataStatusFunc
+	EvaluateFn           EvaluateFunc
+	QueryEventsFn        QueryEventsFunc
+	RunEventStudyFn      RunEventStudyFunc
+	ListEventSnapshotsFn ListEventSnapshotsFunc
+	RunFn                RunFunc
 	// RunStore is the production history backend. The function fields remain
 	// available for small embedding applications and transport tests.
 	RunStore   runstore.Store
@@ -80,9 +87,12 @@ func NewHandler(s *Server) http.Handler {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/onboarding.json", onboardingHandler)
+	mux.HandleFunc("/event-snapshots", s.eventSnapshotsHandler)
 	mux.HandleFunc("/openapi.json", openAPIHandler)
 	mux.HandleFunc("/docs", swaggerHandler)
 	path, h := assayv1connect.NewDataServiceHandler(s)
+	mux.Handle(path, h)
+	path, h = assayv1connect.NewEventStudyServiceHandler(s)
 	mux.Handle(path, h)
 	path, h = assayv1connect.NewPrimitiveServiceHandler(s)
 	mux.Handle(path, h)
@@ -93,6 +103,59 @@ func NewHandler(s *Server) http.Handler {
 	path, h = assayv1connect.NewRunServiceHandler(s)
 	mux.Handle(path, h)
 	return withEmptyJSON(mux)
+}
+
+// eventSnapshotsHandler is deliberately ordinary read-only JSON: the static
+// client can populate its event-snapshot picker before it constructs a
+// ConnectRPC client. The detailed event records remain available only through
+// QueryEvents, which requires an explicit content hash.
+func (s *Server) eventSnapshotsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.ListEventSnapshotsFn == nil {
+		http.Error(w, ErrNotConfigured.Error(), http.StatusNotImplemented)
+		return
+	}
+	items, err := s.ListEventSnapshotsFn(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(struct {
+		Snapshots []event.SnapshotMetadata `json:"snapshots"`
+	}{Snapshots: items})
+}
+
+func (s *Server) QueryEvents(ctx context.Context, req *connect.Request[assayv1.QueryEventsRequest]) (*connect.Response[assayv1.QueryEventsResponse], error) {
+	if s.QueryEventsFn == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, ErrNotConfigured)
+	}
+	out, err := s.QueryEventsFn(ctx, req.Msg)
+	if err != nil {
+		return nil, asConnectError(err)
+	}
+	if out == nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("rpc: event query returned nil response"))
+	}
+	return connect.NewResponse(out), nil
+}
+
+func (s *Server) RunEventStudy(ctx context.Context, req *connect.Request[assayv1.EventStudyRequest]) (*connect.Response[assayv1.EventStudyResponse], error) {
+	if s.RunEventStudyFn == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, ErrNotConfigured)
+	}
+	out, err := s.RunEventStudyFn(ctx, req.Msg)
+	if err != nil {
+		return nil, asConnectError(err)
+	}
+	if out == nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("rpc: event study returned nil response"))
+	}
+	return connect.NewResponse(out), nil
 }
 
 // onboardingHandler is intentionally a small ordinary JSON document so a

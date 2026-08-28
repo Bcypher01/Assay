@@ -17,6 +17,9 @@ cmd/pipeline     bar library builder, runs on a schedule, ships to nobody
 internal/core        fixed-point prices, time, timeframes, series, bitsets
 internal/instrument  instrument specs, calendars, cost models
 internal/store       Parquet bar format, manifests, local cache
+internal/event       immutable structured-event snapshots and query model
+internal/eventsource reviewed event-source adapters (curated catalogue first)
+internal/eventpipeline imports event sources into local snapshots
 internal/library     library fetch + direct-from-venue fallback
 internal/venue/*     per-venue download and decode
 internal/primitive   primitive interface, registry, memoisation cache
@@ -43,6 +46,15 @@ make race
 make lint
 make bench
 ```
+
+To import ten years of official BLS CPI and Employment Situation releases:
+
+```
+go run ./cmd/event-pipeline -provider bls -dir event-data -build-version v1
+```
+
+The checked-in curated catalogue remains available only for offline fixtures:
+`-provider curated`.
 
 ## Where to start reading
 

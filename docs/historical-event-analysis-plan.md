@@ -218,6 +218,18 @@ Once a provider is selected:
 - Add reconciliation that identifies additions, corrections, and revisions without modifying old snapshots.
 - Let users choose an event snapshot explicitly, with a sensible pinned default.
 
+### Current implementation note: local validation before R2 publishing
+
+The initial official BLS CPI/NFP archive is intentionally retained and tested
+locally first. Once its timestamps, coverage, and event-study results are
+accepted, publish the immutable snapshot and manifest through the existing
+Cloudflare R2 distribution path used by market bars. Store source documents
+only where their redistribution terms permit it; otherwise retain their hashes,
+source URLs, and retrieval metadata locally and publish the normalised snapshot
+plus manifest. Do not treat a mutable `latest` object as study input: it may be
+a convenience pointer only, while every study pins a content-addressed
+snapshot hash.
+
 ## API and UI
 
 Add a dedicated \`EventStudyService\`, keeping the current study API focused.
@@ -296,4 +308,3 @@ Build Phase 1 and Phase 2 around a curated set of high-impact USD events and EUR
 > Show the distribution of EURUSD's returns one hour and one day after high-impact US CPI releases from 2016-2026, including every underlying event and the precise snapshot used.
 
 Once that is reliable, add strategy-impact analysis before allowing event windows to change trading rules.
-

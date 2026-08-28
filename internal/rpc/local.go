@@ -12,6 +12,8 @@ import (
 	"github.com/Bcypher01/Assay/internal/analytics"
 	"github.com/Bcypher01/Assay/internal/core"
 	"github.com/Bcypher01/Assay/internal/engine"
+	"github.com/Bcypher01/Assay/internal/event"
+	"github.com/Bcypher01/Assay/internal/eventstudy"
 	"github.com/Bcypher01/Assay/internal/instrument"
 	"github.com/Bcypher01/Assay/internal/ir"
 	"github.com/Bcypher01/Assay/internal/library"
@@ -105,6 +107,111 @@ func NewLocalServerWithServices(cache *store.LocalStore, registry *instrument.Re
 		return runLocal(ctx, cache, registry, history, req, send)
 	}
 	return s, nil
+}
+
+// NewLocalServerWithEventServices adds snapshot-backed event exploration and
+// studies to the standard local server. Event requests are cache-only: missing
+// bars or an unknown snapshot are errors, never silently treated as no events.
+func NewLocalServerWithEventServices(cache *store.LocalStore, registry *instrument.Registry, loader *library.Loader, history runstore.Store, events *event.Store) (*Server, error) {
+	s, err := NewLocalServerWithServices(cache, registry, loader, history)
+	if err != nil {
+		return nil, err
+	}
+	if events == nil {
+		return s, nil
+	}
+	s.ListEventSnapshotsFn = events.List
+	load := func(ctx context.Context, hash string) (event.Snapshot, error) {
+		if hash == "" {
+			return event.Snapshot{}, fmt.Errorf("rpc: event snapshot is required")
+		}
+		return events.Load(ctx, hash)
+	}
+	s.QueryEventsFn = func(ctx context.Context, req *assayv1.QueryEventsRequest) (*assayv1.QueryEventsResponse, error) {
+		snapshot, err := load(ctx, req.Snapshot)
+		if err != nil {
+			return nil, err
+		}
+		filter, err := eventFilter(req.Filter)
+		if err != nil {
+			return nil, err
+		}
+		out := &assayv1.QueryEventsResponse{Snapshot: snapshot.Manifest.ContentHash}
+		for _, e := range snapshot.Query(filter) {
+			out.Events = append(out.Events, eventRecord(e))
+		}
+		return out, nil
+	}
+	s.RunEventStudyFn = func(ctx context.Context, req *assayv1.EventStudyRequest) (*assayv1.EventStudyResponse, error) {
+		if req.Symbol == "" || req.Timeframe == "" {
+			return nil, fmt.Errorf("rpc: event study symbol and timeframe are required")
+		}
+		snapshot, err := load(ctx, req.Snapshot)
+		if err != nil {
+			return nil, err
+		}
+		filter, err := eventFilter(req.Filter)
+		if err != nil {
+			return nil, err
+		}
+		if filter.From == 0 || filter.To == 0 || filter.To <= filter.From {
+			return nil, fmt.Errorf("rpc: event study filter requires a valid from_ms and to_ms")
+		}
+		tf, err := core.ParseTF(req.Timeframe)
+		if err != nil {
+			return nil, err
+		}
+		windows := make([]core.TF, 0, len(req.Windows))
+		for _, raw := range req.Windows {
+			w, err := core.ParseTF(raw)
+			if err != nil {
+				return nil, err
+			}
+			windows = append(windows, w)
+		}
+		series, manifests, err := cache.Load(ctx, req.Symbol, tf, filter.From, filter.To)
+		if err != nil {
+			return nil, err
+		}
+		if len(manifests) == 0 {
+			return nil, fmt.Errorf("rpc: event study bars are not prepared locally")
+		}
+		result, err := eventstudy.Run(eventstudy.Request{Events: snapshot, Series: series, Filter: filter, Windows: windows, BarSnapshot: store.SnapshotHash(manifests)})
+		if err != nil {
+			return nil, err
+		}
+		out := &assayv1.EventStudyResponse{EventSnapshot: result.EventSnapshot, BarSnapshot: result.BarSnapshot, MethodologyVersion: result.MethodologyVersion}
+		for _, o := range result.Eligible {
+			out.EligibleEvents = append(out.EligibleEvents, &assayv1.EventObservation{EventId: o.EventID, OccurredAtMs: int64(o.OccurredAt), AlignedBarMs: int64(o.AlignedBar), Returns: o.Returns})
+		}
+		for _, x := range result.Excluded {
+			out.ExcludedEvents = append(out.ExcludedEvents, &assayv1.EventExclusion{EventId: x.EventID, Reason: x.Reason})
+		}
+		for _, w := range result.Windows {
+			out.Windows = append(out.Windows, &assayv1.EventWindowSummary{Window: w.Window, Count: uint32(w.Count), Mean: w.Mean, Median: w.Median})
+		}
+		return out, nil
+	}
+	return s, nil
+}
+
+func eventFilter(in *assayv1.EventFilter) (event.Filter, error) {
+	if in == nil {
+		return event.Filter{}, nil
+	}
+	out := event.Filter{From: core.Time(in.FromMs), To: core.Time(in.ToMs), AsOf: core.Time(in.AsOfMs), MinimumImpact: event.Impact(in.MinimumImpact)}
+	for _, k := range in.Kinds {
+		kind := event.Kind(k)
+		if !event.IsKnownKind(kind) {
+			return out, fmt.Errorf("rpc: unknown event kind %q", k)
+		}
+		out.Kinds = append(out.Kinds, kind)
+	}
+	out.Currencies = append(out.Currencies, in.Currencies...)
+	return out, nil
+}
+func eventRecord(e event.Event) *assayv1.EventRecord {
+	return &assayv1.EventRecord{Id: e.ID, OccurredAtMs: int64(e.OccurredAt), KnowledgeAtMs: int64(e.KnowledgeAt), Precision: string(e.Precision), Kind: string(e.Kind), Title: e.Title, Jurisdiction: e.Jurisdiction, Currencies: append([]string(nil), e.Currencies...), Impact: string(e.Impact), Status: string(e.Status), Source: e.Source.Provider}
 }
 
 // runCostFree reports the effective simulator configuration, not merely wire

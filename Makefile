@@ -3,6 +3,7 @@
 build:
 	go build -trimpath -o bin/assay ./cmd/assay
 	go build -trimpath -o bin/pipeline ./cmd/pipeline
+	go build -trimpath -o bin/event-pipeline ./cmd/event-pipeline
 
 test:
 	go test ./...

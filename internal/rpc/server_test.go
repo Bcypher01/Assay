@@ -21,16 +21,23 @@ import (
 	"github.com/Bcypher01/Assay/proto/assay/v1/assayv1connect"
 )
 
-func TestSetupTestUIAndJSONBoundary(t *testing.T) {
+func TestSetupJSONBoundary(t *testing.T) {
 	handler := NewHandler(&Server{SetupChartFn: func(_ context.Context, req setuptest.ChartRequest) (setuptest.Chart, error) {
 		return setuptest.Chart{Symbol: req.Symbol, Timeframe: req.Timeframe, Snapshot: "fixed", Bars: []setuptest.Bar{{TimeMS: 1, Open: 10, High: 12, Low: 9, Close: 11}}}, nil
 	}})
 
-	uiRequest := httptest.NewRequest(http.MethodGet, "/setup/", nil)
+	// The server serves no interface. Root advertises the API entry points and
+	// nothing else; a redirect to an embedded page here would be a second copy
+	// of the UI waiting to diverge from the real one.
+	rootResponse := httptest.NewRecorder()
+	handler.ServeHTTP(rootResponse, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rootResponse.Code != http.StatusOK || !strings.Contains(rootResponse.Body.String(), `"service":"assay"`) {
+		t.Fatalf("root status=%d body=%q", rootResponse.Code, rootResponse.Body.String())
+	}
 	uiResponse := httptest.NewRecorder()
-	handler.ServeHTTP(uiResponse, uiRequest)
-	if uiResponse.Code != http.StatusOK || !strings.Contains(uiResponse.Body.String(), "Test setups like this") {
-		t.Fatalf("setup UI status=%d body=%q", uiResponse.Code, uiResponse.Body.String())
+	handler.ServeHTTP(uiResponse, httptest.NewRequest(http.MethodGet, "/setup/", nil))
+	if uiResponse.Code != http.StatusNotFound {
+		t.Fatalf("embedded setup UI is still mounted: status=%d", uiResponse.Code)
 	}
 
 	body, err := json.Marshal(setuptest.ChartRequest{Symbol: "DUKAS:EURUSD", Timeframe: "d1", FromMS: 1, ToMS: 2})

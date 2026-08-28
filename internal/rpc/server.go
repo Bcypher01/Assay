@@ -21,7 +21,6 @@ import (
 	"github.com/Bcypher01/Assay/internal/primitive"
 	"github.com/Bcypher01/Assay/internal/runstore"
 	"github.com/Bcypher01/Assay/internal/setuptest"
-	"github.com/Bcypher01/Assay/internal/setupui"
 	"github.com/Bcypher01/Assay/internal/sim"
 	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
 	"github.com/Bcypher01/Assay/proto/assay/v1/assayv1connect"
@@ -101,13 +100,29 @@ func NewHandler(s *Server) http.Handler {
 	mux.HandleFunc("/api/setup/chart", s.setupChartHandler)
 	mux.HandleFunc("/api/setup/preview", s.setupPreviewHandler)
 	mux.HandleFunc("/api/setup/run", s.setupRunHandler)
-	mux.Handle("/setup/", http.StripPrefix("/setup/", setupui.Handler()))
+	// The server ships no interface of its own. Assay's UI is a separate
+	// application that talks to this process over ConnectRPC and the setup
+	// JSON endpoints above; embedding a second, divergent copy of the same
+	// screens here is how the two drift apart. Root answers with the entry
+	// points a client needs rather than redirecting to a page that no longer
+	// exists.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
 			return
 		}
-		http.Redirect(w, r, "/setup/", http.StatusTemporaryRedirect)
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(struct {
+			Service string   `json:"service"`
+			Docs    string   `json:"docs"`
+			OpenAPI string   `json:"openapi"`
+			Setup   []string `json:"setup"`
+		}{
+			Service: "assay",
+			Docs:    "/docs",
+			OpenAPI: "/openapi.json",
+			Setup:   []string{"/api/setup/chart", "/api/setup/preview", "/api/setup/run"},
+		})
 	})
 	path, h := assayv1connect.NewDataServiceHandler(s)
 	mux.Handle(path, h)

@@ -58,10 +58,12 @@ go run ./cmd/event-pipeline -provider bls -dir event-data -build-version v1
 The checked-in curated catalogue remains available only for offline fixtures:
 `-provider curated`.
 
-The local **Setup Test** chart is available at `http://127.0.0.1:8080/setup/`.
-It lets a trader label and test break-and-retest, order-block, and breaker-block
-drawings without treating the drawing's absolute price as a historical rule.
-See [the Setup Test contract](docs/setup-test.md).
+The **Setup Test** chart lives in the Assay UI (`assay-ui`, the `/setup`
+screen) and talks to this server over the `/api/setup/*` endpoints. It lets a
+trader label and test break-and-retest, order-block, and breaker-block drawings
+without treating the drawing's absolute price as a historical rule. This server
+serves no interface of its own. See
+[the Setup Test contract](docs/setup-test.md).
 
 ## Where to start reading
 

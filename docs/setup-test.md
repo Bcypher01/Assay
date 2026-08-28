@@ -3,7 +3,9 @@
 Setup Test is Assay's chart-first path for evaluating a labelled EUR/USD setup
 without turning arbitrary drawing coordinates into hindsight-fitted rules.
 
-Open `http://127.0.0.1:<port>/setup/` after starting `assay`.
+The interface is the `/setup` screen in the Assay UI (`assay-ui`); this server
+exposes only the JSON endpoints below. Start `assay`, then run the UI and open
+its Setup test tool.
 
 ## User contract
 
@@ -53,7 +55,7 @@ zones, displacement strength, and close confirmation remain explicit inputs.
 
 ## Local API
 
-The dependency-free local UI uses three strict JSON endpoints:
+The UI uses three strict JSON endpoints:
 
 - `POST /api/setup/chart` prepares or reads a requested window and returns at
   most 1,000 raw candles plus the content-addressed snapshot.

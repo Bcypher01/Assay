@@ -12,6 +12,7 @@ import (
 	"github.com/Bcypher01/Assay/internal/instrument"
 	"github.com/Bcypher01/Assay/internal/pipeline"
 	"github.com/Bcypher01/Assay/internal/store"
+	"github.com/Bcypher01/Assay/internal/venue"
 )
 
 func TestDeriveRequestRejectsUnsupportedResolution(t *testing.T) {
@@ -66,7 +67,7 @@ func TestEnsureColdDownloadsVerifiesAndLoads(t *testing.T) {
 		Symbols: []string{"BINANCE:BTCUSDT"},
 		TFs:     []core.TF{core.TFM15},
 		From:    core.MustParseTime("2024-01-01T00:00:00Z"),
-		To:      core.MustParseTime("2024-02-01T00:00:00Z"),
+		To:      core.MustParseTime("2024-01-01T01:00:00Z"),
 	}
 	var updates []Progress
 	if err := loader.Ensure(ctx, req, func(p Progress) { updates = append(updates, p) }); err != nil {
@@ -112,7 +113,7 @@ func TestEnsureWarmCacheMakesZeroNetworkCalls(t *testing.T) {
 		Symbols: []string{"BINANCE:BTCUSDT"},
 		TFs:     []core.TF{core.TFM15},
 		From:    core.MustParseTime("2024-01-01T00:00:00Z"),
-		To:      core.MustParseTime("2024-02-01T00:00:00Z"),
+		To:      core.MustParseTime("2024-01-01T01:00:00Z"),
 	}
 	if err := loader.Ensure(ctx, req, nil); err != nil {
 		t.Fatalf("ensure warm: %v", err)
@@ -219,6 +220,41 @@ func TestStatusAllowsDailyFXHolidayAtPartitionBoundary(t *testing.T) {
 	}
 }
 
+func TestEnsureRefetchesIncompleteWeeklyPartialMonthAndStatusBecomesReady(t *testing.T) {
+	ctx := context.Background()
+	cache := store.NewLocalStore(t.TempDir())
+	incomplete := core.NewSeries("DUKAS:EURUSD", core.TFW1, 1)
+	incomplete.Append(core.MustParseTime("2023-08-14T00:00:00Z"), 110000, 111000, 109000, 110500, 1)
+	if err := cache.Write(ctx, incomplete, store.Manifest{
+		Symbol: "DUKAS:EURUSD", TF: core.TFW1, Month: "2023-08", Source: "fixture", BuildVersion: "test",
+	}); err != nil {
+		t.Fatalf("seed incomplete cache: %v", err)
+	}
+
+	complete := core.NewSeries("DUKAS:EURUSD", core.TFW1, 2)
+	complete.Append(core.MustParseTime("2023-08-07T00:00:00Z"), 109000, 111000, 108000, 110000, 1)
+	complete.Append(core.MustParseTime("2023-08-14T00:00:00Z"), 110000, 112000, 109000, 111000, 1)
+	fallback := &fixtureFetcher{series: complete}
+	loader := New(cache, nil, fallback)
+	loader.Registry = instrument.MustDefault()
+	req := Request{
+		Symbols: []string{"DUKAS:EURUSD"},
+		TFs:     []core.TF{core.TFW1},
+		From:    core.MustParseTime("2023-08-01T00:00:00Z"),
+		To:      core.MustParseTime("2023-08-20T00:00:00Z"),
+	}
+	if err := loader.Ensure(ctx, req, nil); err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if fallback.calls != 1 {
+		t.Fatalf("fallback calls = %d, want incomplete cached month refetched once", fallback.calls)
+	}
+	status := loader.Status(ctx, req)
+	if status.Readiness != ReadinessReady || len(status.MissingPartitions) != 0 {
+		t.Fatalf("status = %+v, want ready weekly partial-month range", status)
+	}
+}
+
 func TestEnsureFallsBackToVenueAndBarsMatchPublished(t *testing.T) {
 	ctx := context.Background()
 	published := t.TempDir()
@@ -243,6 +279,22 @@ func TestEnsureFallsBackToVenueAndBarsMatchPublished(t *testing.T) {
 		t.Fatalf("load fallback: %v", err)
 	}
 	assertSeriesEqual(t, want, got)
+}
+
+func TestEnsureRejectsAnEmptyFallbackMonth(t *testing.T) {
+	ctx := context.Background()
+	empty := core.NewSeries("BINANCE:BTCUSDT", core.TFM15, 0)
+	loader := New(store.NewLocalStore(t.TempDir()), failingObjects{}, &fixtureFetcher{series: empty})
+	req := Request{
+		Symbols: []string{"BINANCE:BTCUSDT"},
+		TFs:     []core.TF{core.TFM15},
+		From:    core.MustParseTime("2024-01-01T00:00:00Z"),
+		To:      core.MustParseTime("2024-02-01T00:00:00Z"),
+	}
+	err := loader.Ensure(ctx, req, nil)
+	if !errors.Is(err, venue.ErrUnavailable) {
+		t.Fatalf("expected unavailable error for empty fallback, got %v", err)
+	}
 }
 
 func TestHashMismatchRetriesOnceThenFailsTyped(t *testing.T) {

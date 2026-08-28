@@ -379,8 +379,8 @@ func (l *Loader) fetchFallback(ctx context.Context, sym string, tf core.TF, mont
 	if err != nil {
 		return fmt.Errorf("library: fallback fetch %s %s %s: %w", sym, tf, month.name, err)
 	}
-	if series.Len() == 0 {
-		return nil
+	if series == nil || series.Len() == 0 {
+		return fmt.Errorf("library: fallback fetch %s %s %s: %w", sym, tf, month.name, venue.ErrUnavailable)
 	}
 	meta := store.Manifest{Symbol: sym, TF: tf, Month: month.name, Source: l.Fallback.Name(), BuildVersion: "fallback"}
 	return l.Cache.Write(ctx, series, meta)
@@ -391,13 +391,14 @@ func (l *Loader) missingMonths(ctx context.Context, sym string, tf core.TF, from
 	if err != nil {
 		return months(from, to), err
 	}
-	have := make(map[string]bool, len(manifests))
+	byMonth := make(map[string]store.Manifest, len(manifests))
 	for _, mf := range manifests {
-		have[mf.Month] = true
+		byMonth[mf.Month] = mf
 	}
 	var missing []monthWindow
 	for _, month := range months(from, to) {
-		if !have[month.name] {
+		mf, ok := byMonth[month.name]
+		if !ok || !manifestCovers(mf, month, tf, l.calendarFor(sym)) {
 			missing = append(missing, month)
 		}
 	}
@@ -460,11 +461,18 @@ func manifestCovers(mf store.Manifest, month monthWindow, tf core.TF, calendar *
 // without treating the Sunday/Monday session boundary as a missing bar.
 func requiredBounds(month monthWindow, tf core.TF, calendar *instrument.Calendar) (core.Time, core.Time, bool) {
 	if tf != core.TFD1 || calendar == nil {
-		last := month.to - core.Time(tf.Millis())
-		if last < month.from {
-			last = month.from
+		step := core.Time(tf.Millis())
+		first := tf.AlignDown(month.from)
+		if first < month.from {
+			first += step
 		}
-		return month.from, last, true
+		last := tf.AlignDown(month.to - 1)
+		if last < first {
+			// The exact partial window contains no bar boundary for this
+			// timeframe, so it cannot require a stored observation.
+			return 0, 0, false
+		}
+		return first, last, true
 	}
 
 	day := month.from.Std().Truncate(24 * time.Hour)

@@ -70,11 +70,15 @@ func (c *Client) Fetch(ctx context.Context, sym string, tf core.TF, from, to cor
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
+		before := out.Len()
 		market := marketSymbol(sym)
 		body, err := c.get(ctx, c.monthlyURL(market, interval, month))
 		if err == nil {
 			if err := appendZipCSV(out, spec, body, from, to); err != nil {
 				return nil, fmt.Errorf("binance: %s %s: %w", sym, month, err)
+			}
+			if out.Len() == before {
+				return nil, unavailableMonth(sym, tf, month)
 			}
 			continue
 		}
@@ -93,11 +97,18 @@ func (c *Client) Fetch(ctx context.Context, sym string, tf core.TF, from, to cor
 				return nil, fmt.Errorf("binance: %s %s: %w", sym, day, err)
 			}
 		}
+		if out.Len() == before {
+			return nil, unavailableMonth(sym, tf, month)
+		}
 	}
 	if err := out.Validate(); err != nil {
 		return nil, fmt.Errorf("binance: normalised invalid series: %w", err)
 	}
 	return out, nil
+}
+
+func unavailableMonth(sym string, tf core.TF, month string) error {
+	return fmt.Errorf("%w: binance has no %s bars for %s in %s", venue.ErrUnavailable, tf, sym, month)
 }
 
 func (c *Client) spec(sym string) (*instrument.Spec, error) {
@@ -239,6 +250,13 @@ func parseMillis(s string) (core.Time, error) {
 	v, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("open time %q: %w", s, err)
+	}
+	// Binance's newer public archives encode timestamps in microseconds, while
+	// older archives use milliseconds. Bar time is kept in milliseconds across
+	// Assay, so normalise the newer format before range filtering. The threshold
+	// is safely above any present-day millisecond Unix timestamp.
+	if v >= 100_000_000_000_000 {
+		v /= 1_000
 	}
 	return core.Time(v), nil
 }

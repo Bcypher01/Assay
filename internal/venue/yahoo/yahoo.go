@@ -214,8 +214,22 @@ func decodeChart(symbol string, tf core.TF, spec *instrument.Spec, data []byte, 
 		if i < len(q.Volume) && q.Volume[i] != nil {
 			v = *q.Volume[i]
 		}
-		if out.Len() > 0 && t <= out.Time[out.Len()-1] {
-			return nil, fmt.Errorf("yahoo: duplicate or out-of-order bar at %d", t)
+		if out.Len() > 0 {
+			last := out.Len() - 1
+			if t < out.Time[last] {
+				return nil, fmt.Errorf("yahoo: out-of-order bar at %d", t)
+			}
+			if t == out.Time[last] {
+				// Yahoo can return more than one observation that aligns to the
+				// same UTC week, particularly around month boundaries and DST.
+				// Fold them into one candle instead of rejecting otherwise valid
+				// history. The first open and latest close preserve chronology.
+				out.High[last] = core.Max(out.High[last], h)
+				out.Low[last] = core.Min(out.Low[last], l)
+				out.Close[last] = c
+				out.Volume[last] += v
+				continue
+			}
 		}
 		out.Append(t, o, h, l, c, v)
 	}

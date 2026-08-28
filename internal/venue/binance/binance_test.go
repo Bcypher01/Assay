@@ -49,6 +49,31 @@ func TestFetchMonthlyKlinesNormalisesToTicks(t *testing.T) {
 	}
 }
 
+func TestFetchMonthlyKlinesAcceptsMicrosecondTimestamps(t *testing.T) {
+	zipBody := zipCSV(t, strings.Join([]string{
+		"open_time,open,high,low,close,volume",
+		"1748736000000000,2500.00,2510.00,2490.00,2505.00,12.5",
+		"1748739600000000,2505.00,2520.00,2500.00,2515.00,13.9",
+		"",
+	}, "\n"))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/zip")
+		_, _ = w.Write(zipBody)
+	}))
+	defer srv.Close()
+
+	c := &Client{BaseURL: srv.URL, Registry: instrument.MustDefault()}
+	got, err := c.Fetch(context.Background(), "BINANCE:ETHUSDT", core.TFH1,
+		core.MustParseTime("2025-06-01T00:00:00Z"),
+		core.MustParseTime("2025-06-02T00:00:00Z"))
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if got.Len() != 2 || got.Time[0] != 1748736000000 || got.Time[1] != 1748739600000 {
+		t.Fatalf("microsecond timestamps were not normalised: %+v", got.Time)
+	}
+}
+
 func TestFetchRejectsOutOfOrderRows(t *testing.T) {
 	zipBody := zipCSV(t, strings.Join([]string{
 		"1704067260000,42005.00,42020.00,42000.00,42015.00,13",
@@ -94,6 +119,19 @@ func TestFetchFallsBackToDailyWhenMonthlyMissing(t *testing.T) {
 	}
 	if len(paths) != 2 || !strings.Contains(paths[0], "/monthly/") || !strings.Contains(paths[1], "/daily/") {
 		t.Fatalf("unexpected paths: %v", paths)
+	}
+}
+
+func TestFetchReportsUnavailableWhenNeitherArchiveHasBars(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	defer srv.Close()
+
+	c := &Client{BaseURL: srv.URL, Registry: instrument.MustDefault()}
+	_, err := c.Fetch(context.Background(), "BINANCE:BTCUSDT", core.TFH1,
+		core.MustParseTime("2026-07-01T00:00:00Z"),
+		core.MustParseTime("2026-08-01T00:00:00Z"))
+	if err == nil || !strings.Contains(err.Error(), "no h1 bars for BINANCE:BTCUSDT in 2026-07") {
+		t.Fatalf("expected an actionable unavailable-data error, got %v", err)
 	}
 }
 

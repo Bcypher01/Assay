@@ -20,6 +20,8 @@ import (
 	"github.com/Bcypher01/Assay/internal/onboarding"
 	"github.com/Bcypher01/Assay/internal/primitive"
 	"github.com/Bcypher01/Assay/internal/runstore"
+	"github.com/Bcypher01/Assay/internal/setuptest"
+	"github.com/Bcypher01/Assay/internal/setupui"
 	"github.com/Bcypher01/Assay/internal/sim"
 	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
 	"github.com/Bcypher01/Assay/proto/assay/v1/assayv1connect"
@@ -35,6 +37,9 @@ type EvaluateFunc func(context.Context, *assayv1.EvaluatePrimitiveRequest) (*ass
 type QueryEventsFunc func(context.Context, *assayv1.QueryEventsRequest) (*assayv1.QueryEventsResponse, error)
 type RunEventStudyFunc func(context.Context, *assayv1.EventStudyRequest) (*assayv1.EventStudyResponse, error)
 type ListEventSnapshotsFunc func(context.Context) ([]event.SnapshotMetadata, error)
+type SetupChartFunc func(context.Context, setuptest.ChartRequest) (setuptest.Chart, error)
+type SetupPreviewFunc func(context.Context, setuptest.PreviewRequest) (setuptest.Preview, error)
+type SetupRunFunc func(context.Context, setuptest.RunRequest) (*assayv1.RunSummary, error)
 
 // RunFunc returns the one terminal summary. Updates supplied to send must be
 // non-terminal updates, which keeps exactly-once terminal delivery enforceable
@@ -60,6 +65,9 @@ type Server struct {
 	RunEventStudyFn      RunEventStudyFunc
 	ListEventSnapshotsFn ListEventSnapshotsFunc
 	RunFn                RunFunc
+	SetupChartFn         SetupChartFunc
+	SetupPreviewFn       SetupPreviewFunc
+	SetupRunFn           SetupRunFunc
 	// RunStore is the production history backend. The function fields remain
 	// available for small embedding applications and transport tests.
 	RunStore   runstore.Store
@@ -90,6 +98,17 @@ func NewHandler(s *Server) http.Handler {
 	mux.HandleFunc("/event-snapshots", s.eventSnapshotsHandler)
 	mux.HandleFunc("/openapi.json", openAPIHandler)
 	mux.HandleFunc("/docs", swaggerHandler)
+	mux.HandleFunc("/api/setup/chart", s.setupChartHandler)
+	mux.HandleFunc("/api/setup/preview", s.setupPreviewHandler)
+	mux.HandleFunc("/api/setup/run", s.setupRunHandler)
+	mux.Handle("/setup/", http.StripPrefix("/setup/", setupui.Handler()))
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		http.Redirect(w, r, "/setup/", http.StatusTemporaryRedirect)
+	})
 	path, h := assayv1connect.NewDataServiceHandler(s)
 	mux.Handle(path, h)
 	path, h = assayv1connect.NewEventStudyServiceHandler(s)
@@ -103,6 +122,85 @@ func NewHandler(s *Server) http.Handler {
 	path, h = assayv1connect.NewRunServiceHandler(s)
 	mux.Handle(path, h)
 	return withEmptyJSON(mux)
+}
+
+func (s *Server) setupChartHandler(w http.ResponseWriter, r *http.Request) {
+	if s.SetupChartFn == nil {
+		writeSetupError(w, ErrNotConfigured, http.StatusNotImplemented)
+		return
+	}
+	var req setuptest.ChartRequest
+	if !decodeSetupRequest(w, r, &req) {
+		return
+	}
+	out, err := s.SetupChartFn(r.Context(), req)
+	if err != nil {
+		writeSetupError(w, err, http.StatusBadRequest)
+		return
+	}
+	writeSetupJSON(w, out)
+}
+
+func (s *Server) setupPreviewHandler(w http.ResponseWriter, r *http.Request) {
+	if s.SetupPreviewFn == nil {
+		writeSetupError(w, ErrNotConfigured, http.StatusNotImplemented)
+		return
+	}
+	var req setuptest.PreviewRequest
+	if !decodeSetupRequest(w, r, &req) {
+		return
+	}
+	out, err := s.SetupPreviewFn(r.Context(), req)
+	if err != nil {
+		writeSetupError(w, err, http.StatusBadRequest)
+		return
+	}
+	writeSetupJSON(w, out)
+}
+
+func (s *Server) setupRunHandler(w http.ResponseWriter, r *http.Request) {
+	if s.SetupRunFn == nil {
+		writeSetupError(w, ErrNotConfigured, http.StatusNotImplemented)
+		return
+	}
+	var req setuptest.RunRequest
+	if !decodeSetupRequest(w, r, &req) {
+		return
+	}
+	out, err := s.SetupRunFn(r.Context(), req)
+	if err != nil {
+		writeSetupError(w, err, http.StatusBadRequest)
+		return
+	}
+	writeSetupJSON(w, out)
+}
+
+func decodeSetupRequest(w http.ResponseWriter, r *http.Request, out any) bool {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		writeSetupError(w, fmt.Errorf("method not allowed"), http.StatusMethodNotAllowed)
+		return false
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(out); err != nil {
+		writeSetupError(w, fmt.Errorf("decode setup request: %w", err), http.StatusBadRequest)
+		return false
+	}
+	return true
+}
+
+func writeSetupError(w http.ResponseWriter, err error, status int) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(struct {
+		Error string `json:"error"`
+	}{Error: err.Error()})
+}
+
+func writeSetupJSON(w http.ResponseWriter, value any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(value)
 }
 
 // eventSnapshotsHandler is deliberately ordinary read-only JSON: the static

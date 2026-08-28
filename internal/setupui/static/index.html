@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Assay · Setup Test</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div><strong>ASSAY<span>.</span></strong><small>Setup Test</small></div>
+    <div class="historical">Historical simulation only · no order routing</div>
+  </header>
+  <main>
+    <section class="workspace">
+      <div class="toolbar">
+        <label>Market<select id="symbol"><option value="DUKAS:EURUSD">EUR/USD</option></select></label>
+        <label>Chart<select id="timeframe"><option value="d1">Daily</option><option value="h4">4 hour</option><option value="h1">1 hour</option><option value="m15">15 minute</option></select></label>
+        <label>History<select id="period"><option value="1">1 year</option><option value="3" selected>3 years</option><option value="5">5 years</option></select></label>
+        <button id="load" class="quiet">Prepare chart</button>
+        <span id="status">Ready to prepare EUR/USD</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="chart"></canvas>
+        <div id="empty">Prepare the chart, then click the candle that represents your setup.</div>
+      </div>
+      <div class="legend">
+        <span><i class="entry"></i>Entry</span><span><i class="stop"></i>Stop</span><span><i class="target"></i>Target</span><span><i class="zone"></i>Level / zone</span>
+        <em>Drag a horizontal line or zone edge to adjust it.</em>
+      </div>
+      <section id="result" class="result hidden"></section>
+    </section>
+    <aside>
+      <p class="eyebrow">01 · Label the drawing</p>
+      <h1>What does this area represent?</h1>
+      <div class="kind-grid">
+        <button data-kind="break_retest" class="kind active"><b>Break + retest</b><span>A prior extreme breaks, then price returns to it.</span></button>
+        <button data-kind="order_block_retest" class="kind"><b>Order block</b><span>Last opposing candle before displacement.</span></button>
+        <button data-kind="breaker_retest" class="kind"><b>Breaker block</b><span>An opposing zone flips, then gets retested.</span></button>
+      </div>
+      <div class="row side-row"><button data-side="long" class="side active">Long</button><button data-side="short" class="side">Short</button></div>
+      <p class="eyebrow">02 · Confirm the rule</p>
+      <div class="fields">
+        <label>Historical lookback<input id="lookback" type="number" value="20" min="2" max="500"><small>bars used to identify structure</small></label>
+        <label>Retest must happen within<input id="retest" type="number" value="10" min="1" max="200"><small>bars after the break or zone creation</small></label>
+        <label>Price tolerance<input id="tolerance" type="number" value="5" min="0"><small>instrument ticks around the level</small></label>
+        <label>Zone expires after<input id="expiry" type="number" value="50" min="1" max="1000"><small>bars without a qualifying retest</small></label>
+        <label>Risk per trade<select id="risk"><option value="0.0025">0.25%</option><option value="0.005" selected>0.5%</option><option value="0.01">1%</option></select></label>
+        <label class="check"><input id="body" type="checkbox">Use candle body for zones</label>
+        <label class="check"><input id="close" type="checkbox" checked>Require closing confirmation</label>
+      </div>
+      <div id="interpretation" class="interpretation">Draw and select a sample candle to see the exact rule.</div>
+      <button id="preview" class="primary" disabled>Test setups like this</button>
+      <button id="run" class="secondary" disabled>Save full backtest</button>
+      <p class="disclaimer">Your drawing is an example. Assay repeats the confirmed structural rule—not this absolute EUR/USD price.</p>
+    </aside>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

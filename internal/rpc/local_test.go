@@ -10,10 +10,65 @@ import (
 	"github.com/Bcypher01/Assay/internal/ir"
 	"github.com/Bcypher01/Assay/internal/library"
 	_ "github.com/Bcypher01/Assay/internal/packs/indicator"
+	"github.com/Bcypher01/Assay/internal/runstore"
+	"github.com/Bcypher01/Assay/internal/setuptest"
 	"github.com/Bcypher01/Assay/internal/store"
 	"github.com/Bcypher01/Assay/internal/venue"
 	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
 )
+
+func TestLocalSetupTestChartPreviewAndPersistedRun(t *testing.T) {
+	ctx := context.Background()
+	cache := store.NewLocalStore(t.TempDir())
+	history, err := runstore.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err := instrument.Default()
+	if err != nil {
+		t.Fatal(err)
+	}
+	series := core.NewSeries("DUKAS:EURUSD", core.TFD1, 7)
+	base := core.MustParseTime("2026-08-01T00:00:00Z")
+	for i, bar := range [][4]core.Price{
+		{100009, 100010, 100008, 100009}, {100010, 100011, 100008, 100009},
+		{100009, 100012, 100009, 100012}, {100012, 100013, 100011, 100013},
+		{100013, 100014, 100011, 100013}, {100013, 100024, 100012, 100023},
+		{100023, 100024, 100022, 100023},
+	} {
+		series.Append(base+core.Time(int64(i)*core.TFD1.Millis()), bar[0], bar[1], bar[2], bar[3], 1)
+	}
+	if err := cache.Write(ctx, series, store.Manifest{Symbol: series.Symbol, TF: series.TF, Month: "2026-08", Source: "fixture", BuildVersion: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	server, err := NewLocalServerWithServices(cache, registry, nil, history)
+	if err != nil {
+		t.Fatal(err)
+	}
+	from, to := base.Millis(), (base + core.Time(7*core.TFD1.Millis())).Millis()
+	chart, err := server.SetupChartFn(ctx, setuptest.ChartRequest{Symbol: series.Symbol, Timeframe: "d1", FromMS: from, ToMS: to, MaxBars: 300})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chart.Bars) != 7 || chart.Snapshot == "" || chart.TickSize != "0.00001" {
+		t.Fatalf("chart = %#v", chart)
+	}
+	drawing := setuptest.Drawing{Kind: setuptest.BreakRetest, Side: "long", Symbol: series.Symbol, Timeframe: "d1", AnchorTimeMS: series.Time[4].Millis(), LevelLow: 100012, LevelHigh: 100012, Entry: 100013, Stop: 100008, Target: 100023, LookbackBars: 3, RetestBars: 3, ToleranceTicks: 1, ExpiryBars: 10, DisplacementBodyMilli: 500, ConfirmByClose: true, RiskPerTrade: .005}
+	preview, err := server.SetupPreviewFn(ctx, setuptest.PreviewRequest{Drawing: drawing, FromMS: from, ToMS: to})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !preview.SampleMatched || len(preview.Matches) == 0 {
+		t.Fatalf("preview = %#v", preview)
+	}
+	summary, err := server.SetupRunFn(ctx, setuptest.RunRequest{Drawing: drawing, FromMS: from, ToMS: to, Assumptions: setuptest.Assumptions{InitialEquity: 1_000_000, RiskPerTrade: .005}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.RunId == "" || summary.Trades == 0 {
+		t.Fatalf("summary = %#v", summary)
+	}
+}
 
 func TestLocalRunMissingCacheDoesNotFetch(t *testing.T) {
 	ctx := context.Background()

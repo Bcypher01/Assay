@@ -54,6 +54,15 @@ The corresponding OpenAPI 3.1 document is `/openapi.json`. Streaming endpoints
 are documented there but should be called through the generated ConnectRPC
 client, which handles the streaming protocol.
 
+## Semantic drawing setup test
+
+The bundled local chart surface is `/setup/`. It calls the strict JSON setup
+boundary documented in [setup-test.md](setup-test.md): chart preparation,
+cache-only semantic preview, then full-run handoff. A client must not enable the
+full backtest action merely because a drawing exists; show `sampleMatched` and
+its warning first, because the selected candle may not satisfy the confirmed
+repeatable rule.
+
 ## Account-value display contract
 
 All money returned for a run is an integer number of **USD cents**. This

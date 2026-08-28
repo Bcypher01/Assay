@@ -24,6 +24,8 @@ internal/library     library fetch + direct-from-venue fallback
 internal/venue/*     per-venue download and decode
 internal/primitive   primitive interface, registry, memoisation cache
 internal/packs/*     indicator, price-action, time and SMC detectors
+internal/packs/semantic chart-drawing setup detectors
+internal/setuptest    semantic drawing -> IR compilation and preview
 internal/sim         trade simulation, costs, ambiguity bounding
 internal/ir          strategy document, validation, content hashing
 internal/engine      IR execution: primitives -> signals -> trades
@@ -55,6 +57,11 @@ go run ./cmd/event-pipeline -provider bls -dir event-data -build-version v1
 
 The checked-in curated catalogue remains available only for offline fixtures:
 `-provider curated`.
+
+The local **Setup Test** chart is available at `http://127.0.0.1:8080/setup/`.
+It lets a trader label and test break-and-retest, order-block, and breaker-block
+drawings without treating the drawing's absolute price as a historical rule.
+See [the Setup Test contract](docs/setup-test.md).
 
 ## Where to start reading
 

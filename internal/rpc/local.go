@@ -18,6 +18,7 @@ import (
 	"github.com/Bcypher01/Assay/internal/ir"
 	"github.com/Bcypher01/Assay/internal/library"
 	"github.com/Bcypher01/Assay/internal/runstore"
+	"github.com/Bcypher01/Assay/internal/setuptest"
 	"github.com/Bcypher01/Assay/internal/sim"
 	"github.com/Bcypher01/Assay/internal/store"
 	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
@@ -105,6 +106,95 @@ func NewLocalServerWithServices(cache *store.LocalStore, registry *instrument.Re
 			}
 		}
 		return runLocal(ctx, cache, registry, history, req, send)
+	}
+	s.SetupChartFn = func(ctx context.Context, req setuptest.ChartRequest) (setuptest.Chart, error) {
+		if req.FromMS >= req.ToMS {
+			return setuptest.Chart{}, fmt.Errorf("setup chart: fromMs must be before toMs")
+		}
+		tf, err := core.ParseTF(req.Timeframe)
+		if err != nil {
+			return setuptest.Chart{}, err
+		}
+		spec, err := registry.Get(req.Symbol)
+		if err != nil {
+			return setuptest.Chart{}, err
+		}
+		if req.Prepare {
+			if loader == nil {
+				return setuptest.Chart{}, fmt.Errorf("setup chart: data preparation is not configured")
+			}
+			request, err := loader.DeriveRequest([]string{req.Symbol}, []core.TF{tf}, core.Time(req.FromMS), core.Time(req.ToMS))
+			if err != nil {
+				return setuptest.Chart{}, err
+			}
+			if err := loader.Ensure(ctx, request, nil); err != nil {
+				return setuptest.Chart{}, err
+			}
+		}
+		series, manifests, err := cache.Load(ctx, req.Symbol, tf, core.Time(req.FromMS), core.Time(req.ToMS))
+		if err != nil {
+			return setuptest.Chart{}, err
+		}
+		if len(manifests) == 0 || series.Len() == 0 {
+			return setuptest.Chart{}, fmt.Errorf("setup chart: no prepared bars for the requested window")
+		}
+		maxBars := req.MaxBars
+		if maxBars <= 0 || maxBars > 1000 {
+			maxBars = 300
+		}
+		from := 0
+		if series.Len() > maxBars {
+			from = series.Len() - maxBars
+		}
+		out := setuptest.Chart{Symbol: req.Symbol, Timeframe: tf.String(), TickSize: spec.TickSize, PipTicks: spec.PipTicks, Snapshot: store.SnapshotHash(manifests), Bars: make([]setuptest.Bar, 0, series.Len()-from)}
+		for i := from; i < series.Len(); i++ {
+			out.Bars = append(out.Bars, setuptest.Bar{TimeMS: series.Time[i].Millis(), Open: series.Open[i], High: series.High[i], Low: series.Low[i], Close: series.Close[i], Volume: series.Volume[i]})
+		}
+		out.FromMS, out.ToMS = out.Bars[0].TimeMS, out.Bars[len(out.Bars)-1].TimeMS+tf.Millis()
+		return out, nil
+	}
+	s.SetupPreviewFn = func(ctx context.Context, req setuptest.PreviewRequest) (setuptest.Preview, error) {
+		if req.FromMS >= req.ToMS {
+			return setuptest.Preview{}, fmt.Errorf("setup preview: fromMs must be before toMs")
+		}
+		tf, err := core.ParseTF(req.Drawing.Timeframe)
+		if err != nil {
+			return setuptest.Preview{}, err
+		}
+		series, manifests, err := cache.Load(ctx, req.Drawing.Symbol, tf, core.Time(req.FromMS), core.Time(req.ToMS))
+		if err != nil {
+			return setuptest.Preview{}, err
+		}
+		if len(manifests) == 0 || series.Len() == 0 {
+			return setuptest.Preview{}, fmt.Errorf("setup preview: prepare the requested historical window first")
+		}
+		spec, err := registry.Get(req.Drawing.Symbol)
+		if err != nil {
+			return setuptest.Preview{}, err
+		}
+		return setuptest.Evaluate(ctx, req.Drawing, series, *spec, store.SnapshotHash(manifests))
+	}
+	s.SetupRunFn = func(ctx context.Context, req setuptest.RunRequest) (*assayv1.RunSummary, error) {
+		strategy, err := setuptest.Compile(req.Drawing)
+		if err != nil {
+			return nil, err
+		}
+		strategyJSON, err := json.Marshal(strategy)
+		if err != nil {
+			return nil, fmt.Errorf("setup run: encode strategy: %w", err)
+		}
+		initialEquity := req.Assumptions.InitialEquity
+		if initialEquity <= 0 {
+			initialEquity = 1_000_000
+		}
+		risk := req.Assumptions.RiskPerTrade
+		if risk <= 0 {
+			risk = req.Drawing.RiskPerTrade
+		}
+		return s.RunFn(ctx, &assayv1.RunRequest{
+			StrategyJson: strategyJSON, FromMs: req.FromMS, ToMs: req.ToMS,
+			Assumptions: &assayv1.StudyAssumptions{InitialEquity: initialEquity, RiskPerTrade: risk, SpreadTicks: req.Assumptions.SpreadTicks, SlippageTicks: req.Assumptions.SlippageTicks, FillPolicy: "next_open"},
+		}, func(*assayv1.RunUpdate) error { return nil })
 	}
 	return s, nil
 }
@@ -403,7 +493,10 @@ func runLocal(ctx context.Context, cache *store.LocalStore, registry *instrument
 	if history != nil {
 		study := &analytics.Study{Strategy: &strategy, Snapshot: snapshot, Scope: analytics.Scope{Instruments: append([]string(nil), strategy.Universe.Symbols...), Period: strconv.FormatInt(req.FromMs, 10) + "-" + strconv.FormatInt(req.ToMs, 10)}, Assumptions: effectiveAssumptions(config), WalkForward: defaultWalkForward(series.Len()), MonteCarlo: analytics.MCConfig{Samples: 1000, BlockLength: 5, Seed: stableSeed(strategy.Hash())}}
 		nearMisses := make([]analytics.NearMiss, 0, len(nearMiss.SlotFailures))
-		for _, condition := range []string{"bias", "poi", "trigger"} {
+		// V1 uses bias/poi/trigger while V2 and semantic drawings use explicit
+		// long/short branches. Preserve both diagnostic vocabularies so a setup
+		// test never loses its "why no trade?" evidence when persisted.
+		for _, condition := range []string{"bias", "poi", "trigger", "long", "short", "entry_conflict"} {
 			if count := nearMiss.SlotFailures[condition]; count > 0 {
 				nearMisses = append(nearMisses, analytics.NearMiss{Condition: condition, Count: count})
 			}

@@ -5,6 +5,7 @@ go 1.24
 require (
 	connectrpc.com/connect v1.18.1
 	github.com/parquet-go/parquet-go v0.25.1
+	github.com/ulikunitz/xz v0.5.15
 	google.golang.org/protobuf v1.34.2
 	modernc.org/sqlite v1.34.5
 )

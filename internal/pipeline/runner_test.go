@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"bytes"
 	"context"
 	"testing"
 	"time"
@@ -50,6 +51,41 @@ func TestRunnerPublishesAndSecondRunIsNoop(t *testing.T) {
 	}
 	if len(manifests) != 1 || manifests[0].BuildVersion != "test-build" || manifests[0].Source != "fake" {
 		t.Fatalf("bad manifests: %+v", manifests)
+	}
+}
+
+func TestRunnerReplacesSameBuildFromDifferentSource(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	series := buildSeries("BINANCE:BTCUSDT", core.TFM1)
+	oldData, oldMeta, err := store.EncodeForPublish(series, store.Manifest{
+		Symbol: "BINANCE:BTCUSDT", TF: core.TFM1, Month: "2024-01", Source: "old-source", BuildVersion: "test-build",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	publisher := NewLocalPublisher(dir)
+	if err := publisher.Put(ctx, ObjectKey("BINANCE:BTCUSDT", core.TFM1, "2024-01"), bytes.NewReader(oldData), oldMeta); err != nil {
+		t.Fatal(err)
+	}
+	fetcher := &fakeFetcher{series: series}
+	report, err := (Runner{
+		Fetcher: fetcher, Publisher: publisher,
+		Now: func() time.Time { return time.Date(2024, 2, 15, 0, 0, 0, 0, time.UTC) },
+	}).Run(ctx, Job{
+		Symbols: []string{"BINANCE:BTCUSDT"}, TFs: []core.TF{core.TFM1},
+		From: core.MustParseTime("2024-01-01T00:00:00Z"), To: core.MustParseTime("2024-02-01T00:00:00Z"),
+		BuildVersion: "test-build",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Published != 1 || report.Skipped != 0 || fetcher.calls != 1 {
+		t.Fatalf("different source was not republished: report=%+v calls=%d", report, fetcher.calls)
+	}
+	meta, ok, err := publisher.Head(ctx, ObjectKey("BINANCE:BTCUSDT", core.TFM1, "2024-01"))
+	if err != nil || !ok || meta.Source != "fake" {
+		t.Fatalf("replacement manifest = %+v, ok=%v, err=%v", meta, ok, err)
 	}
 }
 

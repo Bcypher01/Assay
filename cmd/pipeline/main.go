@@ -15,7 +15,7 @@ import (
 	"github.com/Bcypher01/Assay/internal/pipeline"
 	"github.com/Bcypher01/Assay/internal/venue"
 	"github.com/Bcypher01/Assay/internal/venue/binance"
-	"github.com/Bcypher01/Assay/internal/venue/yahoo"
+	"github.com/Bcypher01/Assay/internal/venue/dukascopy"
 )
 
 func main() {
@@ -42,6 +42,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	if *publisherKind == "r2" && hasVenue(reg, symbols, "dukascopy") &&
+		env("ASSAY_DUKASCOPY_REDISTRIBUTION_AUTHORIZED", "false") != "true" {
+		log.Fatal("publishing Dukascopy candles to R2 requires confirmed redistribution rights and ASSAY_DUKASCOPY_REDISTRIBUTION_AUTHORIZED=true")
+	}
 	tfs, err := parseTFs(*tfsFlag)
 	if err != nil {
 		log.Fatal(err)
@@ -62,8 +66,8 @@ func main() {
 				BaseURL:  env("ASSAY_BINANCE_DATA_BASE_URL", "https://data.binance.vision"),
 				Registry: reg,
 			},
-			"dukascopy": &yahoo.Client{
-				BaseURL:  env("ASSAY_YAHOO_CHART_BASE_URL", "https://query1.finance.yahoo.com/v8/finance/chart/"),
+			"dukascopy": &dukascopy.Client{
+				BaseURL:  env("ASSAY_DUKASCOPY_BASE_URL", "https://datafeed.dukascopy.com/datafeed"),
 				Registry: reg,
 			},
 		},
@@ -129,6 +133,16 @@ func pipelineSymbols(reg *instrument.Registry, explicit string) ([]string, error
 	return out, nil
 }
 
+func hasVenue(reg *instrument.Registry, symbols []string, venueName string) bool {
+	for _, symbol := range symbols {
+		spec, err := reg.Get(symbol)
+		if err == nil && spec.Venue == venueName {
+			return true
+		}
+	}
+	return false
+}
+
 func parseTFs(s string) ([]core.TF, error) {
 	parts := splitCSV(s)
 	out := make([]core.TF, 0, len(parts))
@@ -143,23 +157,11 @@ func parseTFs(s string) ([]core.TF, error) {
 }
 
 func tfsForSymbol(reg *instrument.Registry, symbol string, requested []core.TF) ([]core.TF, error) {
-	spec, err := reg.Get(symbol)
+	_, err := reg.Get(symbol)
 	if err != nil {
 		return nil, err
 	}
-	if spec.Venue != "dukascopy" {
-		return requested, nil
-	}
-	out := make([]core.TF, 0, len(requested))
-	for _, tf := range requested {
-		if tf == core.TFD1 || tf == core.TFW1 {
-			out = append(out, tf)
-		}
-	}
-	if len(out) == 0 {
-		return nil, fmt.Errorf("%s is FX daily mode only; request d1 and/or w1", symbol)
-	}
-	return out, nil
+	return requested, nil
 }
 
 func parseWindow(fromS, toS string) (core.Time, core.Time, error) {

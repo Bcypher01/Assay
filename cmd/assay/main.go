@@ -14,7 +14,7 @@ import (
 	"github.com/Bcypher01/Assay/internal/telemetry"
 	"github.com/Bcypher01/Assay/internal/venue"
 	"github.com/Bcypher01/Assay/internal/venue/binance"
-	"github.com/Bcypher01/Assay/internal/venue/yahoo"
+	"github.com/Bcypher01/Assay/internal/venue/dukascopy"
 )
 
 func main() {
@@ -44,7 +44,7 @@ func main() {
 	// an object has not yet been published to that library.
 	fallback := &venue.Router{Registry: registry, Fetchers: map[string]venue.Fetcher{
 		"binance":   &binance.Client{BaseURL: "https://data.binance.vision", Registry: registry},
-		"dukascopy": &yahoo.Client{BaseURL: "https://query1.finance.yahoo.com/v8/finance/chart/", Registry: registry},
+		"dukascopy": &dukascopy.Client{BaseURL: "https://datafeed.dukascopy.com/datafeed", Registry: registry},
 	}}
 	loader := library.New(cache, objects, fallback)
 	loader.Registry = registry

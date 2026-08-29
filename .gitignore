@@ -11,6 +11,8 @@
 *.tgz
 /_to_delete/
 .fuse_hidden*
+__pycache__/
+*.py[cod]
 
 .env
 /published/

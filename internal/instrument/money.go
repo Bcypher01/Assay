@@ -15,7 +15,8 @@ const AccountCurrency = "USD"
 // SupportsUSDCashAccounting reports whether this spec has enough information
 // to value its profit and loss in USD. USDT is treated as USD at par; this is
 // explicit because it is an assumption, not a claim that a stablecoin is risk
-// free. USDJPY converts JPY proceeds through its closing USDJPY price.
+// free. USD-base FX pairs convert quote-currency proceeds through their own
+// closing price (for example, CAD/USD via USDCAD).
 func (s Spec) SupportsUSDCashAccounting() bool {
 	q, settle := strings.ToUpper(s.QuoteCurrency), strings.ToUpper(s.SettleCurrency)
 	// Unit-test and embedded callers that construct a minimal Spec retain the
@@ -24,13 +25,13 @@ func (s Spec) SupportsUSDCashAccounting() bool {
 	if q == "" && s.ContractSize == "" {
 		return true
 	}
-	return q == "USD" || q == "USDT" || (q == "JPY" && settle == "USD" && strings.HasPrefix(strings.ToUpper(s.Symbol), "DUKAS:USD"))
+	return q == "USD" || q == "USDT" || (settle == "USD" && strings.HasPrefix(strings.ToUpper(s.Symbol), "DUKAS:USD"))
 }
 
 // PnLCents converts a price change in instrument ticks at lots into USD cents.
-// conversionPrice is the closing price and is only used for USDJPY, where JPY
-// quote-currency P&L is converted back to USD. It rounds once, at the account
-// minor-unit boundary, preserving sub-cent precision during the calculation.
+// conversionPrice is the closing price and is used by USD-base FX pairs to
+// convert quote-currency P&L back to USD. It rounds once, at the account minor
+// unit boundary, preserving sub-cent precision during the calculation.
 func (s Spec) PnLCents(ticks core.Price, lots core.Ratio, conversionPrice core.Price) (core.Price, error) {
 	if !s.SupportsUSDCashAccounting() {
 		return 0, fmt.Errorf("instrument: %s cannot be valued in %s", s.Symbol, AccountCurrency)
@@ -58,9 +59,9 @@ func (s Spec) PnLCents(ticks core.Price, lots core.Ratio, conversionPrice core.P
 	d := big.NewInt(core.RatioScale)
 	d.Mul(d, pow10Big(tickFrac))
 	d.Mul(d, pow10Big(contractFrac))
-	if strings.ToUpper(s.QuoteCurrency) == "JPY" {
+	if q := strings.ToUpper(s.QuoteCurrency); q != "" && q != "USD" && q != "USDT" {
 		if conversionPrice <= 0 {
-			return 0, fmt.Errorf("instrument: %s requires a positive USDJPY conversion price", s.Symbol)
+			return 0, fmt.Errorf("instrument: %s requires a positive quote conversion price", s.Symbol)
 		}
 		// conversionPrice is itself in ticks. Cancel its tick-size scale
 		// against the quote amount before dividing JPY by JPY/USD.
@@ -72,13 +73,14 @@ func (s Spec) PnLCents(ticks core.Price, lots core.Ratio, conversionPrice core.P
 }
 
 // QuoteMinorCents converts a quote-currency minor-unit fee into USD cents.
-// USD and USDT costs are already cents; USDJPY fees are whole JPY.
+// USD and USDT costs are already cents. JPY's minor unit is one yen; the other
+// supported FX quote currencies use 100 minor units per currency unit.
 func (s Spec) QuoteMinorCents(minor int64, conversionPrice core.Price) (core.Price, error) {
 	q := strings.ToUpper(s.QuoteCurrency)
 	if q == "USD" || q == "USDT" || q == "" {
 		return core.Price(minor), nil
 	}
-	if q != "JPY" || conversionPrice <= 0 {
+	if !s.SupportsUSDCashAccounting() || conversionPrice <= 0 {
 		return 0, fmt.Errorf("instrument: %s cannot convert quote minor units to %s", s.Symbol, AccountCurrency)
 	}
 	tickMant, tickFrac, err := parseDecimal(s.TickSize)
@@ -90,6 +92,9 @@ func (s Spec) QuoteMinorCents(minor int64, conversionPrice core.Price) (core.Pri
 	n.Mul(n, pow10Big(tickFrac))
 	d := big.NewInt(int64(conversionPrice))
 	d.Mul(d, big.NewInt(tickMant))
+	if q != "JPY" {
+		d.Mul(d, big.NewInt(100))
+	}
 	return core.Price(roundRat(n, d)), nil
 }
 

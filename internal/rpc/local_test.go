@@ -1,8 +1,11 @@
 package rpc
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/Bcypher01/Assay/internal/core"
@@ -16,6 +19,60 @@ import (
 	"github.com/Bcypher01/Assay/internal/venue"
 	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
 )
+
+func TestSetupChartHTTPAllowsPreparedDukascopyH4Candles(t *testing.T) {
+	ctx := context.Background()
+	cache := store.NewLocalStore(t.TempDir())
+	registry := instrument.MustDefault()
+	series := core.NewSeries("DUKAS:EURUSD", core.TFH4, 6)
+	base := core.MustParseTime("2024-06-03T00:00:00Z")
+	for i := 0; i < 6; i++ {
+		open := core.Price(108500 + i*20)
+		series.Append(base+core.Time(int64(i)*core.TFH4.Millis()), open, open+35, open-25, open+15, int64(100+i))
+	}
+	if err := cache.Write(ctx, series, store.Manifest{
+		Symbol: series.Symbol, TF: series.TF, Month: "2024-06", Source: "dukascopy-bid", BuildVersion: "test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	fallback := &countingFetcher{}
+	loader := library.New(cache, nil, fallback)
+	loader.Registry = registry
+	server, err := NewLocalServerWithServices(cache, registry, loader, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := json.Marshal(setuptest.ChartRequest{
+		Symbol: "DUKAS:EURUSD", Timeframe: "h4",
+		FromMS: base.Millis(), ToMS: (base + core.Time(core.TFD1.Millis())).Millis(),
+		MaxBars: 300, Prepare: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/setup/chart", bytes.NewReader(body))
+	res := httptest.NewRecorder()
+	NewHandler(server).ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("setup chart status=%d body=%s", res.Code, res.Body.String())
+	}
+	var chart setuptest.Chart
+	if err := json.Unmarshal(res.Body.Bytes(), &chart); err != nil {
+		t.Fatal(err)
+	}
+	if chart.Timeframe != "h4" || len(chart.Bars) != 6 {
+		t.Fatalf("chart timeframe=%q bars=%d", chart.Timeframe, len(chart.Bars))
+	}
+	for i, bar := range chart.Bars {
+		if bar.Open == bar.Close || bar.Volume == 0 || bar.Low >= bar.High {
+			t.Fatalf("bar %d is not a usable candlestick: %+v", i, bar)
+		}
+	}
+	if fallback.fetches != 0 {
+		t.Fatalf("warm prepared chart unexpectedly fetched %d times", fallback.fetches)
+	}
+}
 
 func TestLocalSetupTestChartPreviewAndPersistedRun(t *testing.T) {
 	ctx := context.Background()

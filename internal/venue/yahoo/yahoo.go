@@ -83,7 +83,7 @@ func (c *Client) spec(sym string) (*instrument.Spec, error) {
 	if err != nil {
 		return nil, err
 	}
-	if spec.Venue != "dukascopy" {
+	if spec.Class != instrument.ClassFX && spec.Class != instrument.ClassMetal {
 		return nil, venue.Unsupported(c.Name(), "symbol "+sym+" is not an FX instrument")
 	}
 	return spec, nil

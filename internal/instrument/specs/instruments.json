@@ -62,8 +62,8 @@
       "swapLong": -700000000, "swapShort": 200000000, "swapTripleWeekday": 3
     },
     "gap": "fill_at_open",
-    "quality": "tick",
-    "source": "dukascopy",
+    "quality": "m1",
+    "source": "dukascopy-bid",
     "calendar": {
       "name": "fx-24x5",
       "location": "America/New_York",
@@ -97,8 +97,8 @@
       "swapLong": -600000000, "swapShort": 100000000, "swapTripleWeekday": 3
     },
     "gap": "fill_at_open",
-    "quality": "tick",
-    "source": "dukascopy",
+    "quality": "m1",
+    "source": "dukascopy-bid",
     "calendar": {
       "name": "fx-24x5",
       "location": "America/New_York",
@@ -132,8 +132,8 @@
       "swapLong": 300000000, "swapShort": -900000000, "swapTripleWeekday": 3
     },
     "gap": "fill_at_open",
-    "quality": "tick",
-    "source": "dukascopy",
+    "quality": "m1",
+    "source": "dukascopy-bid",
     "calendar": {
       "name": "fx-24x5",
       "location": "America/New_York",
@@ -167,8 +167,187 @@
       "swapLong": -1200000000, "swapShort": 400000000, "swapTripleWeekday": 3
     },
     "gap": "fill_at_open",
-    "quality": "tick",
-    "source": "dukascopy",
+    "quality": "m1",
+    "source": "dukascopy-bid",
+    "calendar": {
+      "name": "metals",
+      "location": "America/New_York",
+      "windows": [
+        {"weekday": 0, "startMin": 1080, "endMin": 1440},
+        {"weekday": 1, "startMin": 0, "endMin": 1020},
+        {"weekday": 1, "startMin": 1080, "endMin": 1440},
+        {"weekday": 2, "startMin": 0, "endMin": 1020},
+        {"weekday": 2, "startMin": 1080, "endMin": 1440},
+        {"weekday": 3, "startMin": 0, "endMin": 1020},
+        {"weekday": 3, "startMin": 1080, "endMin": 1440},
+        {"weekday": 4, "startMin": 0, "endMin": 1020},
+        {"weekday": 4, "startMin": 1080, "endMin": 1440},
+        {"weekday": 5, "startMin": 0, "endMin": 1020}
+      ],
+      "holidays": ["2026-01-01", "2026-12-25"]
+    }
+  },
+  {
+    "symbol": "DUKAS:AUDUSD",
+    "class": "fx",
+    "display": "AUD/USD",
+    "venue": "dukascopy",
+    "tickSize": "0.00001",
+    "pipTicks": 10,
+    "contractSize": "100000",
+    "lotStep": "0.01",
+    "minLot": "0.01",
+    "quoteCurrency": "USD",
+    "settleCurrency": "USD",
+    "costs": {
+      "spreadMode": 1, "spreadTicks": 10,
+      "commissionMode": 0, "commissionBps": 0, "commissionFlat": 0,
+      "slippageMode": 0, "slippageTicks": 3, "slippageAtr": 0,
+      "swapLong": -500000000, "swapShort": 100000000, "swapTripleWeekday": 3
+    },
+    "gap": "fill_at_open",
+    "quality": "m1",
+    "source": "dukascopy-bid",
+    "calendar": {
+      "name": "fx-24x5",
+      "location": "America/New_York",
+      "windows": [
+        {"weekday": 0, "startMin": 1020, "endMin": 1440},
+        {"weekday": 1, "startMin": 0, "endMin": 1440},
+        {"weekday": 2, "startMin": 0, "endMin": 1440},
+        {"weekday": 3, "startMin": 0, "endMin": 1440},
+        {"weekday": 4, "startMin": 0, "endMin": 1440},
+        {"weekday": 5, "startMin": 0, "endMin": 1020}
+      ],
+      "holidays": ["2026-01-01", "2026-12-25"]
+    }
+  },
+  {
+    "symbol": "DUKAS:NZDUSD",
+    "class": "fx",
+    "display": "NZD/USD",
+    "venue": "dukascopy",
+    "tickSize": "0.00001",
+    "pipTicks": 10,
+    "contractSize": "100000",
+    "lotStep": "0.01",
+    "minLot": "0.01",
+    "quoteCurrency": "USD",
+    "settleCurrency": "USD",
+    "costs": {
+      "spreadMode": 1, "spreadTicks": 14,
+      "commissionMode": 0, "commissionBps": 0, "commissionFlat": 0,
+      "slippageMode": 0, "slippageTicks": 4, "slippageAtr": 0,
+      "swapLong": -600000000, "swapShort": 100000000, "swapTripleWeekday": 3
+    },
+    "gap": "fill_at_open",
+    "quality": "m1",
+    "source": "dukascopy-bid",
+    "calendar": {
+      "name": "fx-24x5",
+      "location": "America/New_York",
+      "windows": [
+        {"weekday": 0, "startMin": 1020, "endMin": 1440},
+        {"weekday": 1, "startMin": 0, "endMin": 1440},
+        {"weekday": 2, "startMin": 0, "endMin": 1440},
+        {"weekday": 3, "startMin": 0, "endMin": 1440},
+        {"weekday": 4, "startMin": 0, "endMin": 1440},
+        {"weekday": 5, "startMin": 0, "endMin": 1020}
+      ],
+      "holidays": ["2026-01-01", "2026-12-25"]
+    }
+  },
+  {
+    "symbol": "DUKAS:USDCAD",
+    "class": "fx",
+    "display": "USD/CAD",
+    "venue": "dukascopy",
+    "tickSize": "0.00001",
+    "pipTicks": 10,
+    "contractSize": "100000",
+    "lotStep": "0.01",
+    "minLot": "0.01",
+    "quoteCurrency": "CAD",
+    "settleCurrency": "USD",
+    "costs": {
+      "spreadMode": 1, "spreadTicks": 12,
+      "commissionMode": 0, "commissionBps": 0, "commissionFlat": 0,
+      "slippageMode": 0, "slippageTicks": 4, "slippageAtr": 0,
+      "swapLong": -400000000, "swapShort": 100000000, "swapTripleWeekday": 3
+    },
+    "gap": "fill_at_open",
+    "quality": "m1",
+    "source": "dukascopy-bid",
+    "calendar": {
+      "name": "fx-24x5",
+      "location": "America/New_York",
+      "windows": [
+        {"weekday": 0, "startMin": 1020, "endMin": 1440},
+        {"weekday": 1, "startMin": 0, "endMin": 1440},
+        {"weekday": 2, "startMin": 0, "endMin": 1440},
+        {"weekday": 3, "startMin": 0, "endMin": 1440},
+        {"weekday": 4, "startMin": 0, "endMin": 1440},
+        {"weekday": 5, "startMin": 0, "endMin": 1020}
+      ],
+      "holidays": ["2026-01-01", "2026-12-25"]
+    }
+  },
+  {
+    "symbol": "DUKAS:USDCHF",
+    "class": "fx",
+    "display": "USD/CHF",
+    "venue": "dukascopy",
+    "tickSize": "0.00001",
+    "pipTicks": 10,
+    "contractSize": "100000",
+    "lotStep": "0.01",
+    "minLot": "0.01",
+    "quoteCurrency": "CHF",
+    "settleCurrency": "USD",
+    "costs": {
+      "spreadMode": 1, "spreadTicks": 12,
+      "commissionMode": 0, "commissionBps": 0, "commissionFlat": 0,
+      "slippageMode": 0, "slippageTicks": 4, "slippageAtr": 0,
+      "swapLong": 100000000, "swapShort": -700000000, "swapTripleWeekday": 3
+    },
+    "gap": "fill_at_open",
+    "quality": "m1",
+    "source": "dukascopy-bid",
+    "calendar": {
+      "name": "fx-24x5",
+      "location": "America/New_York",
+      "windows": [
+        {"weekday": 0, "startMin": 1020, "endMin": 1440},
+        {"weekday": 1, "startMin": 0, "endMin": 1440},
+        {"weekday": 2, "startMin": 0, "endMin": 1440},
+        {"weekday": 3, "startMin": 0, "endMin": 1440},
+        {"weekday": 4, "startMin": 0, "endMin": 1440},
+        {"weekday": 5, "startMin": 0, "endMin": 1020}
+      ],
+      "holidays": ["2026-01-01", "2026-12-25"]
+    }
+  },
+  {
+    "symbol": "DUKAS:XAGUSD",
+    "class": "metal",
+    "display": "Silver",
+    "venue": "dukascopy",
+    "tickSize": "0.001",
+    "pipTicks": 10,
+    "contractSize": "5000",
+    "lotStep": "0.01",
+    "minLot": "0.01",
+    "quoteCurrency": "USD",
+    "settleCurrency": "USD",
+    "costs": {
+      "spreadMode": 1, "spreadTicks": 30,
+      "commissionMode": 0, "commissionBps": 0, "commissionFlat": 0,
+      "slippageMode": 0, "slippageTicks": 10, "slippageAtr": 0,
+      "swapLong": -1000000000, "swapShort": 300000000, "swapTripleWeekday": 3
+    },
+    "gap": "fill_at_open",
+    "quality": "m1",
+    "source": "dukascopy-bid",
     "calendar": {
       "name": "metals",
       "location": "America/New_York",

@@ -66,6 +66,14 @@ func (r Runner) Run(ctx context.Context, job Job) (Report, error) {
 
 	var report Report
 	for _, sym := range job.Symbols {
+		source := r.Fetcher.Name()
+		if sn, ok := r.Fetcher.(sourceNamer); ok {
+			var err error
+			source, err = sn.Source(sym)
+			if err != nil {
+				return report, err
+			}
+		}
 		tfs := job.TFs
 		if job.TFsForSymbol != nil {
 			var err error
@@ -84,7 +92,7 @@ func (r Runner) Run(ctx context.Context, job Job) (Report, error) {
 				if err != nil {
 					return report, err
 				}
-				if ok && month.name != currentMonth && existing.BuildVersion == job.BuildVersion {
+				if ok && month.name != currentMonth && existing.BuildVersion == job.BuildVersion && existing.Source == source {
 					report.Skipped++
 					continue
 				}
@@ -95,14 +103,6 @@ func (r Runner) Run(ctx context.Context, job Job) (Report, error) {
 				if series.Len() == 0 {
 					report.Skipped++
 					continue
-				}
-				source := r.Fetcher.Name()
-				if sn, ok := r.Fetcher.(sourceNamer); ok {
-					var err error
-					source, err = sn.Source(sym)
-					if err != nil {
-						return report, err
-					}
 				}
 				meta := store.Manifest{Symbol: sym, TF: tf, Month: month.name, Source: source, BuildVersion: job.BuildVersion}
 				data, completed, err := store.EncodeForPublish(series, meta)

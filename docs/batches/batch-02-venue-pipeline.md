@@ -99,3 +99,7 @@ _Required entries before this batch closes:_
 - Dukascopy public data requires no credentials, but republishing derived bars is
   not enabled in this pipeline. FX stays on the client-side fallback path until
   redistribution rights are explicitly cleared.
+- Dukascopy's public BI5 candle artifacts use 24-byte big-endian records in the
+  order `seconds/open/close/low/high/volume`. Completed daily history is served
+  in annual D1 artifacts; fine and current-period bars are reconstructed from
+  daily M1 artifacts when a coarser native artifact is unavailable.

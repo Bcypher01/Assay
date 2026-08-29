@@ -17,6 +17,8 @@ func TestPnLCentsForSupportedInstruments(t *testing.T) {
 		{"EURUSD micro lot", "DUKAS:EURUSD", "0.00001", "100000", "USD", "USD", 1, 0, core.RatioFromFloat(.01), 1},
 		{"BTCUSDT", "BINANCE:BTCUSDT", "0.01", "1", "USDT", "USDT", 1, 0, core.One, 1},
 		{"USDJPY", "DUKAS:USDJPY", "0.001", "100000", "JPY", "USD", 1, 150000, core.One, 67},
+		{"USDCAD", "DUKAS:USDCAD", "0.00001", "100000", "CAD", "USD", 1, 135000, core.One, 74},
+		{"USDCHF", "DUKAS:USDCHF", "0.00001", "100000", "CHF", "USD", 1, 88000, core.One, 114},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -53,5 +55,16 @@ func TestQuoteMinorCentsForUSDJPY(t *testing.T) {
 	}
 	if got != 67 {
 		t.Fatalf("100 JPY fee = %d cents, want 67", got)
+	}
+}
+
+func TestQuoteMinorCentsForUSDCAD(t *testing.T) {
+	s := Spec{Symbol: "DUKAS:USDCAD", TickSize: "0.00001", ContractSize: "100000", QuoteCurrency: "CAD", SettleCurrency: "USD"}
+	got, err := s.QuoteMinorCents(100, 135_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != 74 {
+		t.Fatalf("CAD 1 fee = %d cents, want 74", got)
 	}
 }

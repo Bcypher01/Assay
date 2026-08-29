@@ -49,6 +49,16 @@ make lint
 make bench
 ```
 
+FX and spot-metal candles use Dukascopy's public, broker-native BID feed. It
+requires no API key. Intraday candles are deterministically aggregated from
+the venue's one-minute BI5 artifacts; daily candles use its annual BI5 files.
+The existing `DUKAS:*` symbol IDs remain unchanged.
+
+The feed can be used directly by a local Assay server. Publicly republishing
+the candles is a separate licensing question, so R2 publication remains
+blocked unless redistribution rights have been confirmed and
+`ASSAY_DUKASCOPY_REDISTRIBUTION_AUTHORIZED=true` is set.
+
 To import ten years of official BLS CPI and Employment Situation releases:
 
 ```

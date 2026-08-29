@@ -18,14 +18,14 @@ import (
 func TestDeriveRequestRejectsUnsupportedResolution(t *testing.T) {
 	_, err := DeriveRequest(nil,
 		[]string{"DUKAS:EURUSD"},
-		[]core.TF{core.TFH4},
+		[]core.TF{core.TFS1},
 		core.MustParseTime("2024-01-01T00:00:00Z"),
 		core.MustParseTime("2024-02-01T00:00:00Z"),
 	)
 	if !errors.Is(err, ErrUnsupportedResolution) {
 		t.Fatalf("expected ErrUnsupportedResolution, got %v", err)
 	}
-	if got := err.Error(); got != "library: unsupported resolution: h4 for DUKAS:EURUSD" {
+	if got := err.Error(); got != "library: unsupported resolution: s1 for DUKAS:EURUSD" {
 		t.Fatalf("error did not name timeframe and instrument: %q", got)
 	}
 
@@ -37,6 +37,30 @@ func TestDeriveRequestRejectsUnsupportedResolution(t *testing.T) {
 	)
 	if !errors.Is(err, ErrUnsupportedResolution) {
 		t.Fatalf("expected crypto m5 to be unsupported, got %v", err)
+	}
+}
+
+func TestDeriveRequestAllowsDukascopyTimeframes(t *testing.T) {
+	want := []core.TF{
+		core.TFM1, core.TFM5, core.TFM15, core.TFM30,
+		core.TFH1, core.TFH4, core.TFD1, core.TFW1,
+	}
+	r, err := DeriveRequest(nil,
+		[]string{"DUKAS:EURUSD"},
+		want,
+		core.MustParseTime("2024-01-01T00:00:00Z"),
+		core.MustParseTime("2024-02-01T00:00:00Z"),
+	)
+	if err != nil {
+		t.Fatalf("derive: %v", err)
+	}
+	if len(r.TFs) != len(want) {
+		t.Fatalf("derived %d timeframes, want %d: %v", len(r.TFs), len(want), r.TFs)
+	}
+	for i := range want {
+		if r.TFs[i] != want[i] {
+			t.Fatalf("timeframe %d = %s, want %s", i, r.TFs[i], want[i])
+		}
 	}
 }
 
@@ -183,6 +207,106 @@ func TestStatusTreatsCompleteDailyFXMonthWithWeekendBoundariesAsReady(t *testing
 	})
 	if status.Readiness != ReadinessReady || len(status.MissingPartitions) != 0 {
 		t.Fatalf("status = %+v, want ready daily FX data despite weekend month boundaries", status)
+	}
+}
+
+func TestEnsureReplacesLegacyYahooFXCache(t *testing.T) {
+	ctx := context.Background()
+	registry := instrument.MustDefault()
+	cache := store.NewLocalStore(t.TempDir())
+	series := buildDailyTradingMonth(t, registry, "DUKAS:EURUSD", "2020-02")
+	if err := cache.Write(ctx, series, store.Manifest{
+		Symbol: "DUKAS:EURUSD", TF: core.TFD1, Month: "2020-02", Source: "yahoo-fx", BuildVersion: "old",
+	}); err != nil {
+		t.Fatalf("seed legacy cache: %v", err)
+	}
+	fallback := &fixtureFetcher{series: series}
+	loader := New(cache, failingObjects{}, fallback)
+	loader.Registry = registry
+	req := Request{
+		Symbols: []string{"DUKAS:EURUSD"},
+		TFs:     []core.TF{core.TFD1},
+		From:    core.MustParseTime("2020-02-01T00:00:00Z"),
+		To:      core.MustParseTime("2020-03-01T00:00:00Z"),
+	}
+	status := loader.Status(ctx, req)
+	if status.Readiness != ReadinessPartial || len(status.MissingPartitions) != 1 {
+		t.Fatalf("legacy cache should require refresh: %+v", status)
+	}
+	if err := loader.Ensure(ctx, req, nil); err != nil {
+		t.Fatalf("refresh legacy cache: %v", err)
+	}
+	if fallback.calls != 1 {
+		t.Fatalf("fallback calls=%d, want 1", fallback.calls)
+	}
+	_, manifests, err := loader.Load(ctx, "DUKAS:EURUSD", core.TFD1, req.From, req.To)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manifests) != 1 || manifests[0].Source != "fixture-venue" {
+		t.Fatalf("legacy source was not replaced: %+v", manifests)
+	}
+}
+
+func TestStaleManifestRecognizesPriorFXFeeds(t *testing.T) {
+	loader := &Loader{Registry: instrument.MustDefault()}
+	for _, source := range []string{"yahoo-fx", "stooq-fx", "twelve-data-composite", "dukascopy"} {
+		if !loader.staleManifest("DUKAS:EURUSD", store.Manifest{Source: source}) {
+			t.Errorf("source %q should be stale", source)
+		}
+	}
+	for _, source := range []string{"dukascopy-bid", "fixture", "private-feed"} {
+		if loader.staleManifest("DUKAS:EURUSD", store.Manifest{Source: source}) {
+			t.Errorf("source %q should remain usable", source)
+		}
+	}
+}
+
+func TestEnsureRollingDailyWindowFetchesWholeFirstMonth(t *testing.T) {
+	ctx := context.Background()
+	cache := store.NewLocalStore(t.TempDir())
+	series := core.NewSeries("DUKAS:EURUSD", core.TFD1, 1)
+	bar := core.MustParseTime("2025-08-29T00:00:00Z")
+	series.Append(bar, 110000, 111000, 109000, 110500, 1)
+	fallback := &fixtureFetcher{series: series}
+	loader := New(cache, nil, fallback)
+	loader.Registry = instrument.MustDefault()
+
+	err := loader.Ensure(ctx, Request{
+		Symbols: []string{"DUKAS:EURUSD"},
+		TFs:     []core.TF{core.TFD1},
+		From:    core.MustParseTime("2025-08-29T09:35:00Z"),
+		To:      core.MustParseTime("2025-09-01T00:00:00Z"),
+	}, nil)
+	if err != nil {
+		t.Fatalf("rolling daily window: %v", err)
+	}
+	_, manifests, err := cache.Load(ctx, "DUKAS:EURUSD", core.TFD1, core.MinTime, core.MaxTime)
+	if err != nil || len(manifests) != 1 || manifests[0].Rows != 1 {
+		t.Fatalf("cached first month manifests=%+v, err=%v", manifests, err)
+	}
+}
+
+func TestEnsureSkipsClosedOnlyFirstPartialMonth(t *testing.T) {
+	ctx := context.Background()
+	cache := store.NewLocalStore(t.TempDir())
+	series := core.NewSeries("DUKAS:EURUSD", core.TFD1, 1)
+	series.Append(core.MustParseTime("2025-09-01T00:00:00Z"), 110000, 111000, 109000, 110500, 1)
+	fallback := &fixtureFetcher{series: series}
+	loader := New(cache, nil, fallback)
+	loader.Registry = instrument.MustDefault()
+
+	err := loader.Ensure(ctx, Request{
+		Symbols: []string{"DUKAS:EURUSD"},
+		TFs:     []core.TF{core.TFD1},
+		From:    core.MustParseTime("2025-08-30T10:00:00Z"),
+		To:      core.MustParseTime("2025-09-02T00:00:00Z"),
+	}, nil)
+	if err != nil {
+		t.Fatalf("closed-only leading partition: %v", err)
+	}
+	if fallback.calls != 1 {
+		t.Fatalf("fallback calls=%d, want only September", fallback.calls)
 	}
 }
 

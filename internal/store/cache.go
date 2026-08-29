@@ -262,9 +262,12 @@ func (s *LocalStore) Load(ctx context.Context, sym string, tf core.TF, from, to 
 			return nil, nil, fmt.Errorf("store: %w: %s declares version %d, want %d",
 				ErrSchemaVersion, mfPath, mf.SchemaVersion, SchemaVersion)
 		}
-		// A file overlaps [from, to) unless it ends before the window starts or
-		// begins at or after the window ends.
-		if mf.Last < from || mf.First >= to {
+		// A manifest's Last is the final candle's open, not an instantaneous
+		// observation. Treat the file as covering through that candle's close;
+		// otherwise a rolling D1 request beginning midday ignores a perfectly
+		// valid candle opened at midnight and repeatedly refetches the month.
+		lastEnd := mf.Last + core.Time(tf.Millis())
+		if lastEnd <= from || mf.First >= to {
 			continue
 		}
 		files = append(files, touched{manifest: mf, path: s.parquetPath(sym, tf, mf.Month)})

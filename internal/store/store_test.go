@@ -108,6 +108,28 @@ func TestRoundTripExact(t *testing.T) {
 	}
 }
 
+func TestLoadReturnsManifestWhenWindowFallsInsideLastCandle(t *testing.T) {
+	ctx := context.Background()
+	st := NewLocalStore(t.TempDir())
+	series := core.NewSeries("DUKAS:EURUSD", core.TFD1, 1)
+	open := core.MustParseTime("2025-08-29T00:00:00Z")
+	series.Append(open, 110000, 111000, 109000, 110500, 1)
+	if err := st.Write(ctx, series, Manifest{
+		Symbol: "DUKAS:EURUSD", TF: core.TFD1, Month: "2025-08", Source: "dukascopy-bid", BuildVersion: "test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, manifests, err := st.Load(ctx, "DUKAS:EURUSD", core.TFD1,
+		core.MustParseTime("2025-08-29T09:35:00Z"), core.MustParseTime("2025-08-29T10:00:00Z"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Len() != 0 || len(manifests) != 1 {
+		t.Fatalf("bars=%d manifests=%d, want 0 bars and the overlapping manifest", got.Len(), len(manifests))
+	}
+}
+
 func TestRoundTripCodecDirect(t *testing.T) {
 	// The reader must decode straight into typed slices identical to the input,
 	// independent of the cache layer.

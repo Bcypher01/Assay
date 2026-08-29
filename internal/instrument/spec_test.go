@@ -57,8 +57,13 @@ func TestParseDecimal(t *testing.T) {
 func TestPriceRoundTripIsExact(t *testing.T) {
 	r := MustDefault()
 	samples := map[string][]string{
+		"DUKAS:AUDUSD":    {"0.65432", "0.00001"},
 		"DUKAS:EURUSD":    {"1.08532", "0.00001", "1.00000", "1.23456", "0.99999"},
+		"DUKAS:NZDUSD":    {"0.61234", "0.00001"},
+		"DUKAS:USDCAD":    {"1.35210", "0.00001"},
+		"DUKAS:USDCHF":    {"0.88123", "0.00001"},
 		"DUKAS:USDJPY":    {"147.250", "0.001", "100.000"},
+		"DUKAS:XAGUSD":    {"29.375", "0.001"},
 		"DUKAS:XAUUSD":    {"2431.750", "0.001"},
 		"BINANCE:BTCUSDT": {"67000.50", "0.01", "104233.99"},
 		"BINANCE:ETHUSDT": {"3211.07", "0.01"},
@@ -169,7 +174,7 @@ func TestQualityTierSupports(t *testing.T) {
 
 func TestRegistryLoad(t *testing.T) {
 	r := MustDefault()
-	if r.Len() < 6 {
+	if r.Len() < 11 {
 		t.Fatalf("expected the seed set, got %d instruments", r.Len())
 	}
 	syms := r.Symbols()

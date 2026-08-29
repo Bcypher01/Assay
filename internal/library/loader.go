@@ -122,6 +122,10 @@ type ObjectStore interface {
 	Get(ctx context.Context, key string) (io.ReadCloser, bool, error)
 }
 
+type sourceNamer interface {
+	Source(sym string) (string, error)
+}
+
 // Loader resolves published library objects into the local cache.
 type Loader struct {
 	Cache    *store.LocalStore
@@ -288,7 +292,13 @@ func (l *Loader) Status(ctx context.Context, r Request) Status {
 					status.LastSuccessfulPrep = mf.Last
 				}
 			}
-			missing := missingPartitions(sym, tf, r.From, r.To, manifests, l.calendarFor(sym))
+			current := make([]store.Manifest, 0, len(manifests))
+			for _, mf := range manifests {
+				if !l.staleManifest(sym, mf) {
+					current = append(current, mf)
+				}
+			}
+			missing := missingPartitions(sym, tf, r.From, r.To, current, l.calendarFor(sym))
 			status.MissingPartitions = append(status.MissingPartitions, missing...)
 		}
 	}
@@ -330,7 +340,7 @@ func (l *Loader) ensureMonth(ctx context.Context, sym string, tf core.TF, month 
 	key := objectKey(sym, tf, month.name)
 	if l.Objects != nil {
 		meta, ok, err := l.Objects.Head(ctx, key)
-		if err == nil && ok {
+		if err == nil && ok && !l.staleManifest(sym, meta) {
 			err := l.downloadMonth(ctx, key, meta, progress)
 			if err == nil {
 				return nil
@@ -375,14 +385,28 @@ func (l *Loader) fetchFallback(ctx context.Context, sym string, tf core.TF, mont
 		return fmt.Errorf("library: %s %s %s unavailable and no fallback configured", sym, tf, month.name)
 	}
 	report(progress, Progress{Stage: "downloading", CurrentFile: objectKey(sym, tf, month.name)})
-	series, err := l.Fallback.Fetch(ctx, sym, tf, month.from, month.to)
+	// Cache objects are calendar-month partitions even when the user asks for
+	// an exact rolling window beginning midway through a candle. Fetching only
+	// the clamped request can otherwise produce an empty first partition (for
+	// example, a D1 request starting Friday at 09:35). The final Load still
+	// slices the cached month to the caller's exact range.
+	partitionFrom := core.FromStd(firstOfMonth(month.from.Std()))
+	partitionTo := core.FromStd(firstOfMonth(month.from.Std()).AddDate(0, 1, 0))
+	series, err := l.Fallback.Fetch(ctx, sym, tf, partitionFrom, partitionTo)
 	if err != nil {
 		return fmt.Errorf("library: fallback fetch %s %s %s: %w", sym, tf, month.name, err)
 	}
 	if series == nil || series.Len() == 0 {
 		return fmt.Errorf("library: fallback fetch %s %s %s: %w", sym, tf, month.name, venue.ErrUnavailable)
 	}
-	meta := store.Manifest{Symbol: sym, TF: tf, Month: month.name, Source: l.Fallback.Name(), BuildVersion: "fallback"}
+	source := l.Fallback.Name()
+	if namer, ok := l.Fallback.(sourceNamer); ok {
+		source, err = namer.Source(sym)
+		if err != nil {
+			return err
+		}
+	}
+	meta := store.Manifest{Symbol: sym, TF: tf, Month: month.name, Source: source, BuildVersion: "fallback"}
 	return l.Cache.Write(ctx, series, meta)
 }
 
@@ -398,11 +422,38 @@ func (l *Loader) missingMonths(ctx context.Context, sym string, tf core.TF, from
 	var missing []monthWindow
 	for _, month := range months(from, to) {
 		mf, ok := byMonth[month.name]
-		if !ok || !manifestCovers(mf, month, tf, l.calendarFor(sym)) {
+		calendar := l.calendarFor(sym)
+		if !ok {
+			if _, _, requiresBars := requiredBounds(month, tf, calendar); !requiresBars {
+				continue
+			}
+			missing = append(missing, month)
+			continue
+		}
+		if l.staleManifest(sym, mf) || !manifestCovers(mf, month, tf, calendar) {
 			missing = append(missing, month)
 		}
 	}
 	return missing, nil
+}
+
+// staleManifest identifies known pre-migration FX sources whose candles must
+// not survive a feed switch. Unknown source names remain valid so fixture,
+// private, and user-supplied libraries keep working.
+func (l *Loader) staleManifest(symbol string, mf store.Manifest) bool {
+	if l.Registry == nil {
+		return false
+	}
+	spec, err := l.Registry.Get(symbol)
+	if err != nil || spec.Source != "dukascopy-bid" || mf.Source == spec.Source {
+		return false
+	}
+	switch mf.Source {
+	case "yahoo", "yahoo-fx", "stooq-fx", "twelve-data-composite", "dukascopy", "venue-router":
+		return true
+	default:
+		return false
+	}
 }
 
 func missingPartitions(sym string, tf core.TF, from, to core.Time, manifests []store.Manifest, calendar *instrument.Calendar) []MissingPartition {
@@ -413,7 +464,20 @@ func missingPartitions(sym string, tf core.TF, from, to core.Time, manifests []s
 	var missing []MissingPartition
 	for _, month := range months(from, to) {
 		mf, ok := byMonth[month.name]
-		if !ok || !manifestCovers(mf, month, tf, calendar) {
+		if !ok {
+			if _, _, requiresBars := requiredBounds(month, tf, calendar); !requiresBars {
+				continue
+			}
+			missing = append(missing, MissingPartition{
+				Symbol: sym,
+				TF:     tf,
+				Month:  month.name,
+				From:   month.from,
+				To:     month.to,
+			})
+			continue
+		}
+		if !manifestCovers(mf, month, tf, calendar) {
 			missing = append(missing, MissingPartition{
 				Symbol: sym,
 				TF:     tf,
@@ -520,6 +584,18 @@ func supports(reg *instrument.Registry, sym string, tf core.TF) bool {
 	spec, err := reg.Get(sym)
 	if err != nil {
 		return false
+	}
+	// Dukascopy is backed by M1 data and the adapter can either serve M1
+	// directly or aggregate it into every advertised coarser timeframe. Keep
+	// this policy in step with dukascopy.Client.SupportedTFs; the old generic FX
+	// branch below incorrectly limited these instruments to D1/W1.
+	if spec.Venue == "dukascopy" {
+		switch tf {
+		case core.TFM1, core.TFM5, core.TFM15, core.TFM30, core.TFH1, core.TFH4, core.TFD1, core.TFW1:
+			return spec.Quality.Supports(tf)
+		default:
+			return false
+		}
 	}
 	switch spec.Class {
 	case instrument.ClassCrypto:

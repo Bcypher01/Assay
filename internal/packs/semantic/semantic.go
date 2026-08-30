@@ -19,16 +19,23 @@ func init() {
 		BreakRetest{side: core.SideLong}, BreakRetest{side: core.SideShort},
 		OrderBlockRetest{side: core.SideLong}, OrderBlockRetest{side: core.SideShort},
 		BreakerRetest{side: core.SideLong}, BreakerRetest{side: core.SideShort},
+		FairValueGapRetest{side: core.SideLong}, FairValueGapRetest{side: core.SideShort},
+		DrawnPrecedent{side: core.SideLong}, DrawnPrecedent{side: core.SideShort},
 	} {
 		primitive.MustRegister(p)
 	}
 }
 
 type parameters struct {
-	lookback, retest, tolerance, expiry int
-	displacementBody                    int
-	useBody, confirmByClose             bool
+	lookback, retest, tolerance, expiry, minSize int
+	displacementBody                             int
+	useBody, confirmByClose                      bool
+	mitigationRule                               string
+	precedent                                    []normalizedBar
+	similarity                                   int
 }
+
+type normalizedBar struct{ open, high, low, close int }
 
 func readParameters(message proto.Message) (parameters, error) {
 	x, ok := message.(*structpb.Struct)
@@ -63,12 +70,217 @@ func readParameters(message proto.Message) (parameters, error) {
 	if out.displacementBody, err = readInt("displacementBodyMilli", 600); err != nil {
 		return out, err
 	}
+	if out.minSize, err = readInt("minSizeTicks", 1); err != nil {
+		return out, err
+	}
+	if out.similarity, err = readInt("similarityMilli", 800); err != nil {
+		return out, err
+	}
+	if field, ok := x.Fields["precedent"]; ok {
+		for _, value := range field.GetListValue().Values {
+			item := value.GetStructValue()
+			if item == nil {
+				return out, fmt.Errorf("semantic: precedent candles must be objects")
+			}
+			read := func(name string) (int, error) {
+				value, ok := item.Fields[name]
+				if !ok || value.GetNumberValue() != math.Trunc(value.GetNumberValue()) {
+					return 0, fmt.Errorf("semantic: precedent %s must be an integer", name)
+				}
+				return int(value.GetNumberValue()), nil
+			}
+			var bar normalizedBar
+			if bar.open, err = read("openMilli"); err != nil {
+				return out, err
+			}
+			if bar.high, err = read("highMilli"); err != nil {
+				return out, err
+			}
+			if bar.low, err = read("lowMilli"); err != nil {
+				return out, err
+			}
+			if bar.close, err = read("closeMilli"); err != nil {
+				return out, err
+			}
+			out.precedent = append(out.precedent, bar)
+		}
+	}
+	if field, ok := x.Fields["mitigationRule"]; ok {
+		out.mitigationRule = field.GetStringValue()
+	}
+	if out.mitigationRule == "" {
+		out.mitigationRule = "first_touch"
+	}
 	out.useBody = boolField(x, "useBody", false)
 	out.confirmByClose = boolField(x, "confirmByClose", true)
 	if out.lookback < 2 || out.retest < 1 || out.expiry < 1 || out.displacementBody < 1 || out.displacementBody > 1000 {
 		return out, fmt.Errorf("semantic: invalid setup detector parameters")
 	}
 	return out, nil
+}
+
+// DrawnPrecedent repeats the normalized candle shape selected directly on the
+// chart. It deliberately has no named trading concept: the user's example is
+// the strategy precedent. Absolute price and timestamp never enter matching.
+type DrawnPrecedent struct{ side core.Side }
+
+func (x DrawnPrecedent) Spec() primitive.Spec {
+	if x.side == core.SideShort {
+		return semanticSpec("drawn_precedent_bearish")
+	}
+	return semanticSpec("drawn_precedent_bullish")
+}
+
+func (x DrawnPrecedent) New(p proto.Message, _ core.TF) (primitive.Instance, error) {
+	params, err := readParameters(p)
+	if err != nil {
+		return nil, err
+	}
+	if len(params.precedent) < 3 || len(params.precedent) > 64 {
+		return nil, fmt.Errorf("semantic: precedent must contain 3 to 64 candles")
+	}
+	if params.similarity < 500 || params.similarity > 1000 {
+		return nil, fmt.Errorf("semantic: similarityMilli must be between 500 and 1000")
+	}
+	return &drawnPrecedent{parameters: params, side: x.side}, nil
+}
+
+type drawnPrecedent struct {
+	parameters
+	side     core.Side
+	overlays []primitive.Overlay
+}
+
+func (x *drawnPrecedent) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.Value, error) {
+	b, valid := core.NewBitset(s.Len()), core.NewBitset(s.Len())
+	n := len(x.precedent)
+	expected := make([]PrecedentCandle, n)
+	for i, bar := range x.precedent {
+		expected[i] = PrecedentCandle{Open: bar.open, High: bar.high, Low: bar.low, Close: bar.close}
+	}
+	for i := n - 1; i < s.Len(); i++ {
+		valid.Set(i)
+		from := i - n + 1
+		low, high := s.Low[from], s.High[from]
+		for j := from + 1; j <= i; j++ {
+			low = core.Min(low, s.Low[j])
+			high = core.Max(high, s.High[j])
+		}
+		score := ScoreSeriesPrecedent(expected, s, i, x.similarity)
+		if !score.Accepted {
+			continue
+		}
+		b.Set(i)
+		x.overlays = append(x.overlays,
+			primitive.Overlay{Kind: primitive.OverlayZoneBox, From: s.Time[from], To: s.Time[i], Price: low, Price2: high, Text: "drawn precedent"},
+			primitive.Overlay{Kind: primitive.OverlayMarker, From: s.Time[i], To: s.Time[i], Price: s.Close[i], Text: "precedent match"},
+		)
+	}
+	return primitive.Value{Kind: primitive.KindBool, Bool: b, Valid: valid}, nil
+}
+
+func (x *drawnPrecedent) Overlays(from, to core.Time) []primitive.Overlay {
+	return clip(x.overlays, from, to)
+}
+
+func absInt(value int) int {
+	if value < 0 {
+		return -value
+	}
+	return value
+}
+
+// FairValueGapRetest is the executable meaning of a user-drawn FVG zone. The
+// drawing supplies a confirmed example; this detector repeats the candle
+// relationship and fill rule without retaining that example's price or time.
+type FairValueGapRetest struct{ side core.Side }
+
+func (x FairValueGapRetest) Spec() primitive.Spec {
+	if x.side == core.SideShort {
+		return semanticSpec("fair_value_gap_retest_bearish")
+	}
+	return semanticSpec("fair_value_gap_retest_bullish")
+}
+
+func (x FairValueGapRetest) New(p proto.Message, _ core.TF) (primitive.Instance, error) {
+	params, err := readParameters(p)
+	if err != nil {
+		return nil, err
+	}
+	if params.minSize < 1 {
+		return nil, fmt.Errorf("semantic: minSizeTicks must be positive")
+	}
+	switch params.mitigationRule {
+	case "first_touch", "half_fill", "full_fill":
+	default:
+		return nil, fmt.Errorf("semantic: invalid FVG mitigation rule")
+	}
+	return &fairValueGapRetest{parameters: params, side: x.side}, nil
+}
+
+type fairValueGapRetest struct {
+	parameters
+	side     core.Side
+	overlays []primitive.Overlay
+}
+
+func (x *fairValueGapRetest) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.Value, error) {
+	b, valid := core.NewBitset(s.Len()), core.NewBitset(s.Len())
+	var pending *pendingZone
+	for i := range s.Time {
+		valid.Set(i)
+		if pending != nil {
+			if i > pending.expires {
+				pending = nil
+			} else if i > pending.created && x.filled(s, i, *pending) {
+				b.Set(i)
+				x.overlays = append(x.overlays,
+					primitive.Overlay{Kind: primitive.OverlayZoneBox, From: s.Time[pending.created], To: s.Time[i], Price: pending.low, Price2: pending.high, Text: "FVG"},
+					primitive.Overlay{Kind: primitive.OverlayMarker, From: s.Time[i], To: s.Time[i], Price: midpoint(pending.low, pending.high), Text: "FVG retest"},
+				)
+				pending = nil
+			}
+		}
+		if i < 2 {
+			continue
+		}
+		var low, high core.Price
+		if x.side == core.SideLong {
+			low, high = s.High[i-2], s.Low[i]
+		} else {
+			low, high = s.High[i], s.Low[i-2]
+		}
+		if high-low < core.Price(x.minSize) {
+			continue
+		}
+		pending = &pendingZone{low: low, high: high, created: i, expires: min(i+x.expiry, s.Len()-1)}
+		x.overlays = append(x.overlays, primitive.Overlay{Kind: primitive.OverlayZoneBox, From: s.Time[i], To: s.Time[pending.expires], Price: low, Price2: high, Text: "FVG"})
+	}
+	return primitive.Value{Kind: primitive.KindBool, Bool: b, Valid: valid}, nil
+}
+
+func (x *fairValueGapRetest) filled(s *core.Series, i int, z pendingZone) bool {
+	mid := midpoint(z.low, z.high)
+	switch x.mitigationRule {
+	case "first_touch":
+		return s.Low[i] <= z.high && s.High[i] >= z.low
+	case "half_fill":
+		if x.side == core.SideLong {
+			return s.Low[i] <= mid
+		}
+		return s.High[i] >= mid
+	case "full_fill":
+		if x.side == core.SideLong {
+			return s.Low[i] <= z.low
+		}
+		return s.High[i] >= z.high
+	default:
+		return false
+	}
+}
+
+func (x *fairValueGapRetest) Overlays(from, to core.Time) []primitive.Overlay {
+	return clip(x.overlays, from, to)
 }
 
 func boolField(x *structpb.Struct, name string, fallback bool) bool {

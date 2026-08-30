@@ -67,6 +67,10 @@ func TestEvaluateReportsSampleMatchAndCompiledStrategy(t *testing.T) {
 	if preview.Matches[0].SignalTimeMS != drawing().AnchorTimeMS {
 		t.Fatalf("signal time = %d", preview.Matches[0].SignalTimeMS)
 	}
+	match := preview.Matches[0]
+	if match.ExitTimeMSPessimistic < match.EntryTimeMS || match.ExitPessimistic == 0 {
+		t.Fatalf("exit marker data = %#v", preview.Matches[0])
+	}
 }
 
 func TestEvaluateRejectsAZoneThatDoesNotMatchDetectedStructure(t *testing.T) {
@@ -94,5 +98,78 @@ func TestDrawingValidationRejectsInvalidTradeGeometry(t *testing.T) {
 	d.Stop = d.Target
 	if errs := d.Validate(); len(errs) == 0 || errs[0].Path != "stop" {
 		t.Fatalf("errors = %#v", errs)
+	}
+}
+
+func TestCompileVisualFVGStrategy(t *testing.T) {
+	d := drawing()
+	d.Kind = FairValueGapRetest
+	d.MinSizeTicks = 2
+	d.MitigationRule = "half_fill"
+	d.RiskUnit = "percent"
+	strategy, err := Compile(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(strategy.Nodes) != 1 || strategy.Nodes[0].Type != "fair_value_gap_retest_bullish" {
+		t.Fatalf("nodes = %#v", strategy.Nodes)
+	}
+	if strategy.Template.ID != "semantic-drawing/fair_value_gap_retest" {
+		t.Fatalf("template = %#v", strategy.Template)
+	}
+	if strategy.Risk.Stop.Unit != core.UnitPercent || strategy.Risk.Target.Unit != core.UnitPercent {
+		t.Fatalf("risk = %#v", strategy.Risk)
+	}
+}
+
+func TestCompileDrawnPrecedentStrategy(t *testing.T) {
+	d := drawing()
+	d.Kind = DrawnPrecedent
+	d.RiskUnit = "percent"
+	d.SimilarityMilli = 850
+	d.Precedent = []PrecedentBar{
+		{OpenMilli: 250, HighMilli: 500, LowMilli: 0, CloseMilli: 250},
+		{OpenMilli: 500, HighMilli: 750, LowMilli: 0, CloseMilli: 250},
+		{OpenMilli: 250, HighMilli: 1000, LowMilli: 250, CloseMilli: 1000},
+	}
+	strategy, err := Compile(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(strategy.Nodes) != 1 || strategy.Nodes[0].Type != "drawn_precedent_bullish" {
+		t.Fatalf("nodes = %#v", strategy.Nodes)
+	}
+	if strategy.Template.ID != "semantic-drawing/drawn_precedent" {
+		t.Fatalf("template = %#v", strategy.Template)
+	}
+}
+
+func TestEvaluateDrawnPrecedentRecognizesItsOwnExample(t *testing.T) {
+	registry, err := instrument.Default()
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec, err := registry.Get("DUKAS:EURUSD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := drawing()
+	d.Kind = DrawnPrecedent
+	d.AnchorTimeMS = 120_000
+	d.SimilarityMilli = 1000
+	d.Precedent = []PrecedentBar{
+		{OpenMilli: 250, HighMilli: 500, LowMilli: 0, CloseMilli: 250},
+		{OpenMilli: 500, HighMilli: 750, LowMilli: 0, CloseMilli: 250},
+		{OpenMilli: 250, HighMilli: 1000, LowMilli: 250, CloseMilli: 1000},
+	}
+	preview, err := Evaluate(context.Background(), d, series(), *spec, "snapshot")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !preview.SampleMatched || !preview.RuleMatched || !preview.DrawingMatched {
+		t.Fatalf("match state = rule:%v drawing:%v sample:%v", preview.RuleMatched, preview.DrawingMatched, preview.SampleMatched)
+	}
+	if len(preview.Matches) != 0 || preview.Metrics.Trades != 0 {
+		t.Fatalf("source example counted as historical evidence: matches=%d trades=%d", len(preview.Matches), preview.Metrics.Trades)
 	}
 }

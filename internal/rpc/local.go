@@ -139,7 +139,7 @@ func NewLocalServerWithServices(cache *store.LocalStore, registry *instrument.Re
 			return setuptest.Chart{}, fmt.Errorf("setup chart: no prepared bars for the requested window")
 		}
 		maxBars := req.MaxBars
-		if maxBars <= 0 || maxBars > 1000 {
+		if maxBars <= 0 || maxBars > 50_000 {
 			maxBars = 300
 		}
 		from := 0

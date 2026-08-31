@@ -18,7 +18,7 @@ func TestHTTPStoreReadsPublicObjectsAndManifests(t *testing.T) {
 	}
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/library/BINANCE:BTCUSDT/m15/2025-01.parquet.manifest.json":
+		case "/library/BINANCE:BTCUSDT/m15/2025-01.manifest.json":
 			_, _ = w.Write(mb)
 		case "/library/BINANCE:BTCUSDT/m15/2025-01.parquet":
 			_, _ = w.Write([]byte("parquet"))

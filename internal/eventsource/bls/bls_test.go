@@ -2,6 +2,7 @@ package bls
 
 import (
 	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/Bcypher01/Assay/internal/event"
 	"testing"
 )
 
@@ -17,5 +18,14 @@ func TestArchiveLinksAndReleaseTime(t *testing.T) {
 	}
 	if got != core.MustParseTime("2024-09-11T12:30:00Z") || title == "" {
 		t.Fatalf("%d %q", got, title)
+	}
+}
+
+func TestReleaseTitleUsesTheRequestedFeedKind(t *testing.T) {
+	if got := releaseTitle(event.KindUSNonfarmPayrolls); got != "U.S. Employment Situation release" {
+		t.Fatalf("NFP title = %q", got)
+	}
+	if got := releaseTitle(event.KindUSCPI); got != "U.S. Consumer Price Index release" {
+		t.Fatalf("CPI title = %q", got)
 	}
 }

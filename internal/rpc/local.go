@@ -252,33 +252,86 @@ func NewLocalServerWithEventServices(cache *store.LocalStore, registry *instrume
 			return nil, err
 		}
 		windows := make([]core.TF, 0, len(req.Windows))
+		seriesFrom := filter.From
+		seriesTo := filter.To
 		for _, raw := range req.Windows {
 			w, err := core.ParseTF(raw)
 			if err != nil {
 				return nil, err
 			}
 			windows = append(windows, w)
+			if end := filter.To + core.Time(w.Millis()); end > seriesTo {
+				seriesTo = end
+			}
 		}
-		series, manifests, err := cache.Load(ctx, req.Symbol, tf, filter.From, filter.To)
+		trade, err := eventTradeConfig(req.Trade)
+		if err != nil {
+			return nil, err
+		}
+		if trade != nil {
+			if trade.CostPerTrade == 0 {
+				spec, err := registry.Get(req.Symbol)
+				if err != nil {
+					return nil, err
+				}
+				trade.EstimateCosts = true
+				trade.CostSpec = spec
+			}
+			if end := filter.To + core.Time(trade.EntryDelay.Millis()+trade.HoldFor.Millis()+tf.Millis()); end > seriesTo {
+				seriesTo = end
+			}
+			if trade.EntryTiming == eventstudy.EntryBeforeRelease {
+				seriesFrom = filter.From - core.Time(trade.EntryDelay.Millis()+tf.Millis())
+			}
+		}
+		// Measurement and trade exits can occur after the event filter boundary.
+		// Load the complete execution window rather than truncating the last event.
+		series, manifests, err := cache.Load(ctx, req.Symbol, tf, seriesFrom, seriesTo)
 		if err != nil {
 			return nil, err
 		}
 		if len(manifests) == 0 {
 			return nil, fmt.Errorf("rpc: event study bars are not prepared locally")
 		}
-		result, err := eventstudy.Run(eventstudy.Request{Events: snapshot, Series: series, Filter: filter, Windows: windows, BarSnapshot: store.SnapshotHash(manifests)})
+		result, err := eventstudy.Run(eventstudy.Request{Events: snapshot, Series: series, Filter: filter, Windows: windows, BarSnapshot: store.SnapshotHash(manifests), Trade: trade})
 		if err != nil {
 			return nil, err
 		}
 		out := &assayv1.EventStudyResponse{EventSnapshot: result.EventSnapshot, BarSnapshot: result.BarSnapshot, MethodologyVersion: result.MethodologyVersion}
 		for _, o := range result.Eligible {
-			out.EligibleEvents = append(out.EligibleEvents, &assayv1.EventObservation{EventId: o.EventID, OccurredAtMs: int64(o.OccurredAt), AlignedBarMs: int64(o.AlignedBar), Returns: o.Returns})
+			out.EligibleEvents = append(out.EligibleEvents, &assayv1.EventObservation{
+				EventId: o.EventID, OccurredAtMs: int64(o.OccurredAt), AlignedBarMs: int64(o.AlignedBar), Returns: o.Returns,
+				Actual: o.Actual, Forecast: o.Forecast, Previous: o.Previous, Surprise: o.Surprise, SurpriseZ: o.SurpriseZ, HasSurprise: o.HasSurprise,
+			})
 		}
 		for _, x := range result.Excluded {
 			out.ExcludedEvents = append(out.ExcludedEvents, &assayv1.EventExclusion{EventId: x.EventID, Reason: x.Reason})
 		}
 		for _, w := range result.Windows {
-			out.Windows = append(out.Windows, &assayv1.EventWindowSummary{Window: w.Window, Count: uint32(w.Count), Mean: w.Mean, Median: w.Median})
+			out.Windows = append(out.Windows, &assayv1.EventWindowSummary{
+				Window: w.Window, Count: uint32(w.Count), Mean: w.Mean, Median: w.Median,
+				MeanAbs: w.MeanAbs, MedianAbs: w.MedianAbs, UpCount: uint32(w.UpCount), DownCount: uint32(w.DownCount),
+				BaselineMeanAbs: w.BaselineMeanAbs, ImpactRatio: w.ImpactRatio,
+			})
+		}
+		if result.TradeSummary != nil {
+			summary := result.TradeSummary
+			out.TradeSummary = &assayv1.EventTradeSummary{
+				Trades: uint32(summary.Trades), Wins: uint32(summary.Wins), Losses: uint32(summary.Losses),
+				Whipsaws: uint32(summary.Whipsaws), Ambiguous: uint32(summary.Ambiguous), GrossPnl: summary.GrossPnL,
+				Costs: summary.Costs, NetPnl: summary.NetPnL, EndingEquity: summary.EndingEquity,
+				MaxDrawdown: summary.MaxDrawdown, Expectancy: summary.Expectancy, ProfitFactor: summary.ProfitFactor,
+				AverageMfe: summary.AverageMFE, AverageMae: summary.AverageMAE,
+			}
+		}
+		for _, trade := range result.Trades {
+			out.Trades = append(out.Trades, &assayv1.EventTrade{
+				EventId: trade.EventID, EventTimeMs: int64(trade.EventTime), EntryTimeMs: int64(trade.EntryTime), ExitTimeMs: int64(trade.ExitTime),
+				Side: trade.Side, MarketReturn: trade.MarketReturn, StrategyReturn: trade.StrategyReturn,
+				GrossPnl: trade.GrossPnL, Costs: trade.Costs, NetPnl: trade.NetPnL, Mfe: trade.MFE, Mae: trade.MAE,
+				Surprise: trade.Surprise, SurpriseZ: trade.SurpriseZ, HasSurprise: trade.HasSurprise,
+				ExitReason: trade.ExitReason, Ambiguous: trade.Ambiguous, Whipsaw: trade.Whipsaw,
+			})
 		}
 		return out, nil
 	}
@@ -301,7 +354,39 @@ func eventFilter(in *assayv1.EventFilter) (event.Filter, error) {
 	return out, nil
 }
 func eventRecord(e event.Event) *assayv1.EventRecord {
-	return &assayv1.EventRecord{Id: e.ID, OccurredAtMs: int64(e.OccurredAt), KnowledgeAtMs: int64(e.KnowledgeAt), Precision: string(e.Precision), Kind: string(e.Kind), Title: e.Title, Jurisdiction: e.Jurisdiction, Currencies: append([]string(nil), e.Currencies...), Impact: string(e.Impact), Status: string(e.Status), Source: e.Source.Provider}
+	return &assayv1.EventRecord{
+		Id: e.ID, OccurredAtMs: int64(e.OccurredAt), KnowledgeAtMs: int64(e.KnowledgeAt), Precision: string(e.Precision),
+		Kind: string(e.Kind), Title: e.Title, Jurisdiction: e.Jurisdiction, Currencies: append([]string(nil), e.Currencies...),
+		Impact: string(e.Impact), Status: string(e.Status), Source: e.Source.Provider,
+		Actual: decimalString(e.Actual), Forecast: decimalString(e.Forecast), Previous: decimalString(e.Previous), RevisionOf: e.RevisionOf,
+	}
+}
+
+func eventTradeConfig(in *assayv1.EventTradeConfig) (*eventstudy.TradeConfig, error) {
+	if in == nil {
+		return nil, nil
+	}
+	entryDelay, err := core.ParseTF(in.EntryDelay)
+	if err != nil {
+		return nil, fmt.Errorf("rpc: invalid event entry delay: %w", err)
+	}
+	holdFor, err := core.ParseTF(in.HoldFor)
+	if err != nil {
+		return nil, fmt.Errorf("rpc: invalid event holding period: %w", err)
+	}
+	return &eventstudy.TradeConfig{
+		EntryTiming: in.EntryTiming, DirectionRule: in.DirectionRule, EntryDelay: entryDelay, HoldFor: holdFor,
+		MinimumSurpriseZ: in.MinimumSurpriseZ, SurpriseFilter: in.SurpriseFilter,
+		StartingEquity: in.StartingEquity, PositionSize: in.PositionSize, CostPerTrade: in.CostPerTrade,
+		StopLoss: in.StopLoss, TakeProfit: in.TakeProfit,
+	}, nil
+}
+
+func decimalString(value *event.Decimal) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
 }
 
 // runCostFree reports the effective simulator configuration, not merely wire

@@ -506,12 +506,12 @@ func manifestCovers(mf store.Manifest, month monthWindow, tf core.TF, calendar *
 	if !requiresBars {
 		return true
 	}
-	if tf == core.TFD1 && calendar != nil {
+	if calendar != nil {
 		// Instrument calendars describe regular sessions, but do not enumerate
 		// every historical exchange/bank holiday. A complete daily partition can
-		// therefore begin or end a few calendar days inside its nominal boundary
-		// (for example, the May Day weekend in FX data). Keep this allowance small
-		// so a genuinely truncated daily download remains detectable.
+		// therefore begin or end a few calendar days inside its nominal boundary;
+		// intraday FX also closes early around dates such as New Year's Eve. Keep
+		// this allowance small so a genuinely truncated download remains detectable.
 		const holidayBoundaryAllowance = core.Time(4 * 24 * time.Hour / time.Millisecond)
 		return mf.First <= firstRequired+holidayBoundaryAllowance && mf.Last >= lastRequired-holidayBoundaryAllowance
 	}
@@ -524,7 +524,7 @@ func manifestCovers(mf store.Manifest, month monthWindow, tf core.TF, calendar *
 // at noon UTC identifies whether that trading date should have a daily bar
 // without treating the Sunday/Monday session boundary as a missing bar.
 func requiredBounds(month monthWindow, tf core.TF, calendar *instrument.Calendar) (core.Time, core.Time, bool) {
-	if tf != core.TFD1 || calendar == nil {
+	if calendar == nil {
 		step := core.Time(tf.Millis())
 		first := tf.AlignDown(month.from)
 		if first < month.from {
@@ -537,6 +537,26 @@ func requiredBounds(month monthWindow, tf core.TF, calendar *instrument.Calendar
 			return 0, 0, false
 		}
 		return first, last, true
+	}
+	if tf != core.TFD1 {
+		step := core.Time(tf.Millis())
+		firstBucket := tf.AlignDown(month.from)
+		if firstBucket < month.from {
+			firstBucket += step
+		}
+		lastBucket := tf.AlignDown(month.to - 1)
+		if lastBucket < firstBucket {
+			return 0, 0, false
+		}
+		firstOpen, ok := calendar.NextOpen(firstBucket)
+		if !ok || firstOpen >= month.to {
+			return 0, 0, false
+		}
+		lastOpen, ok := calendar.PreviousOpen(month.to - core.Time(time.Minute/time.Millisecond))
+		if !ok || lastOpen < firstBucket {
+			return 0, 0, false
+		}
+		return tf.AlignDown(firstOpen), tf.AlignDown(lastOpen), true
 	}
 
 	day := month.from.Std().Truncate(24 * time.Hour)

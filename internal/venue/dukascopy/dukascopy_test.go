@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"math"
 	"net/http"
@@ -182,6 +183,38 @@ func TestFetchHourlyFromDailyMinuteArtifact(t *testing.T) {
 	}
 }
 
+func TestFetchSkipsClosedSaturdayArtifact(t *testing.T) {
+	friday := encodeBI5(t,
+		rawBar{0, 110000, 110010, 109990, 110020, 10},
+	)
+	var saturdayRequested atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/EURUSD/2025/00/03/BID_candles_min_1.bi5":
+			_, _ = w.Write(friday)
+		case "/EURUSD/2025/00/04/BID_candles_min_1.bi5":
+			saturdayRequested.Store(true)
+			http.Error(w, "temporarily unavailable", http.StatusServiceUnavailable)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := &Client{BaseURL: srv.URL, Registry: dukaRegistry(t)}
+	got, err := c.Fetch(context.Background(), "DUKAS:EURUSD", core.TFH4,
+		core.MustParseTime("2025-01-03T00:00:00Z"), core.MustParseTime("2025-01-05T00:00:00Z"))
+	if err != nil {
+		t.Fatalf("fetch across closed Saturday: %v", err)
+	}
+	if saturdayRequested.Load() {
+		t.Fatal("closed Saturday artifact was requested")
+	}
+	if got.Len() != 1 || got.Open[0] != 110000 || got.Close[0] != 110010 {
+		t.Fatalf("unexpected Friday aggregate: %+v", got)
+	}
+}
+
 func TestFoldSundayIntoMonday(t *testing.T) {
 	src := core.NewSeries("DUKAS:EURUSD", core.TFD1, 2)
 	sunday := core.MustParseTime("2025-01-05T00:00:00Z")
@@ -241,6 +274,37 @@ func TestMirrorNotFoundDoesNotHidePrimaryArtifact(t *testing.T) {
 	body, err := client.download(context.Background(), primary, 0)
 	if err != nil || string(body) != "artifact" || calls.Load() != 3 {
 		t.Fatalf("body=%q calls=%d err=%v", body, calls.Load(), err)
+	}
+}
+
+func TestFetchArtifactsRetriesFailedDayWithoutCancelingMonth(t *testing.T) {
+	body := encodeBI5(t, rawBar{0, 110000, 110010, 109990, 110020, 10})
+	var calls atomic.Int32
+	client := &Client{
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			call := calls.Add(1)
+			status, responseBody := http.StatusServiceUnavailable, "busy"
+			if call == 7 {
+				status, responseBody = http.StatusOK, string(body)
+			}
+			return &http.Response{
+				StatusCode: status,
+				Status:     fmt.Sprintf("%d %s", status, http.StatusText(status)),
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(responseBody)),
+			}, nil
+		})},
+		retryDelay: func(int, string) time.Duration { return 0 },
+	}
+	base := time.Date(2020, 2, 2, 0, 0, 0, 0, time.UTC)
+	got, err := client.fetchArtifacts(context.Background(), "DUKAS:EURUSD", core.TFM1,
+		[]artifact{{url: "https://datafeed.dukascopy.com/datafeed/EURUSD/file.bi5", base: base}},
+		core.FromStd(base), core.FromStd(base.AddDate(0, 0, 1)))
+	if err != nil {
+		t.Fatalf("recovery pass failed: %v", err)
+	}
+	if calls.Load() != 7 || got.Len() != 1 {
+		t.Fatalf("calls=%d series=%+v", calls.Load(), got)
 	}
 }
 

@@ -83,7 +83,13 @@ func main() {
 		To:           to,
 		BuildVersion: *buildVersion,
 	}
-	report, err := (pipeline.Runner{Fetcher: fetcher, Publisher: pub}).Run(ctx, job)
+	report, err := (pipeline.Runner{
+		Fetcher:   fetcher,
+		Publisher: pub,
+		Progress: func(progress pipeline.Progress) {
+			log.Printf("%s %s %s: %s", progress.Symbol, progress.TF, progress.Month, progress.Stage)
+		},
+	}).Run(ctx, job)
 	if err != nil {
 		log.Fatal(err)
 	}

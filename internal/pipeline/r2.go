@@ -35,6 +35,8 @@ type R2Publisher struct {
 	now    func() time.Time
 }
 
+var defaultR2HTTPClient = &http.Client{Timeout: 30 * time.Second}
+
 // NewR2Publisher returns an R2 publisher. The endpoint should look like
 // https://<account-id>.r2.cloudflarestorage.com.
 func NewR2Publisher(cfg R2Config, client *http.Client) (*R2Publisher, error) {
@@ -48,7 +50,7 @@ func NewR2Publisher(cfg R2Config, client *http.Client) (*R2Publisher, error) {
 		return nil, fmt.Errorf("pipeline: incomplete R2 configuration")
 	}
 	if client == nil {
-		client = http.DefaultClient
+		client = defaultR2HTTPClient
 	}
 	return &R2Publisher{cfg: cfg, client: client}, nil
 }
@@ -158,7 +160,7 @@ func (p *R2Publisher) sign(req *http.Request, body []byte) {
 	signedHeaders := signedHeaderNames(req.Header)
 	canonical := strings.Join([]string{
 		req.Method,
-		uriEncodePath(req.URL.EscapedPath()),
+		uriEncodePath(req.URL.Path),
 		"",
 		canonicalHeaders(req.Header, signedHeaders),
 		strings.Join(signedHeaders, ";"),
@@ -207,7 +209,24 @@ func uriEncodePath(p string) string {
 	if p == "" {
 		return "/"
 	}
-	return p
+	const hexChars = "0123456789ABCDEF"
+	var out strings.Builder
+	out.Grow(len(p))
+	for i := 0; i < len(p); i++ {
+		ch := p[i]
+		if ch == '/' ||
+			(ch >= 'a' && ch <= 'z') ||
+			(ch >= 'A' && ch <= 'Z') ||
+			(ch >= '0' && ch <= '9') ||
+			ch == '-' || ch == '_' || ch == '.' || ch == '~' {
+			out.WriteByte(ch)
+			continue
+		}
+		out.WriteByte('%')
+		out.WriteByte(hexChars[ch>>4])
+		out.WriteByte(hexChars[ch&15])
+	}
+	return out.String()
 }
 
 func signingKey(secret, date, region, service string) []byte {

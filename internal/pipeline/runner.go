@@ -27,11 +27,20 @@ type Report struct {
 	Skipped   int
 }
 
+// Progress describes one monthly partition as it moves through the pipeline.
+type Progress struct {
+	Symbol string
+	TF     core.TF
+	Month  string
+	Stage  string
+}
+
 // Runner fetches, normalises, encodes, and publishes monthly bar objects.
 type Runner struct {
 	Fetcher   venue.Fetcher
 	Publisher Publisher
 	Now       func() time.Time
+	Progress  func(Progress)
 }
 
 type sourceNamer interface {
@@ -88,20 +97,24 @@ func (r Runner) Run(ctx context.Context, job Job) (Report, error) {
 					return report, err
 				}
 				key := ObjectKey(sym, tf, month.name)
+				r.progress(sym, tf, month.name, "checking")
 				existing, ok, err := r.Publisher.Head(ctx, key)
 				if err != nil {
 					return report, err
 				}
 				if ok && month.name != currentMonth && existing.BuildVersion == job.BuildVersion && existing.Source == source {
 					report.Skipped++
+					r.progress(sym, tf, month.name, "skipped")
 					continue
 				}
+				r.progress(sym, tf, month.name, "fetching")
 				series, err := r.Fetcher.Fetch(ctx, sym, tf, month.from, month.to)
 				if err != nil {
 					return report, fmt.Errorf("pipeline: fetch %s %s %s: %w", sym, tf, month.name, err)
 				}
 				if series.Len() == 0 {
 					report.Skipped++
+					r.progress(sym, tf, month.name, "empty")
 					continue
 				}
 				meta := store.Manifest{Symbol: sym, TF: tf, Month: month.name, Source: source, BuildVersion: job.BuildVersion}
@@ -113,10 +126,17 @@ func (r Runner) Run(ctx context.Context, job Job) (Report, error) {
 					return report, err
 				}
 				report.Published++
+				r.progress(sym, tf, month.name, "published")
 			}
 		}
 	}
 	return report, nil
+}
+
+func (r Runner) progress(symbol string, tf core.TF, month, stage string) {
+	if r.Progress != nil {
+		r.Progress(Progress{Symbol: symbol, TF: tf, Month: month, Stage: stage})
+	}
 }
 
 type monthWindow struct {

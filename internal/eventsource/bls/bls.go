@@ -73,7 +73,7 @@ func (a Archive) Events(ctx context.Context, scope eventsource.Scope) ([]event.E
 		if err != nil {
 			return nil, err
 		}
-		occurred, title, err := releaseTime(string(page))
+		occurred, _, err := releaseTime(string(page))
 		if err != nil {
 			return nil, fmt.Errorf("bls archive: %s: %w", name, err)
 		}
@@ -82,7 +82,7 @@ func (a Archive) Events(ctx context.Context, scope eventsource.Scope) ([]event.E
 		}
 		id := "bls:" + strings.TrimSuffix(name, ".htm")
 		url := defaultBaseURL + "/news.release/archives/" + name
-		out = append(out, event.Event{ID: id, OccurredAt: occurred, KnowledgeAt: occurred, Precision: event.PrecisionExact, Kind: kind, Title: title, Jurisdiction: "US", Currencies: []string{"USD"}, Impact: event.ImpactHigh, Status: event.StatusReleased, Source: event.SourceRef{Provider: a.Name(), RecordID: id, URL: url}, Evidence: []event.EvidenceRef{{Title: "Captured U.S. Bureau of Labor Statistics release", URL: url}}})
+		out = append(out, event.Event{ID: id, OccurredAt: occurred, KnowledgeAt: occurred, Precision: event.PrecisionExact, Kind: kind, Title: releaseTitle(kind), Jurisdiction: "US", Currencies: []string{"USD"}, Impact: event.ImpactHigh, Status: event.StatusReleased, Source: event.SourceRef{Provider: a.Name(), RecordID: id, URL: url}, Evidence: []event.EvidenceRef{{Title: "Captured U.S. Bureau of Labor Statistics release", URL: url}}})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].OccurredAt != out[j].OccurredAt {
@@ -129,7 +129,7 @@ func (c *Client) Events(ctx context.Context, scope eventsource.Scope) ([]event.E
 			if err != nil {
 				return nil, err
 			}
-			occurred, title, err := releaseTime(page)
+			occurred, _, err := releaseTime(page)
 			if err != nil {
 				return nil, fmt.Errorf("bls: %s: %w", ref, err)
 			}
@@ -137,7 +137,7 @@ func (c *Client) Events(ctx context.Context, scope eventsource.Scope) ([]event.E
 				continue
 			}
 			id := "bls:" + strings.TrimSuffix(strings.TrimPrefix(ref, "/news.release/archives/"), ".htm")
-			out = append(out, event.Event{ID: id, OccurredAt: occurred, KnowledgeAt: occurred, Precision: event.PrecisionExact, Kind: feed.kind, Title: title, Jurisdiction: "US", Currencies: []string{"USD"}, Impact: event.ImpactHigh, Status: event.StatusReleased, Source: event.SourceRef{Provider: c.Name(), RecordID: id, URL: absolute(base, ref)}, Evidence: []event.EvidenceRef{{Title: "US Bureau of Labor Statistics release", URL: absolute(base, ref)}}})
+			out = append(out, event.Event{ID: id, OccurredAt: occurred, KnowledgeAt: occurred, Precision: event.PrecisionExact, Kind: feed.kind, Title: releaseTitle(feed.kind), Jurisdiction: "US", Currencies: []string{"USD"}, Impact: event.ImpactHigh, Status: event.StatusReleased, Source: event.SourceRef{Provider: c.Name(), RecordID: id, URL: absolute(base, ref)}, Evidence: []event.EvidenceRef{{Title: "US Bureau of Labor Statistics release", URL: absolute(base, ref)}}})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -196,6 +196,17 @@ func archiveLinks(page, prefix string) []string {
 
 var timeRE = regexp.MustCompile(`(?is)(\d{1,2}:\d{2})\s*(a\.m\.|p\.m\.)\s*\((?:ET|EST|EDT)\)\s*(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday),?\s*)?([A-Za-z]+\s+\d{1,2},\s+\d{4})`)
 var titleRE = regexp.MustCompile(`(?is)(?:THE\s+EMPLOYMENT\s+SITUATION|CONSUMER\s+PRICE\s+INDEX)\s*(?:--|—|-)?\s*([^<\n]{0,80})`)
+
+func releaseTitle(kind event.Kind) string {
+	switch kind {
+	case event.KindUSNonfarmPayrolls:
+		return "U.S. Employment Situation release"
+	case event.KindUSCPI:
+		return "U.S. Consumer Price Index release"
+	default:
+		return "BLS release"
+	}
+}
 
 func releaseTime(page string) (core.Time, string, error) {
 	clean := strings.ReplaceAll(strings.ReplaceAll(page, "&nbsp;", " "), "\r", " ")

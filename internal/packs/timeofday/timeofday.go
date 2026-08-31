@@ -2,10 +2,12 @@ package timeofday
 
 import (
 	"fmt"
+
+	"google.golang.org/protobuf/proto"
+
 	"github.com/Bcypher01/Assay/internal/core"
 	"github.com/Bcypher01/Assay/internal/primitive"
 	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
-	"google.golang.org/protobuf/proto"
 )
 
 func init() {
@@ -109,14 +111,15 @@ func (x sessionRange) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.Valu
 				candidate = s.High[i]
 			}
 			key := x.session.key(t)
-			if !active || key != currentKey {
+			switch {
+			case !active || key != currentKey:
 				if active && haveCurrent {
 					completed, haveCompleted = current, true
 				}
 				current, currentKey, active, haveCurrent = candidate, key, true, true
-			} else if x.high {
+			case x.high:
 				current = core.Max(current, candidate)
-			} else {
+			default:
 				current = core.Min(current, candidate)
 			}
 			continue

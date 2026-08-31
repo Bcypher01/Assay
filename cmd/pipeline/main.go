@@ -245,7 +245,9 @@ func loadDotEnv(path string) error {
 		key = strings.TrimSpace(key)
 		val = strings.Trim(strings.TrimSpace(val), `"'`)
 		if key != "" && os.Getenv(key) == "" {
-			os.Setenv(key, val)
+			if err := os.Setenv(key, val); err != nil {
+				return fmt.Errorf("setting %s from env file: %w", key, err)
+			}
 		}
 	}
 	return sc.Err()

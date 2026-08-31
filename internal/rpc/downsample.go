@@ -50,11 +50,12 @@ func DownsampleViewport(s *core.Series, maxPoints int) []ViewportPoint {
 				hi = i
 			}
 		}
-		if lo == hi {
+		switch {
+		case lo == hi:
 			out = append(out, viewportAt(s, lo))
-		} else if lo < hi {
+		case lo < hi:
 			out = append(out, viewportAt(s, lo), viewportAt(s, hi))
-		} else {
+		default:
 			out = append(out, viewportAt(s, hi), viewportAt(s, lo))
 		}
 	}

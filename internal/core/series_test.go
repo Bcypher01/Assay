@@ -1,6 +1,9 @@
 package core
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func buildSeries(n int) *Series {
 	s := NewSeries("TEST", TFM15, n)
@@ -21,7 +24,7 @@ func TestSeriesValidate(t *testing.T) {
 
 	ragged := buildSeries(5)
 	ragged.Close = ragged.Close[:4]
-	if err := ragged.Validate(); err != ErrRaggedSeries {
+	if err := ragged.Validate(); !errors.Is(err, ErrRaggedSeries) {
 		t.Fatalf("expected ErrRaggedSeries, got %v", err)
 	}
 

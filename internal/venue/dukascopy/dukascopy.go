@@ -17,10 +17,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ulikunitz/xz/lzma"
+
 	"github.com/Bcypher01/Assay/internal/core"
 	"github.com/Bcypher01/Assay/internal/instrument"
 	"github.com/Bcypher01/Assay/internal/venue"
-	"github.com/ulikunitz/xz/lzma"
 )
 
 const (
@@ -99,9 +100,8 @@ func (c *Client) Fetch(ctx context.Context, sym string, tf core.TF, from, to cor
 				raw = aggregate(raw, core.TFD1)
 			}
 		}
-	} else if tf == core.TFH1 || tf == core.TFH4 {
-		raw, err = c.fetchMinutes(ctx, sym, rawFrom, rawTo)
 	} else {
+		// Every other timeframe is deterministically aggregated from M1.
 		raw, err = c.fetchMinutes(ctx, sym, rawFrom, rawTo)
 	}
 	if err != nil {
@@ -363,8 +363,9 @@ func (c *Client) download(ctx context.Context, rawURL string, ttl time.Duration)
 				err = fmt.Errorf("mirror status %s", res.Status)
 			case res.StatusCode < 500 && res.StatusCode != http.StatusTooManyRequests:
 				return nil, fmt.Errorf("status %s", res.Status)
+			default:
+				err = fmt.Errorf("status %s", res.Status)
 			}
-			err = fmt.Errorf("status %s", res.Status)
 		}
 		if attempt == 5 {
 			return nil, fmt.Errorf("download failed after retries: %w", err)

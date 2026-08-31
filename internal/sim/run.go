@@ -458,14 +458,6 @@ func sizeFor(eq, entry, stop core.Price, c Config) (core.Ratio, core.Ratio) {
 	return req, lots
 }
 
-func divRatio(a, b core.Ratio) core.Ratio {
-	if b == 0 {
-		return 0
-	}
-	// Values here are lots (normally single digits), so the fixed-point
-	// product cannot approach int64 limits in a valid instrument run.
-	return core.Ratio((int64(a) * core.RatioScale) / int64(b))
-}
 func lotRatio(s string) core.Ratio {
 	if s == "" {
 		return 0
@@ -499,7 +491,7 @@ func lotRatio(s string) core.Ratio {
 	return core.Ratio(whole*core.RatioScale + frac)
 }
 func settle(p position, exit core.Price, t core.Time, bar int, c Config) Outcome {
-	gross, _ := c.Spec.PnLCents(core.Price(p.side.Sign())*(exit-p.entry), p.lots, exit)
+	gross, _ := c.Spec.PnLCents(p.side.Sign()*(exit-p.entry), p.lots, exit)
 	costs := commission(p, exit, c) + swap(p, t, exit, c)
 	return Outcome{ExitTime: t, ExitBar: bar, ExitPrice: exit, Gross: gross, Costs: costs, Net: gross - costs, Closed: true}
 }

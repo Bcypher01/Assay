@@ -1,3 +1,7 @@
+// Package pipeline builds the published bar library: it downloads venue data,
+// aggregates it to the published timeframes, reconciles the result against the
+// venue's own aggregates and uploads it. It runs as a scheduled job, so unlike
+// the study path it may read the wall clock.
 package pipeline
 
 import (

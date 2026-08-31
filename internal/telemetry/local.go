@@ -53,9 +53,12 @@ func (l *Local) Record(_ context.Context, name string, fields map[string]any) er
 	if err != nil {
 		return fmt.Errorf("telemetry: open metrics file: %w", err)
 	}
-	defer f.Close()
 	if _, err := f.Write(append(line, '\n')); err != nil {
+		_ = f.Close()
 		return fmt.Errorf("telemetry: write event: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("telemetry: close metrics file: %w", err)
 	}
 	return nil
 }

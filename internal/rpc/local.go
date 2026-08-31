@@ -50,6 +50,7 @@ func NewLocalServerWithServices(cache *store.LocalStore, registry *instrument.Re
 			return dataStatusResponse(loader.Status(ctx, r)), nil
 		}
 		s.EnsureDataFn = func(ctx context.Context, req *assayv1.EnsureDataRequest, report func(*assayv1.Progress) error) error {
+			//nolint:forbidigo // measures wall-clock duration for telemetry; no run output depends on it
 			started := time.Now()
 			request, err := dataRequest(loader, req)
 			if err != nil {
@@ -68,6 +69,7 @@ func NewLocalServerWithServices(cache *store.LocalStore, registry *instrument.Re
 		}
 	}
 	s.RunFn = func(ctx context.Context, req *assayv1.RunRequest, send func(*assayv1.RunUpdate) error) (summary *assayv1.RunSummary, runErr error) {
+		//nolint:forbidigo // measures wall-clock duration for telemetry; no run output depends on it
 		started := time.Now()
 		costFree, costKnown := runCostFree(registry, req)
 		s.record(ctx, "study_started", map[string]any{"timeframe_window_ms": req.ToMs - req.FromMs})

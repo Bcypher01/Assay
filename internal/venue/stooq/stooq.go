@@ -4,6 +4,7 @@ package stooq
 import (
 	"context"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -157,7 +158,7 @@ func decodeCSV(symbol string, tf core.TF, spec *instrument.Spec, data []byte, fr
 	out := core.NewSeries(symbol, tf, 0)
 	for {
 		rec, err := r.Read()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

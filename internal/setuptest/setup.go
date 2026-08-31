@@ -11,6 +11,9 @@ import (
 	"math"
 	"strings"
 
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/structpb"
+
 	"github.com/Bcypher01/Assay/internal/analytics"
 	"github.com/Bcypher01/Assay/internal/core"
 	"github.com/Bcypher01/Assay/internal/engine"
@@ -19,8 +22,6 @@ import (
 	"github.com/Bcypher01/Assay/internal/packs/semantic"
 	"github.com/Bcypher01/Assay/internal/primitive"
 	"github.com/Bcypher01/Assay/internal/sim"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type Kind string
@@ -151,11 +152,12 @@ func (d Drawing) Validate() []ValidationError {
 	if d.LevelLow <= 0 || d.LevelHigh <= 0 || d.LevelLow > d.LevelHigh {
 		add("levelLow", "draw a valid level or zone")
 	}
-	if d.Entry <= 0 || d.Stop <= 0 || d.Target <= 0 {
+	switch {
+	case d.Entry <= 0 || d.Stop <= 0 || d.Target <= 0:
 		add("entry", "entry, stop, and target must be positive prices")
-	} else if d.Side == "long" && !(d.Stop < d.Entry && d.Entry < d.Target) {
+	case d.Side == "long" && !(d.Stop < d.Entry && d.Entry < d.Target):
 		add("stop", "a long setup requires stop < entry < target")
-	} else if d.Side == "short" && !(d.Target < d.Entry && d.Entry < d.Stop) {
+	case d.Side == "short" && !(d.Target < d.Entry && d.Entry < d.Stop):
 		add("stop", "a short setup requires target < entry < stop")
 	}
 	if d.LookbackBars < 2 || d.LookbackBars > 500 {

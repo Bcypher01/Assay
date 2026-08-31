@@ -199,7 +199,7 @@ func appendZipCSV(dst *core.Series, spec *instrument.Spec, data []byte, from, to
 	r.FieldsPerRecord = -1
 	for {
 		rec, err := r.Read()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

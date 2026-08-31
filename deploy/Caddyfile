@@ -1,0 +1,17 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$ASSAY_DOMAIN} {
+	encode zstd gzip
+
+	# The browser always uses /api. Strip that prefix before forwarding to
+	# ConnectRPC and the ordinary JSON endpoints exposed by the Go server.
+	handle_path /api/* {
+		reverse_proxy api:8080
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

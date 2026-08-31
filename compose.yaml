@@ -1,0 +1,37 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+    env_file:
+      - ./deploy/.env
+    volumes:
+      - assay-data:/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+    restart: unless-stopped
+
+  proxy:
+    image: caddy:2.10-alpine
+    depends_on:
+      - api
+      - web
+    env_file:
+      - ./deploy/.env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+
+volumes:
+  assay-data:
+  caddy-data:
+  caddy-config:

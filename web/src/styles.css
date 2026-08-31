@@ -1,0 +1,1661 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap');
+@import 'tailwindcss';
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: hsl(var(--warning-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --font-mono:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+:root {
+  /* Let native controls (date picker, calendar icon, scrollbars) follow the
+     theme. Without this, the date input renders light-mode chrome — dark text
+     and a dark calendar icon — which is invisible on the dark card and looks
+     broken. */
+  color-scheme: light;
+  --background: 0 0% 100%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --primary: 222 47% 11%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 222 47% 11%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215 16% 47%;
+  --accent: 210 40% 96%;
+  --accent-foreground: 222 47% 11%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 210 40% 98%;
+  --success: 142 71% 40%;
+  --success-foreground: 210 40% 98%;
+  --warning: 32 95% 44%;
+  --warning-foreground: 210 40% 98%;
+  --border: 214 32% 91%;
+  --input: 214 32% 91%;
+  --ring: 222 47% 11%;
+  --radius: 0.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --background: 222 47% 7%;
+    --foreground: 210 40% 98%;
+    --card: 222 45% 9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 45% 9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 217 33% 16%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 16%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 18%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 50%;
+    --destructive-foreground: 210 40% 98%;
+    --success: 142 65% 45%;
+    --success-foreground: 210 40% 98%;
+    --warning: 38 92% 55%;
+    --warning-foreground: 222 47% 11%;
+    --border: 217 33% 20%;
+    --input: 217 33% 22%;
+    --ring: 213 27% 70%;
+  }
+}
+
+* {
+  box-sizing: border-box;
+  border-color: hsl(var(--border));
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background-color: hsl(var(--primary) / 0.2);
+}
+
+@keyframes progress-indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+.progress-indeterminate {
+  animation: progress-indeterminate 1.2s ease-in-out infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-indeterminate {
+    animation: none;
+    opacity: 0.65;
+    transform: translateX(100%);
+  }
+}
+
+/* Run Log visual system — adapted from design/run-log-prototype.html. */
+:root {
+  --background: 198 14% 89%;
+  --foreground: 199 33% 9%;
+  --card: 200 13% 94%;
+  --card-foreground: 199 33% 9%;
+  --popover: 200 13% 96%;
+  --popover-foreground: 199 33% 9%;
+  --primary: 197 72% 29%;
+  --primary-foreground: 200 13% 96%;
+  --secondary: 195 10% 84%;
+  --secondary-foreground: 199 33% 9%;
+  --muted: 195 10% 86%;
+  --muted-foreground: 198 12% 35%;
+  --accent: 195 12% 96%;
+  --accent-foreground: 199 33% 9%;
+  --destructive: 8 62% 38%;
+  --destructive-foreground: 200 13% 96%;
+  --success: 148 42% 29%;
+  --success-foreground: 200 13% 96%;
+  --warning: 43 79% 30%;
+  --warning-foreground: 200 13% 96%;
+  --border: 197 13% 73%;
+  --input: 197 13% 73%;
+  --ring: 197 72% 29%;
+  --radius: 0;
+
+  /* Chart ink. The setup chart paints on a canvas, which cannot read a
+     Tailwind class, so the drawing colours are tokens the component resolves
+     at paint time. They are deliberately not reused from --success and
+     --destructive: a rising candle is not a "success", and borrowing the
+     semantic colours makes every green bar read as an endorsement. */
+  --chart-up: 148 42% 32%;
+  --chart-down: 8 62% 42%;
+  --chart-entry: 197 72% 34%;
+  --chart-stop: 8 62% 42%;
+  --chart-target: 148 42% 32%;
+  --chart-zone: 39 68% 36%;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: 195 30% 6%;
+    --foreground: 190 17% 91%;
+    --card: 194 24% 8%;
+    --card-foreground: 190 17% 91%;
+    --popover: 194 20% 12%;
+    --popover-foreground: 190 17% 91%;
+    --primary: 197 65% 61%;
+    --primary-foreground: 195 30% 6%;
+    --secondary: 195 20% 12%;
+    --secondary-foreground: 190 17% 91%;
+    --muted: 195 20% 12%;
+    --muted-foreground: 194 13% 65%;
+    --accent: 195 18% 14%;
+    --accent-foreground: 190 17% 91%;
+    --destructive: 9 66% 63%;
+    --success: 145 32% 52%;
+    --warning: 42 57% 50%;
+    --border: 195 17% 20%;
+    --input: 195 17% 20%;
+    --ring: 197 65% 61%;
+
+    --chart-up: 145 40% 52%;
+    --chart-down: 9 66% 63%;
+    --chart-entry: 197 65% 61%;
+    --chart-stop: 9 66% 63%;
+    --chart-target: 145 40% 52%;
+    --chart-zone: 42 62% 55%;
+  }
+}
+
+body {
+  font-family: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+  background: hsl(var(--background));
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: 'Syne', ui-sans-serif, sans-serif;
+  letter-spacing: -0.02em;
+}
+button,
+input,
+select,
+textarea {
+  font-family: 'Instrument Sans', ui-sans-serif, sans-serif;
+}
+code,
+pre,
+.font-mono {
+  font-family: 'Spline Sans Mono', ui-monospace, monospace;
+}
+
+.assay-shell {
+  display: grid;
+  grid-template-columns: 276px minmax(0, 1fr);
+  min-height: 100dvh;
+}
+.assay-main {
+  min-width: 0;
+  background: hsl(var(--card));
+}
+.assay-stage {
+  width: min(100%, 1120px);
+  min-width: 0;
+  padding: 44px 40px 88px;
+}
+.runlog-spine {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  display: flex;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  flex-direction: column;
+  overflow: hidden;
+  background: hsl(var(--secondary));
+  border-right: 1px solid hsl(var(--border));
+  padding: 22px 0 36px;
+}
+.runlog-wordmark {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 20px 18px;
+  border-bottom: 1px solid hsl(var(--border) / 0.75);
+  color: hsl(var(--foreground));
+  font-family: 'Syne', sans-serif;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.runlog-wordmark-rest {
+  /* Optically joined to the mark: the square already carries the A, so the
+     remainder sits close enough to be read as its continuation. */
+  margin-left: 1px;
+}
+.runlog-wordmark small {
+  margin-left: 6px;
+}
+.runlog-wordmark small,
+.runlog-label,
+.runlog-entry-copy small {
+  font-family: 'Spline Sans Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+.runlog-mark {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  font-size: 15px;
+  line-height: 1;
+  color: hsl(var(--primary-foreground));
+  background: hsl(var(--primary));
+}
+.runlog-nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin-top: 10px;
+}
+.runlog-entry {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 70px;
+  padding: 12px 20px 12px 52px;
+  border-bottom: 1px solid hsl(var(--border) / 0.65);
+  color: hsl(var(--muted-foreground));
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+.runlog-entry:hover {
+  background: hsl(var(--foreground) / 0.04);
+  color: hsl(var(--foreground));
+}
+.runlog-entry[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+.runlog-entry[data-status='active'] {
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+.runlog-entry::after {
+  content: '';
+  position: absolute;
+  left: 29px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: hsl(var(--border));
+}
+.runlog-entry:first-child::after {
+  top: 27px;
+}
+.runlog-entry:last-child::after {
+  bottom: 27px;
+}
+.runlog-marker {
+  position: absolute;
+  z-index: 1;
+  left: 22.5px;
+  top: 50%;
+  display: grid;
+  width: 15px;
+  height: 15px;
+  transform: translateY(-50%);
+  place-items: center;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--secondary));
+  color: transparent;
+}
+/* The check has to survive at 15px, so it is a bare tick with a heavy stroke
+   rather than an icon that draws its own circle inside the marker's box. */
+.runlog-marker svg {
+  width: 11px;
+  height: 11px;
+  stroke-width: 3;
+}
+.runlog-entry[data-status='active'] .runlog-marker {
+  background: hsl(var(--card));
+  border-color: hsl(var(--foreground));
+  box-shadow:
+    0 0 0 3px hsl(var(--card)),
+    0 0 0 4px hsl(var(--border));
+}
+.runlog-entry-copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+/* The summary line is what makes the spine a log rather than a menu: each
+   entry states what was actually decided there. */
+.runlog-entry-copy em {
+  font-family: 'Spline Sans Mono', monospace;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1.4;
+  color: hsl(var(--muted-foreground));
+  overflow-wrap: anywhere;
+}
+.runlog-entry[data-status='active'] .runlog-entry-copy em {
+  color: hsl(var(--foreground) / 0.75);
+}
+/* Recorded but not settled: the step has a decision on it, and the tick is
+   withheld rather than the whole marker being emptied. */
+.runlog-marker-started {
+  border-color: hsl(var(--foreground) / 0.45);
+  color: hsl(var(--muted-foreground));
+}
+.runlog-entry[data-status='active'] .runlog-marker-started {
+  color: hsl(var(--foreground));
+}
+.runlog-marker-done {
+  background: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+.runlog-tools {
+  display: grid;
+  gap: 8px;
+  margin: 20px 20px 0;
+  padding-top: 16px;
+  border-top: 1px solid hsl(var(--border) / 0.65);
+}
+.runlog-tool {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  color: hsl(var(--muted-foreground));
+  font-size: 13px;
+  font-weight: 600;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+.runlog-tool:hover {
+  background: hsl(var(--foreground) / 0.04);
+  color: hsl(var(--foreground));
+}
+.runlog-tool[data-status='active'] {
+  background: hsl(var(--secondary));
+  border-color: hsl(var(--foreground) / 0.55);
+  color: hsl(var(--foreground));
+}
+.runlog-tool svg {
+  width: 15px;
+  height: 15px;
+}
+.runlog-session {
+  display: grid;
+  gap: 14px;
+  margin: 24px 20px 0;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card) / 0.78);
+  padding: 16px;
+}
+.runlog-session-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.runlog-session-heading h2 {
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.25;
+  color: hsl(var(--foreground));
+}
+.runlog-session-heading strong {
+  display: grid;
+  min-width: 38px;
+  height: 38px;
+  padding: 0 8px;
+  place-items: center;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--secondary));
+  font-family: 'Spline Sans Mono', monospace;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  color: hsl(var(--foreground));
+}
+.runlog-session-copy {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: hsl(var(--muted-foreground));
+}
+.runlog-reset {
+  width: 100%;
+  justify-content: center;
+  min-height: 38px;
+  background: hsl(var(--secondary));
+}
+.runlog-reset-compact {
+  display: none;
+}
+.runlog-mobile-icon {
+  display: none;
+}
+.runlog-note {
+  margin-top: auto;
+  padding: 24px 20px 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: hsl(var(--muted-foreground));
+}
+
+@media (max-height: 820px) and (min-width: 901px) {
+  .runlog-entry {
+    min-height: 62px;
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+  .runlog-tools {
+    margin-top: 14px;
+    padding-top: 12px;
+  }
+  .runlog-session {
+    gap: 10px;
+    margin-top: 14px;
+    padding: 13px;
+  }
+  .runlog-note {
+    display: none;
+  }
+}
+.runlog-page-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid hsl(var(--border));
+  padding-bottom: 22px;
+}
+.runlog-page-header h1 {
+  margin-top: 6px;
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 1.02;
+}
+.runlog-page-header p:not(.runlog-label) {
+  max-width: 62ch;
+  font-size: 15px;
+  color: hsl(var(--muted-foreground));
+}
+.runlog-page-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.assay-stage [class~='rounded-lg'],
+.assay-stage [class~='rounded-md'],
+.assay-stage [class~='rounded-xl'] {
+  border-radius: 0;
+}
+.assay-stage .shadow-sm {
+  box-shadow: none;
+}
+.assay-stage [class~='bg-card'] {
+  background-color: hsl(var(--card) / 0.9);
+}
+.assay-stage table {
+  font-size: 13px;
+}
+.assay-stage .grid > * {
+  min-width: 0;
+}
+.assay-stage th {
+  font-family: 'Spline Sans Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+@media (max-width: 900px) {
+  .assay-shell {
+    display: block;
+  }
+  .runlog-spine {
+    position: static;
+    min-height: 0;
+    max-height: none;
+    padding: 0 0 12px;
+  }
+  .runlog-wordmark {
+    min-height: 58px;
+    padding: 12px 16px;
+  }
+  .runlog-nav {
+    display: flex;
+    flex: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    margin: 0;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+  .runlog-entry {
+    min-width: 136px;
+    flex: 1;
+    min-height: 68px;
+    padding: 10px 12px 10px 38px;
+    border-right: 1px solid hsl(var(--border) / 0.65);
+    border-bottom: 0;
+    scroll-snap-align: start;
+  }
+  .runlog-entry::after {
+    display: none;
+  }
+  .runlog-marker {
+    left: 13px;
+  }
+  .runlog-mobile-icon {
+    display: block;
+    width: 15px;
+    height: 15px;
+  }
+  .runlog-note {
+    display: none;
+  }
+  .runlog-entry-copy {
+    font-size: 12px;
+    line-height: 1.3;
+  }
+  .runlog-entry-copy em {
+    display: none;
+  }
+  .runlog-tools {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin: 10px 12px 0;
+    padding-top: 10px;
+  }
+  .runlog-tools > .runlog-label {
+    display: none;
+  }
+  .runlog-tool {
+    min-height: 40px;
+    justify-content: center;
+    padding: 8px 10px;
+  }
+  .runlog-session {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    margin: 10px 12px 0;
+    padding: 10px;
+  }
+  .runlog-session-heading {
+    align-items: center;
+  }
+  .runlog-session-heading .runlog-label,
+  .runlog-session-copy {
+    display: none;
+  }
+  .runlog-session-heading h2 {
+    margin: 0;
+    font-size: 12px;
+  }
+  .runlog-session-heading strong {
+    min-width: 30px;
+    height: 30px;
+    font-size: 14px;
+  }
+  .runlog-reset {
+    width: auto;
+    min-height: 36px;
+    padding-inline: 12px;
+  }
+  .runlog-reset-wide {
+    display: none;
+  }
+  .runlog-reset-compact {
+    display: inline;
+  }
+  .assay-stage {
+    padding: 32px 20px 64px;
+  }
+}
+
+@media (min-width: 601px) and (max-width: 900px) and (max-height: 600px) {
+  .runlog-spine {
+    display: grid;
+    grid-template-areas:
+      'wordmark wordmark'
+      'steps steps'
+      'tools session';
+    grid-template-columns: 1fr 1fr;
+    padding-bottom: 8px;
+  }
+  .runlog-wordmark {
+    grid-area: wordmark;
+    min-height: 46px;
+    padding-block: 8px;
+  }
+  .runlog-nav {
+    grid-area: steps;
+  }
+  .runlog-entry {
+    min-height: 54px;
+    padding-block: 7px;
+  }
+  .runlog-tools {
+    grid-area: tools;
+    margin: 8px 5px 0 12px;
+    padding-top: 8px;
+  }
+  .runlog-session {
+    grid-area: session;
+    margin: 8px 12px 0 5px;
+    padding: 8px 10px;
+  }
+}
+
+@media (max-width: 600px) {
+  .assay-stage {
+    padding: 26px 16px max(52px, env(safe-area-inset-bottom));
+  }
+  .runlog-page-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 16px;
+    padding-bottom: 18px;
+  }
+  .runlog-page-header h1 {
+    font-size: clamp(26px, 9vw, 34px);
+  }
+  .runlog-page-header p:not(.runlog-label) {
+    font-size: 14px;
+    line-height: 1.55;
+  }
+  .runlog-page-actions {
+    width: 100%;
+  }
+  .runlog-page-actions > * {
+    flex: 1;
+  }
+  .assay-stage button,
+  .assay-stage [role='combobox'] {
+    min-height: 40px;
+  }
+  .assay-stage input,
+  .assay-stage textarea,
+  .assay-stage [role='combobox'] {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .assay-stage table {
+    font-size: 12px;
+  }
+  .assay-stage th,
+  .assay-stage td {
+    white-space: nowrap;
+  }
+}
+
+/* Native <select>: replace the OS chevron with one that keeps its distance
+   from the field edge, and reserve room for it so long values never collide. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px 16px;
+}
+select::-ms-expand {
+  display: none;
+}
+
+/* ------------------------------------------------------------ Setup test */
+
+/* The Setup Test is the one screen in the app that is a workspace rather than
+   a page, and it owns the whole viewport: the route opts out of the run-log
+   shell entirely (`staticData.fullscreen`), so there is no spine and no page
+   column here. A toolbar strip, a chart that takes every pixel left over, a
+   legend rail, and a fixed side column for the label-and-rule panel. Nothing
+   scrolls the document — each region scrolls itself, so the chart never slides
+   out from under the controls that change it. */
+.setup-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 384px;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  background: hsl(var(--background));
+}
+
+.setup-canvas {
+  display: flex;
+  height: 100dvh;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scroll-behavior: smooth;
+}
+
+.setup-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 18px;
+  border-bottom: 1px solid hsl(var(--border));
+  padding: 14px 22px;
+  background: hsl(var(--card));
+}
+
+/* The only way out of the screen, so it reads as a link and not as chrome. */
+.setup-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: -4px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+.setup-back:hover {
+  color: hsl(var(--foreground));
+}
+
+.setup-back svg {
+  width: 13px;
+  height: 13px;
+}
+
+.setup-toolbar h1 {
+  font-family: 'Syne', ui-sans-serif, system-ui, sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.1;
+}
+
+.setup-toolbar-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.setup-field {
+  display: flex;
+  min-width: 116px;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* The status line sits at the far end of the toolbar, where the thing it
+   describes — the chart — begins. */
+.setup-toolbar-end {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  text-align: right;
+}
+
+.setup-status {
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+}
+.setup-status[data-tone='bad'] {
+  color: hsl(var(--destructive));
+}
+
+.setup-historical {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+.setup-canvas-body {
+  position: relative;
+  min-height: 480px;
+  flex: 0 0 max(480px, calc(100dvh - 150px));
+  background: hsl(var(--card));
+}
+
+.setup-results-jump {
+  position: absolute;
+  z-index: 3;
+  right: 18px;
+  bottom: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 2px;
+  padding: 7px 11px;
+  background: hsl(var(--card) / 0.94);
+  box-shadow: 0 7px 20px hsl(var(--background) / 0.55);
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  font-weight: 600;
+  backdrop-filter: blur(8px);
+}
+
+.setup-results-jump svg {
+  width: 14px;
+  height: 14px;
+}
+
+.setup-results-jump[data-ready='true'] {
+  border-color: hsl(var(--primary) / 0.65);
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  cursor: pointer;
+}
+
+.setup-results-jump:disabled {
+  opacity: 0.78;
+}
+
+.setup-legend {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  height: 40px;
+  flex: 0 0 40px;
+  padding: 0 22px;
+  border-top: 1px solid hsl(var(--border));
+  border-bottom: 1px solid hsl(var(--border));
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.setup-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.setup-legend span::before {
+  content: '';
+  width: 14px;
+  height: 2px;
+  background: currentColor;
+}
+
+.setup-legend span[data-line='entry']::before {
+  background: hsl(var(--chart-entry));
+}
+.setup-legend span[data-line='stop']::before {
+  background: hsl(var(--chart-stop));
+}
+.setup-legend span[data-line='target']::before {
+  background: hsl(var(--chart-target));
+}
+.setup-legend span[data-line='zone']::before {
+  background: hsl(var(--chart-zone));
+}
+
+.setup-legend em {
+  margin-left: auto;
+  font-style: normal;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Results belong to the main-column scroll flow. The chart keeps a full
+   working viewport above them while the configuration rail remains fixed. */
+.setup-results {
+  flex: none;
+  overflow: visible;
+  scroll-margin-top: 0;
+  outline: none;
+  background: hsl(var(--background));
+}
+
+.setup-results-toolbar {
+  position: sticky;
+  z-index: 5;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 66px;
+  border-bottom: 1px solid hsl(var(--border));
+  padding: 10px 22px;
+  background: hsl(var(--card) / 0.97);
+  box-shadow: 0 8px 18px hsl(var(--background) / 0.3);
+  backdrop-filter: blur(10px);
+}
+
+.setup-results-toolbar strong {
+  display: block;
+  margin-top: 2px;
+  font-family: 'Syne', ui-sans-serif, system-ui, sans-serif;
+  font-size: 15px;
+}
+
+.setup-result {
+  padding: 18px 22px 24px;
+  background: hsl(var(--background));
+}
+
+.setup-result + .setup-result {
+  border-top: 1px solid hsl(var(--border));
+}
+
+.setup-result-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.setup-result-head h2 {
+  font-family: 'Syne', ui-sans-serif, system-ui, sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.setup-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.setup-metric {
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  padding: 11px 12px;
+}
+
+.setup-metric b {
+  display: block;
+  margin: 4px 0 2px;
+  font-family: 'Spline Sans Mono', monospace;
+  font-size: 21px;
+  font-weight: 500;
+}
+
+.setup-metric small {
+  display: block;
+  font-size: 11px;
+  line-height: 1.4;
+  color: hsl(var(--muted-foreground));
+}
+
+/* The side rail follows one decision at a time: setup, risk, then test. */
+.setup-rail {
+  display: flex;
+  height: 100dvh;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0;
+  overflow-y: auto;
+  border-left: 1px solid hsl(var(--border));
+  background: hsl(var(--secondary));
+  padding: 20px 20px 28px;
+}
+
+.setup-rail h2 {
+  font-family: 'Syne', ui-sans-serif, system-ui, sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+  margin-bottom: 12px;
+}
+
+.setup-rail-section + .setup-rail-section {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid hsl(var(--border));
+}
+
+.setup-mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.setup-step-copy {
+  margin-top: 12px;
+  font-size: 11px;
+}
+
+.setup-readiness {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.setup-readiness > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  padding: 9px 10px;
+}
+
+.setup-readiness > div > span,
+.setup-readiness > div > svg {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  place-items: center;
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+  font:
+    11px 'Spline Sans Mono',
+    monospace;
+}
+
+.setup-readiness > div[data-ready='true'] {
+  border-color: hsl(var(--success) / 0.45);
+}
+
+.setup-readiness > div[data-ready='true'] > svg {
+  border: 0;
+  color: hsl(var(--success));
+}
+
+.setup-readiness p,
+.setup-readiness b,
+.setup-readiness small {
+  display: block;
+}
+
+.setup-readiness b {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.setup-readiness small,
+.setup-source-note {
+  margin-top: 2px;
+  color: hsl(var(--muted-foreground));
+  font-size: 10px;
+}
+
+.setup-source-note {
+  margin-top: 8px;
+}
+
+.setup-risk-field {
+  margin-top: 12px;
+}
+
+.setup-risk-field > label {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+.setup-rule-summary {
+  margin-bottom: 12px;
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.setup-disclosure {
+  border-top: 1px solid hsl(var(--border));
+}
+
+.setup-disclosure summary {
+  cursor: pointer;
+  padding: 11px 0;
+  color: hsl(var(--foreground));
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.setup-disclosure[open] {
+  padding-bottom: 12px;
+}
+
+.setup-market-stage {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+}
+
+.setup-market-stage[data-stage='done'] {
+  color: hsl(var(--success));
+}
+
+.setup-market-stage[data-stage='error'] {
+  color: hsl(var(--destructive));
+}
+
+.setup-kinds {
+  display: grid;
+  gap: 7px;
+}
+
+.setup-visual-source {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 55%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  padding: 0.65rem 0.75rem;
+  color: var(--color-foreground);
+  font-size: 0.75rem;
+}
+
+.setup-visual-source svg {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  color: var(--color-primary);
+}
+
+.setup-templates {
+  margin-top: 0.75rem;
+}
+
+.setup-templates summary {
+  cursor: pointer;
+  color: var(--color-muted-foreground);
+  font-size: 0.72rem;
+}
+
+.setup-templates[open] .setup-kinds {
+  margin-top: 0.65rem;
+}
+
+.setup-market-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem 0.75rem;
+  margin-top: 0.8rem;
+}
+
+.setup-kind {
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  padding: 11px 12px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    background-color 0.12s ease;
+}
+
+.setup-kind:hover {
+  border-color: hsl(var(--foreground) / 0.4);
+}
+
+.setup-kind b {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.setup-kind span {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: hsl(var(--muted-foreground));
+}
+
+.setup-kind[aria-pressed='true'] {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.12);
+}
+
+.setup-sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* Two columns of numbers, because the four structural parameters are read
+   against each other — a 10-bar retest inside a 20-bar lookback means
+   something the same numbers stacked in a list do not show. */
+.setup-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.setup-fields .setup-full {
+  grid-column: 1 / -1;
+}
+
+.setup-fields label,
+.setup-field label {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+.setup-hint {
+  margin-top: 4px;
+  font-size: 10px;
+  line-height: 1.35;
+  color: hsl(var(--muted-foreground));
+}
+
+.setup-hint[data-error='true'] {
+  color: hsl(var(--destructive));
+}
+
+.setup-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.setup-check input {
+  margin-top: 2px;
+}
+
+/* The plain-English restatement of the rule: the screen's conscience, marked
+   with a rule down one side rather than boxed like another panel. */
+.setup-interpretation {
+  border-left: 2px solid hsl(var(--primary));
+  padding-left: 12px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.setup-interpretation strong {
+  display: block;
+  font-family: 'Syne', ui-sans-serif, system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.setup-interpretation p {
+  margin-top: 5px;
+}
+
+.setup-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.setup-disclaimer {
+  margin-top: 12px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: hsl(var(--muted-foreground));
+}
+
+/* The drawing surface itself fills whatever the workspace gives it. */
+.setup-chart {
+  position: absolute;
+  inset: 0;
+}
+
+.setup-drawing-toolbar {
+  position: absolute;
+  z-index: 2;
+  top: 30px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card) / 0.94);
+  box-shadow: 0 5px 18px hsl(var(--background) / 0.28);
+  backdrop-filter: blur(8px);
+}
+
+.setup-drawing-toolbar button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid transparent;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+}
+
+.setup-drawing-toolbar button:hover:not(:disabled) {
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+  background: hsl(var(--accent));
+}
+
+.setup-drawing-toolbar button[aria-pressed='true'] {
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.12);
+}
+
+.setup-drawing-toolbar button:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 1px;
+}
+
+.setup-drawing-toolbar button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.setup-drawing-toolbar button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.setup-drawing-toolbar > span {
+  width: 1px;
+  height: 20px;
+  margin: 0 2px;
+  background: hsl(var(--border));
+}
+
+.setup-drawing-toolbar input {
+  width: 120px;
+  height: 30px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+  padding: 0 8px;
+  font-size: 11px;
+  color: hsl(var(--foreground));
+  outline: none;
+}
+
+.setup-drawing-toolbar input:focus {
+  border-color: hsl(var(--ring));
+}
+
+.setup-chart-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+}
+
+.setup-chart:focus-within {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: -2px;
+}
+
+.setup-chart-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0 24px;
+  text-align: center;
+  font-size: 14px;
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
+}
+
+@media (max-width: 1100px) {
+  .setup-workspace {
+    grid-template-columns: minmax(0, 1fr) 330px;
+  }
+}
+
+@media (max-width: 900px) {
+  .setup-workspace {
+    grid-template-columns: 1fr;
+    height: auto;
+    overflow: visible;
+  }
+  .setup-canvas {
+    height: auto;
+    overflow: visible;
+  }
+  .setup-canvas-body {
+    /* In the stacked layout the flex column no longer has a fixed height for
+       `flex: 1` to fill, so flex-basis 0 collapses the chart to nothing and
+       the empty-state message ends up flush against the legend. Pin it to the
+       explicit height instead of letting flex size it. */
+    flex: none;
+    min-height: clamp(360px, 60dvh, 560px);
+    height: clamp(360px, 60dvh, 560px);
+  }
+  .setup-result {
+    max-height: none;
+    overflow: visible;
+  }
+  .setup-rail {
+    height: auto;
+    border-left: 0;
+    border-top: 1px solid hsl(var(--border));
+    overflow: visible;
+    padding-bottom: max(28px, env(safe-area-inset-bottom));
+  }
+  .setup-toolbar {
+    align-items: stretch;
+  }
+  .setup-toolbar-controls {
+    flex-wrap: wrap;
+  }
+  .setup-toolbar-end {
+    margin-left: 0;
+    align-items: flex-start;
+    text-align: left;
+  }
+  .setup-historical {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .setup-toolbar {
+    gap: 14px;
+    padding: 14px 16px;
+  }
+  .setup-toolbar > :first-child {
+    width: 100%;
+  }
+  .setup-toolbar h1 {
+    margin-top: 4px;
+    font-size: 19px;
+  }
+  .setup-toolbar-controls {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .setup-toolbar-controls > button {
+    width: 100%;
+    min-width: 0;
+  }
+  .setup-field {
+    min-width: 0;
+  }
+  .setup-toolbar-end {
+    width: 100%;
+  }
+  .setup-status {
+    line-height: 1.45;
+  }
+  .setup-notice {
+    padding: 11px 16px;
+  }
+  .setup-drawing-toolbar {
+    right: 12px;
+    max-width: calc(100% - 24px);
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+  }
+  .setup-drawing-toolbar button {
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+  }
+  .setup-drawing-toolbar input {
+    height: 38px;
+  }
+  .setup-toolbar [role='combobox'],
+  .setup-toolbar-controls > button {
+    min-height: 42px;
+  }
+  .setup-results-jump {
+    right: 12px;
+    bottom: 12px;
+    max-width: calc(100% - 24px);
+  }
+  .setup-legend {
+    gap: 14px;
+    padding-inline: 16px;
+  }
+  .setup-results-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 12px 16px;
+  }
+  .setup-results-toolbar button {
+    width: 100%;
+  }
+  .setup-result {
+    padding: 16px 16px 22px;
+  }
+  .setup-rail {
+    padding: 18px 16px max(24px, env(safe-area-inset-bottom));
+  }
+  .setup-actions button {
+    min-height: 42px;
+    white-space: normal;
+  }
+}
+
+@media (max-width: 380px) {
+  .setup-toolbar-controls {
+    grid-template-columns: 1fr;
+  }
+  .setup-canvas-body {
+    min-height: 340px;
+    height: 56dvh;
+  }
+  .setup-results-jump {
+    font-size: 10px;
+  }
+}
+
+/* The data-quality notice. It sits between the toolbar and the chart because
+   it is about the bars below it, and it is not dismissible: a warning the user
+   can clear is a warning that stops being true on screen while staying true in
+   the result. */
+.setup-notice {
+  display: flex;
+  gap: 10px;
+  padding: 12px 22px;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--warning) / 0.12);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.setup-notice svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  margin-top: 2px;
+  color: hsl(var(--warning));
+}
+
+.setup-notice strong {
+  display: block;
+  font-weight: 600;
+}
+
+.setup-notice ul {
+  margin-top: 4px;
+  padding-left: 16px;
+  list-style: disc;
+  color: hsl(var(--muted-foreground));
+}
+
+.setup-notice li + li {
+  margin-top: 3px;
+}

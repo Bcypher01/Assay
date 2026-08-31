@@ -1,0 +1,159 @@
+import {
+  displaySymbol,
+  displayTimeframe,
+  expressionNodeIDs,
+} from '@/lib/strategy'
+import type { Distance, StrategyDoc, StrategyNode } from '@/lib/strategy'
+
+/**
+ * A local rendering of a strategy in trading language.
+ *
+ * The server owns the real one: `StudyService.Describe` generates it from the
+ * same document the engine executes, which is the only version guaranteed to
+ * stay truthful. This exists so the authoring screen still says something
+ * useful while a request is in flight, or when the local server is older than
+ * this client — never as a replacement.
+ *
+ * It is deliberately marked as provisional wherever it is shown.
+ */
+
+export interface LocalRule {
+  branch: string
+  text: string
+  enabled: boolean
+}
+
+export interface LocalDescription {
+  summary: string
+  rules: LocalRule[]
+}
+
+function distanceText(d: Distance): string {
+  switch (d.unit) {
+    case 'percent':
+      return `${d.value}%`
+    case 'atr':
+      return `${d.value}× ATR`
+    case 'price':
+      return `${d.value} in price`
+    default:
+      return `${d.value} ${d.unit}`
+  }
+}
+
+function param(node: StrategyNode, ...names: string[]): string {
+  for (const name of names) {
+    const value = node.params[name]
+    if (typeof value === 'number') return String(value)
+    if (typeof value === 'string' && value) return value
+  }
+  return '?'
+}
+
+function clock(node: StrategyNode, ...names: string[]): string {
+  for (const name of names) {
+    const value = node.params[name]
+    if (typeof value === 'number') {
+      const h = Math.floor(value / 60)
+      const m = value % 60
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+    }
+  }
+  return '?'
+}
+
+/** One primitive as a phrase. Unknown primitives are named, never hidden. */
+export function describeNode(node: StrategyNode): string {
+  switch (`${node.pack}/${node.type}`) {
+    case 'indicator/ma_cross':
+      return `the ${param(node, 'fastPeriod', 'fast_period')}-period average crosses the ${param(node, 'slowPeriod', 'slow_period')}-period average`
+    case 'indicator/ma_cross_up':
+      return `the ${param(node, 'fastPeriod', 'fast_period')}-period average crosses above the ${param(node, 'slowPeriod', 'slow_period')}-period average`
+    case 'indicator/ma_cross_down':
+      return `the ${param(node, 'fastPeriod', 'fast_period')}-period average crosses below the ${param(node, 'slowPeriod', 'slow_period')}-period average`
+    case 'indicator/ma_touch':
+      return `price pulls back to the ${param(node, 'period')}-period average`
+    case 'priceaction/engulfing':
+      return 'an engulfing candle closes'
+    case 'priceaction/pin_bar':
+      return 'a pin bar closes'
+    case 'priceaction/inside_bar':
+      return 'an inside bar closes'
+    case 'priceaction/doji':
+      return 'a doji closes'
+    case 'priceaction/consolidation':
+      return `price has held a tight range for ${param(node, 'period')} bars`
+    case 'priceaction/swing_high':
+      return 'a swing high forms'
+    case 'priceaction/swing_low':
+      return 'a swing low forms'
+    case 'timeofday/session':
+      return `the bar falls inside the ${clock(node, 'startMinuteUtc', 'start_minute_utc')}–${clock(node, 'endMinuteUtc', 'end_minute_utc')} UTC session`
+    case 'timeofday/time_of_day_range':
+      return `the time is between ${clock(node, 'startMinuteUtc', 'start_minute_utc')} and ${clock(node, 'endMinuteUtc', 'end_minute_utc')} UTC`
+    case 'smc/market_structure':
+      return 'market structure shifts'
+    case 'smc/liquidity_sweep':
+      return 'price sweeps a prior extreme and closes back inside'
+    case 'smc/liquidity_pool':
+      return 'price reaches a pool of resting liquidity'
+    case 'smc/displacement':
+      return 'a displacement candle closes'
+    case 'smc/breaker':
+      return 'a breaker forms'
+    default:
+      return `${node.pack} ${node.type.replace(/_/g, ' ')} is true`
+  }
+}
+
+function joinClauses(parts: string[]): string {
+  if (parts.length === 0) return ''
+  if (parts.length === 1) return parts[0]
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`
+  return `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`
+}
+
+/** Every condition, in the order the engine reads the slots. */
+export function conditionPhrases(
+  doc: StrategyDoc,
+  side: 'long' | 'short',
+): string[] {
+  return expressionNodeIDs(doc.entries[side].when)
+    .map((id) => doc.nodes.find((node) => node.id === id))
+    .filter((node): node is StrategyNode => node !== undefined)
+    .map(describeNode)
+}
+
+export function describeLocally(doc: StrategyDoc): LocalDescription {
+  const market = doc.universe.symbols[0]
+    ? displaySymbol(doc.universe.symbols[0])
+    : 'an unselected market'
+  const entry = doc.timeframes.entry
+    ? displayTimeframe(doc.timeframes.entry)
+    : 'an unselected timeframe'
+  const branches = (['long', 'short'] as const).map((side) => ({
+    side,
+    entry: doc.entries[side],
+    conditions: conditionPhrases(doc, side),
+  }))
+  const active = branches.filter(
+    ({ entry, conditions }) => entry.enabled && conditions.length > 0,
+  )
+
+  let summary = `Trade ${market} on the ${entry} chart. `
+  summary +=
+    active.length === 0
+      ? 'No entry condition has been set yet, so nothing would ever trigger. '
+      : `Enter at the next bar open when either enabled rule fires. `
+  summary += `Fill at the next bar open, place the stop ${distanceText(doc.risk.stop)} away and the target ${distanceText(doc.risk.target)} away.`
+
+  const rules: LocalRule[] = branches.map(({ side, entry, conditions }) => ({
+    branch: side,
+    text:
+      entry.name ||
+      `${side === 'long' ? 'Buy' : 'Sell'} when ${joinClauses(conditions)}`,
+    enabled: entry.enabled,
+  }))
+
+  return { summary, rules }
+}

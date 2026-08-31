@@ -1,0 +1,90 @@
+# Lint configuration for Assay. The rules below exist to enforce the
+# non-negotiables in CLAUDE.md and docs/conventions.md, not general taste.
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck      # an unchecked error is a silently wrong number
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose     # venue fetchers leak connections otherwise
+    - errorlint     # preserve the %w chain the error policy requires
+    - copyloopvar
+    - misspell
+    - nilerr
+    - unconvert
+    - usestdlibvars
+    - gocritic
+    - forbidigo     # determinism: see the forbid list below
+
+  settings:
+    errcheck:
+      # Best-effort cleanup on paths that already return the real error. Every
+      # Close on a *write* path is checked in code, because an unchecked one
+      # silently loses data.
+      exclude-functions:
+        - (io.Closer).Close
+        - (io.ReadCloser).Close
+        - (*os.File).Close
+        - (*database/sql.Rows).Close
+        - (*database/sql.Tx).Rollback
+        - os.Remove
+    forbidigo:
+      # A run must be a pure function of (IR document, data snapshot, seed).
+      # cmd/ and _test.go are excluded below.
+      forbid:
+        - pattern: '^time\.Now$'
+          msg: "determinism: no wall-clock reads under internal/; pass the timestamp in"
+        - pattern: '^rand\.(Int|Intn|IntN|Int31|Int63|Int64|Float64|Float32|Perm|Shuffle|Read|Seed)$'
+          msg: "determinism: no global rand; construct rand.New with an explicitly passed seed"
+        - pattern: '^fmt\.Print.*$'
+          msg: "library code does not print; return an error or use the telemetry recorder"
+      analyze-types: true
+    staticcheck:
+      # QF* are editor quick-fixes rather than defects; ST1003 fights the
+      # domain vocabulary (TF, IR, FVG, R2).
+      checks: ["all", "-QF1001", "-QF1003", "-ST1003"]
+    gocritic:
+      disabled-checks:
+        - appendAssign
+        - commentFormatting
+
+  exclusions:
+    generated: lax
+    paths:
+      # Vendored JavaScript packages occasionally ship Go files of their own.
+      - (^|/)node_modules/
+    rules:
+      # cmd/ is wiring: it may read the clock, print and fatal on startup.
+      - path: ^cmd/
+        linters: [forbidigo]
+      # Tests may print, use the clock, and ignore errors on cleanup paths.
+      - path: _test\.go$
+        linters: [forbidigo, errcheck, gocritic]
+      - path: ^internal/telemetry/
+        linters: [forbidigo]
+      # The library pipeline is a scheduled job, not part of a study run.
+      # CLAUDE.md exempts it from the wall-clock rule by name.
+      - path: ^internal/pipeline/
+        linters: [forbidigo]
+      # Venue adapters ask the venue what data exists *now*. A run does not
+      # depend on that answer: it pins the data snapshot by content hash.
+      - path: ^internal/venue/
+        linters: [forbidigo]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    paths:
+      - (^|/)node_modules/
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/bcypher01/assay

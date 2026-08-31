@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOLANGCI_VERSION: v2.1.6
+  BUF_VERSION: v1.50.0
+
+jobs:
+  go:
+    name: Go
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        # CGO_ENABLED=0 is a product requirement, not a preference: the binary
+        # must cross-compile statically.
+        run: CGO_ENABLED=0 go build ./...
+
+      - name: Lint
+        run: |
+          test -z "$(gofmt -l . | grep -v '^gen/' | grep -v node_modules | tee /dev/stderr)" || \
+            { echo "gofmt: the files above are not formatted"; exit 1; }
+          go vet ./...
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_VERSION}
+          golangci-lint run ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Race
+        run: go test -race ./...
+
+      - name: Generated protobuf code is up to date
+        run: |
+          go install github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}
+          buf generate proto
+          git diff --exit-code -- gen/go || \
+            { echo "gen/go is stale; run make proto and commit the result"; exit 1; }
+
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run check
+      - run: npm run build

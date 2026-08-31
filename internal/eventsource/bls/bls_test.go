@@ -1,9 +1,10 @@
 package bls
 
 import (
+	"testing"
+
 	"github.com/bcypher01/assay/internal/core"
 	"github.com/bcypher01/assay/internal/event"
-	"testing"
 )
 
 func TestArchiveLinksAndReleaseTime(t *testing.T) {

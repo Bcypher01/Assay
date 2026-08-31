@@ -6,8 +6,9 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/bcypher01/assay/internal/core"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/bcypher01/assay/internal/core"
 )
 
 // ConfigHash identifies one pure detection pass.
@@ -23,7 +24,7 @@ func HashConfig(pack, typ string, params proto.Message, tf core.TF, snapshot str
 		return ConfigHash{}, fmt.Errorf("primitive: marshal params: %w", err)
 	}
 	h := sha256.New()
-	for _, part := range [][]byte{[]byte(pack), []byte{0}, []byte(typ), []byte{0}, []byte(tf.String()), []byte{0}, []byte(snapshot), []byte{0}, b} {
+	for _, part := range [][]byte{[]byte(pack), {0}, []byte(typ), {0}, []byte(tf.String()), {0}, []byte(snapshot), {0}, b} {
 		_, _ = h.Write(part)
 	}
 	var out ConfigHash

@@ -16,9 +16,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ulikunitz/xz/lzma"
+
 	"github.com/bcypher01/assay/internal/core"
 	"github.com/bcypher01/assay/internal/instrument"
-	"github.com/ulikunitz/xz/lzma"
 )
 
 func TestFetchDailyBI5(t *testing.T) {

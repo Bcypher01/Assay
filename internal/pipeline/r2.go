@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -75,7 +76,8 @@ func (p *R2Publisher) Put(ctx context.Context, key string, body io.Reader, meta 
 func (p *R2Publisher) Head(ctx context.Context, key string) (store.Manifest, bool, error) {
 	var data []byte
 	err := p.do(ctx, http.MethodGet, manifestKey(key), nil, "", &data)
-	if errStatus, ok := err.(*statusError); ok && errStatus.code == http.StatusNotFound {
+	var errStatus *statusError
+	if errors.As(err, &errStatus) && errStatus.code == http.StatusNotFound {
 		return store.Manifest{}, false, nil
 	}
 	if err != nil {
@@ -91,7 +93,8 @@ func (p *R2Publisher) Head(ctx context.Context, key string) (store.Manifest, boo
 func (p *R2Publisher) Get(ctx context.Context, key string) (io.ReadCloser, bool, error) {
 	var data []byte
 	err := p.do(ctx, http.MethodGet, key, nil, "", &data)
-	if errStatus, ok := err.(*statusError); ok && errStatus.code == http.StatusNotFound {
+	var errStatus *statusError
+	if errors.As(err, &errStatus) && errStatus.code == http.StatusNotFound {
 		return nil, false, nil
 	}
 	if err != nil {

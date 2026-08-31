@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+
 	assayv1 "github.com/bcypher01/assay/gen/go/assay/v1"
 	"github.com/bcypher01/assay/gen/go/assay/v1/assayv1connect"
 	"github.com/bcypher01/assay/internal/analytics"

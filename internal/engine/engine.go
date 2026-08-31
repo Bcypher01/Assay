@@ -5,6 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
+
 	assayv1 "github.com/bcypher01/assay/gen/go/assay/v1"
 	"github.com/bcypher01/assay/internal/core"
 	"github.com/bcypher01/assay/internal/ir"
@@ -15,9 +19,6 @@ import (
 	_ "github.com/bcypher01/assay/internal/packs/timeofday"
 	"github.com/bcypher01/assay/internal/primitive"
 	"github.com/bcypher01/assay/internal/sim"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type Data struct {

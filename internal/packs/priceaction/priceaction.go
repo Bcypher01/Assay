@@ -2,10 +2,12 @@ package priceaction
 
 import (
 	"fmt"
+
+	"google.golang.org/protobuf/proto"
+
 	assayv1 "github.com/bcypher01/assay/gen/go/assay/v1"
 	"github.com/bcypher01/assay/internal/core"
 	"github.com/bcypher01/assay/internal/primitive"
-	"google.golang.org/protobuf/proto"
 )
 
 func init() {

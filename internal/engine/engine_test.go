@@ -4,13 +4,14 @@ import (
 	"context"
 	"testing"
 
+	"google.golang.org/protobuf/proto"
+
 	assayv1 "github.com/bcypher01/assay/gen/go/assay/v1"
 	"github.com/bcypher01/assay/internal/core"
 	"github.com/bcypher01/assay/internal/instrument"
 	"github.com/bcypher01/assay/internal/ir"
 	"github.com/bcypher01/assay/internal/primitive"
 	"github.com/bcypher01/assay/internal/sim"
-	"google.golang.org/protobuf/proto"
 )
 
 func TestRunUsesPOIWindowForLaterTrigger(t *testing.T) {

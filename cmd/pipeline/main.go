@@ -24,7 +24,7 @@ func main() {
 	}
 
 	publisherKind := flag.String("publisher", env("ASSAY_PUBLISHER", "r2"), "publisher backend: r2 or local")
-	localDir := flag.String("local-dir", env("ASSAY_LOCAL_PUBLISH_DIR", "published"), "local publisher directory")
+	localDir := flag.String("local-dir", env("ASSAY_LOCAL_PUBLISH_DIR", "data/published"), "local publisher directory")
 	symbolsFlag := flag.String("symbols", env("ASSAY_PIPELINE_SYMBOLS", ""), "comma-separated registry symbols")
 	tfsFlag := flag.String("tfs", env("ASSAY_PIPELINE_TFS", "m15,m30,h1,h4,d1,w1"), "comma-separated timeframes")
 	fromFlag := flag.String("from", env("ASSAY_PIPELINE_FROM", ""), "inclusive UTC date, YYYY-MM-DD")

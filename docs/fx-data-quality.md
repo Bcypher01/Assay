@@ -10,7 +10,7 @@ severities and very different fixes.
 ## Evidence
 
 All figures below are read directly from the local cache
-(`cache/<symbol>/<tf>/<month>.parquet`, columns `time/open/high/low/close/volume`,
+(`<cache-dir>/<symbol>/<tf>/<month>.parquet`, columns `time/open/high/low/close/volume`,
 prices as int64 instrument ticks).
 
 | Series | Fetcher | Rows | Median body as % of range | Bars with open == close |
@@ -114,7 +114,7 @@ When it is done, it touches:
 
 ## What the UI does about it meanwhile
 
-`assay-ui` runs `inspectBars` (`src/lib/setup.ts`) over every loaded chart and
+The web client runs `inspectBars` (`web/src/lib/setup.ts`) over every loaded chart and
 shows a non-dismissible notice above the Setup Test chart when the median body
 is under 8% of range, or when any bar opens on a UTC weekend. The notice names
 the specific measurement rather than warning in general, and says that
@@ -141,9 +141,9 @@ is still wrong. Two separate things are.
 
 ### A. Most of the local cache predates the swap
 
-`cache/` is read before any venue is consulted, so a month written by the old
+The bar cache is read before any venue is consulted, so a month written by the old
 Yahoo path is never refetched and the swap has no effect on it. Measuring
-`cache/DUKAS:EURUSD/d1` on 29 Aug:
+the cached `DUKAS:EURUSD/d1` on 29 Aug:
 
 | Month | Written | Median body | open == close | Weekday spread |
 | --- | --- | --- | --- | --- |
@@ -154,7 +154,7 @@ Yahoo path is never refetched and the swap has no effect on it. Measuring
 | 2026-08 | 28 Aug 11:54 (yahoo) | 2.6% | 1/20 | Sun–Fri — shifted |
 | **2024-06** | **28 Aug 22:10 (dukascopy)** | **0.0%** | **20/20** | **Mon–Fri — correct** |
 
-Clearing `cache/DUKAS:*` is a prerequisite for judging the new source at all.
+Clearing the cached `DUKAS:*` is a prerequisite for judging the new source at all.
 
 ### B. The Dukascopy daily path fixes the dates and breaks the bodies
 
@@ -216,7 +216,7 @@ and only `fetchDaily` needs changing.
 
 ### Revised order
 
-1. Clear `cache/DUKAS:*`. Nothing measured before this means anything.
+1. Clear the cached `DUKAS:*`. Nothing measured before this means anything.
 2. Run `scripts/bi5-probe.py` and fix the decode from the captured bytes.
 3. Re-anchor `dukascopy_test.go` on a real captured artifact, not `encodeBI5`.
 4. Only then revisit session alignment (still open, still not urgent).

@@ -103,7 +103,8 @@ Applies to every package under `internal/`:
 - Constructors are `New<Type>`; ones that can fail return `(T, error)`.
 - Detector types are named for what they detect: `FairValueGap`, `OrderBlock`,
   `LiquiditySweep` — never `FVGDetector` or `SMCHelper`.
-- Test fixtures are named `<subject>_<case>.golden.json` under `testdata/golden/`.
+- Test fixtures are named `<subject>_<case>.golden.json` under the package's own
+  `testdata/golden/` directory.
 
 ---
 

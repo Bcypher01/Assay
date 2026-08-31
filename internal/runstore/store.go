@@ -20,10 +20,10 @@ import (
 	"github.com/parquet-go/parquet-go"
 	_ "modernc.org/sqlite"
 
-	"github.com/Bcypher01/Assay/internal/analytics"
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/ir"
-	"github.com/Bcypher01/Assay/internal/sim"
+	"github.com/bcypher01/assay/internal/analytics"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/ir"
+	"github.com/bcypher01/assay/internal/sim"
 )
 
 var ErrNotFound = errors.New("runstore: run not found")

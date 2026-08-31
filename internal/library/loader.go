@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/instrument"
-	"github.com/Bcypher01/Assay/internal/store"
-	"github.com/Bcypher01/Assay/internal/venue"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/instrument"
+	"github.com/bcypher01/assay/internal/store"
+	"github.com/bcypher01/assay/internal/venue"
 )
 
 // ErrUnsupportedResolution reports a strategy requesting a timeframe finer

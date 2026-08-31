@@ -3,7 +3,7 @@ package event
 import (
 	"sort"
 
-	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/bcypher01/assay/internal/core"
 )
 
 // Filter selects an event cohort. Bounds are [From, To); zero means unbounded.

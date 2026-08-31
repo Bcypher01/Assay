@@ -1,8 +1,8 @@
 package bls
 
 import (
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/event"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/event"
 	"testing"
 )
 

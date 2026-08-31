@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/bcypher01/assay/internal/core"
 )
 
 func TestLocalStoreEvictsOldParquetUnderByteLimit(t *testing.T) {

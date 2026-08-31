@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/bcypher01/assay/internal/core"
 )
 
 // Reader loads bars for a symbol, timeframe and time window, returning the

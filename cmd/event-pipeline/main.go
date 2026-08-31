@@ -10,13 +10,13 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/event"
-	"github.com/Bcypher01/Assay/internal/eventpipeline"
-	"github.com/Bcypher01/Assay/internal/eventsource"
-	"github.com/Bcypher01/Assay/internal/eventsource/bls"
-	"github.com/Bcypher01/Assay/internal/eventsource/curated"
-	"github.com/Bcypher01/Assay/internal/userdir"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/event"
+	"github.com/bcypher01/assay/internal/eventpipeline"
+	"github.com/bcypher01/assay/internal/eventsource"
+	"github.com/bcypher01/assay/internal/eventsource/bls"
+	"github.com/bcypher01/assay/internal/eventsource/curated"
+	"github.com/bcypher01/assay/internal/userdir"
 )
 
 func main() {

@@ -3,11 +3,11 @@ package ir
 import (
 	"testing"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	_ "github.com/Bcypher01/Assay/internal/packs/indicator"
-	_ "github.com/Bcypher01/Assay/internal/packs/smc"
-	_ "github.com/Bcypher01/Assay/internal/packs/timeofday"
-	"github.com/Bcypher01/Assay/internal/primitive"
+	"github.com/bcypher01/assay/internal/core"
+	_ "github.com/bcypher01/assay/internal/packs/indicator"
+	_ "github.com/bcypher01/assay/internal/packs/smc"
+	_ "github.com/bcypher01/assay/internal/packs/timeofday"
+	"github.com/bcypher01/assay/internal/primitive"
 )
 
 func TestNewMovingAverageCrossover(t *testing.T) {

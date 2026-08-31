@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Bcypher01/Assay/internal/store"
+	"github.com/bcypher01/assay/internal/store"
 )
 
 // HTTPStore reads published library objects from a public, read-only HTTP

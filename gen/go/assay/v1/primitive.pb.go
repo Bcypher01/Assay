@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.12
 // 	protoc        (unknown)
-// source: proto/assay/v1/primitive.proto
+// source: assay/v1/primitive.proto
 
 package assayv1
 
@@ -57,11 +57,11 @@ func (x MitigationRule) String() string {
 }
 
 func (MitigationRule) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_assay_v1_primitive_proto_enumTypes[0].Descriptor()
+	return file_assay_v1_primitive_proto_enumTypes[0].Descriptor()
 }
 
 func (MitigationRule) Type() protoreflect.EnumType {
-	return &file_proto_assay_v1_primitive_proto_enumTypes[0]
+	return &file_assay_v1_primitive_proto_enumTypes[0]
 }
 
 func (x MitigationRule) Number() protoreflect.EnumNumber {
@@ -70,7 +70,7 @@ func (x MitigationRule) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use MitigationRule.Descriptor instead.
 func (MitigationRule) EnumDescriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{0}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{0}
 }
 
 // SampleParams proves the parameter contract used by every primitive pack:
@@ -85,7 +85,7 @@ type SampleParams struct {
 
 func (x *SampleParams) Reset() {
 	*x = SampleParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[0]
+	mi := &file_assay_v1_primitive_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -97,7 +97,7 @@ func (x *SampleParams) String() string {
 func (*SampleParams) ProtoMessage() {}
 
 func (x *SampleParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[0]
+	mi := &file_assay_v1_primitive_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -110,7 +110,7 @@ func (x *SampleParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SampleParams.ProtoReflect.Descriptor instead.
 func (*SampleParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{0}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *SampleParams) GetPeriod() uint32 {
@@ -136,7 +136,7 @@ type MovingAverageParams struct {
 
 func (x *MovingAverageParams) Reset() {
 	*x = MovingAverageParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[1]
+	mi := &file_assay_v1_primitive_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -148,7 +148,7 @@ func (x *MovingAverageParams) String() string {
 func (*MovingAverageParams) ProtoMessage() {}
 
 func (x *MovingAverageParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[1]
+	mi := &file_assay_v1_primitive_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -161,7 +161,7 @@ func (x *MovingAverageParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MovingAverageParams.ProtoReflect.Descriptor instead.
 func (*MovingAverageParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{1}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *MovingAverageParams) GetPeriod() uint32 {
@@ -180,7 +180,7 @@ type RsiParams struct {
 
 func (x *RsiParams) Reset() {
 	*x = RsiParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[2]
+	mi := &file_assay_v1_primitive_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -192,7 +192,7 @@ func (x *RsiParams) String() string {
 func (*RsiParams) ProtoMessage() {}
 
 func (x *RsiParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[2]
+	mi := &file_assay_v1_primitive_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -205,7 +205,7 @@ func (x *RsiParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RsiParams.ProtoReflect.Descriptor instead.
 func (*RsiParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{2}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *RsiParams) GetPeriod() uint32 {
@@ -224,7 +224,7 @@ type AtrParams struct {
 
 func (x *AtrParams) Reset() {
 	*x = AtrParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[3]
+	mi := &file_assay_v1_primitive_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -236,7 +236,7 @@ func (x *AtrParams) String() string {
 func (*AtrParams) ProtoMessage() {}
 
 func (x *AtrParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[3]
+	mi := &file_assay_v1_primitive_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -249,7 +249,7 @@ func (x *AtrParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AtrParams.ProtoReflect.Descriptor instead.
 func (*AtrParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{3}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *AtrParams) GetPeriod() uint32 {
@@ -268,7 +268,7 @@ type PeriodParams struct {
 
 func (x *PeriodParams) Reset() {
 	*x = PeriodParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[4]
+	mi := &file_assay_v1_primitive_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -280,7 +280,7 @@ func (x *PeriodParams) String() string {
 func (*PeriodParams) ProtoMessage() {}
 
 func (x *PeriodParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[4]
+	mi := &file_assay_v1_primitive_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -293,7 +293,7 @@ func (x *PeriodParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeriodParams.ProtoReflect.Descriptor instead.
 func (*PeriodParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{4}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *PeriodParams) GetPeriod() uint32 {
@@ -312,7 +312,7 @@ type SlopeParams struct {
 
 func (x *SlopeParams) Reset() {
 	*x = SlopeParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[5]
+	mi := &file_assay_v1_primitive_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -324,7 +324,7 @@ func (x *SlopeParams) String() string {
 func (*SlopeParams) ProtoMessage() {}
 
 func (x *SlopeParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[5]
+	mi := &file_assay_v1_primitive_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -337,7 +337,7 @@ func (x *SlopeParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SlopeParams.ProtoReflect.Descriptor instead.
 func (*SlopeParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{5}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *SlopeParams) GetPeriod() uint32 {
@@ -357,7 +357,7 @@ type MovingAverageTouchParams struct {
 
 func (x *MovingAverageTouchParams) Reset() {
 	*x = MovingAverageTouchParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[6]
+	mi := &file_assay_v1_primitive_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -369,7 +369,7 @@ func (x *MovingAverageTouchParams) String() string {
 func (*MovingAverageTouchParams) ProtoMessage() {}
 
 func (x *MovingAverageTouchParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[6]
+	mi := &file_assay_v1_primitive_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -382,7 +382,7 @@ func (x *MovingAverageTouchParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MovingAverageTouchParams.ProtoReflect.Descriptor instead.
 func (*MovingAverageTouchParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{6}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *MovingAverageTouchParams) GetPeriod() uint32 {
@@ -409,7 +409,7 @@ type MovingAverageCrossParams struct {
 
 func (x *MovingAverageCrossParams) Reset() {
 	*x = MovingAverageCrossParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[7]
+	mi := &file_assay_v1_primitive_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -421,7 +421,7 @@ func (x *MovingAverageCrossParams) String() string {
 func (*MovingAverageCrossParams) ProtoMessage() {}
 
 func (x *MovingAverageCrossParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[7]
+	mi := &file_assay_v1_primitive_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -434,7 +434,7 @@ func (x *MovingAverageCrossParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MovingAverageCrossParams.ProtoReflect.Descriptor instead.
 func (*MovingAverageCrossParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{7}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *MovingAverageCrossParams) GetFastPeriod() uint32 {
@@ -462,7 +462,7 @@ type MacdParams struct {
 
 func (x *MacdParams) Reset() {
 	*x = MacdParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[8]
+	mi := &file_assay_v1_primitive_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -474,7 +474,7 @@ func (x *MacdParams) String() string {
 func (*MacdParams) ProtoMessage() {}
 
 func (x *MacdParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[8]
+	mi := &file_assay_v1_primitive_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -487,7 +487,7 @@ func (x *MacdParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MacdParams.ProtoReflect.Descriptor instead.
 func (*MacdParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{8}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *MacdParams) GetFastPeriod() uint32 {
@@ -521,7 +521,7 @@ type BollingerBandsParams struct {
 
 func (x *BollingerBandsParams) Reset() {
 	*x = BollingerBandsParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[9]
+	mi := &file_assay_v1_primitive_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -533,7 +533,7 @@ func (x *BollingerBandsParams) String() string {
 func (*BollingerBandsParams) ProtoMessage() {}
 
 func (x *BollingerBandsParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[9]
+	mi := &file_assay_v1_primitive_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -546,7 +546,7 @@ func (x *BollingerBandsParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BollingerBandsParams.ProtoReflect.Descriptor instead.
 func (*BollingerBandsParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{9}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *BollingerBandsParams) GetPeriod() uint32 {
@@ -572,7 +572,7 @@ type AdxParams struct {
 
 func (x *AdxParams) Reset() {
 	*x = AdxParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[10]
+	mi := &file_assay_v1_primitive_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -584,7 +584,7 @@ func (x *AdxParams) String() string {
 func (*AdxParams) ProtoMessage() {}
 
 func (x *AdxParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[10]
+	mi := &file_assay_v1_primitive_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -597,7 +597,7 @@ func (x *AdxParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdxParams.ProtoReflect.Descriptor instead.
 func (*AdxParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{10}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *AdxParams) GetPeriod() uint32 {
@@ -616,7 +616,7 @@ type StochasticParams struct {
 
 func (x *StochasticParams) Reset() {
 	*x = StochasticParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[11]
+	mi := &file_assay_v1_primitive_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -628,7 +628,7 @@ func (x *StochasticParams) String() string {
 func (*StochasticParams) ProtoMessage() {}
 
 func (x *StochasticParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[11]
+	mi := &file_assay_v1_primitive_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -641,7 +641,7 @@ func (x *StochasticParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StochasticParams.ProtoReflect.Descriptor instead.
 func (*StochasticParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{11}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *StochasticParams) GetPeriod() uint32 {
@@ -661,7 +661,7 @@ type SwingParams struct {
 
 func (x *SwingParams) Reset() {
 	*x = SwingParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[12]
+	mi := &file_assay_v1_primitive_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -673,7 +673,7 @@ func (x *SwingParams) String() string {
 func (*SwingParams) ProtoMessage() {}
 
 func (x *SwingParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[12]
+	mi := &file_assay_v1_primitive_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -686,7 +686,7 @@ func (x *SwingParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SwingParams.ProtoReflect.Descriptor instead.
 func (*SwingParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{12}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *SwingParams) GetLeft() uint32 {
@@ -713,7 +713,7 @@ type ClusterParams struct {
 
 func (x *ClusterParams) Reset() {
 	*x = ClusterParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[13]
+	mi := &file_assay_v1_primitive_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -725,7 +725,7 @@ func (x *ClusterParams) String() string {
 func (*ClusterParams) ProtoMessage() {}
 
 func (x *ClusterParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[13]
+	mi := &file_assay_v1_primitive_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -738,7 +738,7 @@ func (x *ClusterParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClusterParams.ProtoReflect.Descriptor instead.
 func (*ClusterParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{13}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ClusterParams) GetLookback() uint32 {
@@ -765,7 +765,7 @@ type PinBarParams struct {
 
 func (x *PinBarParams) Reset() {
 	*x = PinBarParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[14]
+	mi := &file_assay_v1_primitive_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -777,7 +777,7 @@ func (x *PinBarParams) String() string {
 func (*PinBarParams) ProtoMessage() {}
 
 func (x *PinBarParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[14]
+	mi := &file_assay_v1_primitive_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -790,7 +790,7 @@ func (x *PinBarParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PinBarParams.ProtoReflect.Descriptor instead.
 func (*PinBarParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{14}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *PinBarParams) GetBodyRatioMilli() uint32 {
@@ -816,7 +816,7 @@ type DojiParams struct {
 
 func (x *DojiParams) Reset() {
 	*x = DojiParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[15]
+	mi := &file_assay_v1_primitive_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -828,7 +828,7 @@ func (x *DojiParams) String() string {
 func (*DojiParams) ProtoMessage() {}
 
 func (x *DojiParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[15]
+	mi := &file_assay_v1_primitive_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -841,7 +841,7 @@ func (x *DojiParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DojiParams.ProtoReflect.Descriptor instead.
 func (*DojiParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{15}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *DojiParams) GetBodyRatioMilli() uint32 {
@@ -861,7 +861,7 @@ type RangeParams struct {
 
 func (x *RangeParams) Reset() {
 	*x = RangeParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[16]
+	mi := &file_assay_v1_primitive_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -873,7 +873,7 @@ func (x *RangeParams) String() string {
 func (*RangeParams) ProtoMessage() {}
 
 func (x *RangeParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[16]
+	mi := &file_assay_v1_primitive_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -886,7 +886,7 @@ func (x *RangeParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RangeParams.ProtoReflect.Descriptor instead.
 func (*RangeParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{16}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *RangeParams) GetPeriod() uint32 {
@@ -912,7 +912,7 @@ type MeasuredMoveParams struct {
 
 func (x *MeasuredMoveParams) Reset() {
 	*x = MeasuredMoveParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[17]
+	mi := &file_assay_v1_primitive_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -924,7 +924,7 @@ func (x *MeasuredMoveParams) String() string {
 func (*MeasuredMoveParams) ProtoMessage() {}
 
 func (x *MeasuredMoveParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[17]
+	mi := &file_assay_v1_primitive_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -937,7 +937,7 @@ func (x *MeasuredMoveParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MeasuredMoveParams.ProtoReflect.Descriptor instead.
 func (*MeasuredMoveParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{17}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *MeasuredMoveParams) GetPeriod() uint32 {
@@ -957,7 +957,7 @@ type SessionParams struct {
 
 func (x *SessionParams) Reset() {
 	*x = SessionParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[18]
+	mi := &file_assay_v1_primitive_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -969,7 +969,7 @@ func (x *SessionParams) String() string {
 func (*SessionParams) ProtoMessage() {}
 
 func (x *SessionParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[18]
+	mi := &file_assay_v1_primitive_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -982,7 +982,7 @@ func (x *SessionParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SessionParams.ProtoReflect.Descriptor instead.
 func (*SessionParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{18}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SessionParams) GetStartMinuteUtc() uint32 {
@@ -1008,7 +1008,7 @@ type DayOfWeekParams struct {
 
 func (x *DayOfWeekParams) Reset() {
 	*x = DayOfWeekParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[19]
+	mi := &file_assay_v1_primitive_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1020,7 +1020,7 @@ func (x *DayOfWeekParams) String() string {
 func (*DayOfWeekParams) ProtoMessage() {}
 
 func (x *DayOfWeekParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[19]
+	mi := &file_assay_v1_primitive_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1033,7 +1033,7 @@ func (x *DayOfWeekParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DayOfWeekParams.ProtoReflect.Descriptor instead.
 func (*DayOfWeekParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{19}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *DayOfWeekParams) GetDays() []uint32 {
@@ -1053,7 +1053,7 @@ type TimeOfDayRangeParams struct {
 
 func (x *TimeOfDayRangeParams) Reset() {
 	*x = TimeOfDayRangeParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[20]
+	mi := &file_assay_v1_primitive_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1065,7 +1065,7 @@ func (x *TimeOfDayRangeParams) String() string {
 func (*TimeOfDayRangeParams) ProtoMessage() {}
 
 func (x *TimeOfDayRangeParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[20]
+	mi := &file_assay_v1_primitive_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1078,7 +1078,7 @@ func (x *TimeOfDayRangeParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TimeOfDayRangeParams.ProtoReflect.Descriptor instead.
 func (*TimeOfDayRangeParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{20}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *TimeOfDayRangeParams) GetStartMinuteUtc() uint32 {
@@ -1105,7 +1105,7 @@ type BarOfSessionParams struct {
 
 func (x *BarOfSessionParams) Reset() {
 	*x = BarOfSessionParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[21]
+	mi := &file_assay_v1_primitive_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1117,7 +1117,7 @@ func (x *BarOfSessionParams) String() string {
 func (*BarOfSessionParams) ProtoMessage() {}
 
 func (x *BarOfSessionParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[21]
+	mi := &file_assay_v1_primitive_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1130,7 +1130,7 @@ func (x *BarOfSessionParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BarOfSessionParams.ProtoReflect.Descriptor instead.
 func (*BarOfSessionParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{21}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *BarOfSessionParams) GetStartMinuteUtc() uint32 {
@@ -1161,7 +1161,7 @@ type MarketStructureParams struct {
 
 func (x *MarketStructureParams) Reset() {
 	*x = MarketStructureParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[22]
+	mi := &file_assay_v1_primitive_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1173,7 +1173,7 @@ func (x *MarketStructureParams) String() string {
 func (*MarketStructureParams) ProtoMessage() {}
 
 func (x *MarketStructureParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[22]
+	mi := &file_assay_v1_primitive_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1186,7 +1186,7 @@ func (x *MarketStructureParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarketStructureParams.ProtoReflect.Descriptor instead.
 func (*MarketStructureParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{22}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *MarketStructureParams) GetSwingLookback() uint32 {
@@ -1228,7 +1228,7 @@ type DisplacementParams struct {
 
 func (x *DisplacementParams) Reset() {
 	*x = DisplacementParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[23]
+	mi := &file_assay_v1_primitive_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1240,7 +1240,7 @@ func (x *DisplacementParams) String() string {
 func (*DisplacementParams) ProtoMessage() {}
 
 func (x *DisplacementParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[23]
+	mi := &file_assay_v1_primitive_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1253,7 +1253,7 @@ func (x *DisplacementParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisplacementParams.ProtoReflect.Descriptor instead.
 func (*DisplacementParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{23}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *DisplacementParams) GetMinBodyRatioMilli() uint32 {
@@ -1289,7 +1289,7 @@ type FairValueGapParams struct {
 
 func (x *FairValueGapParams) Reset() {
 	*x = FairValueGapParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[24]
+	mi := &file_assay_v1_primitive_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1301,7 +1301,7 @@ func (x *FairValueGapParams) String() string {
 func (*FairValueGapParams) ProtoMessage() {}
 
 func (x *FairValueGapParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[24]
+	mi := &file_assay_v1_primitive_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1314,7 +1314,7 @@ func (x *FairValueGapParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FairValueGapParams.ProtoReflect.Descriptor instead.
 func (*FairValueGapParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{24}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *FairValueGapParams) GetMinSizeTicks() uint32 {
@@ -1358,7 +1358,7 @@ type OrderBlockParams struct {
 
 func (x *OrderBlockParams) Reset() {
 	*x = OrderBlockParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[25]
+	mi := &file_assay_v1_primitive_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1370,7 +1370,7 @@ func (x *OrderBlockParams) String() string {
 func (*OrderBlockParams) ProtoMessage() {}
 
 func (x *OrderBlockParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[25]
+	mi := &file_assay_v1_primitive_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1383,7 +1383,7 @@ func (x *OrderBlockParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrderBlockParams.ProtoReflect.Descriptor instead.
 func (*OrderBlockParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{25}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *OrderBlockParams) GetClusterBars() uint32 {
@@ -1431,7 +1431,7 @@ type BreakerParams struct {
 
 func (x *BreakerParams) Reset() {
 	*x = BreakerParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[26]
+	mi := &file_assay_v1_primitive_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1443,7 +1443,7 @@ func (x *BreakerParams) String() string {
 func (*BreakerParams) ProtoMessage() {}
 
 func (x *BreakerParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[26]
+	mi := &file_assay_v1_primitive_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1456,7 +1456,7 @@ func (x *BreakerParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BreakerParams.ProtoReflect.Descriptor instead.
 func (*BreakerParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{26}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *BreakerParams) GetInvalidatingTouches() uint32 {
@@ -1484,7 +1484,7 @@ type LiquidityPoolParams struct {
 
 func (x *LiquidityPoolParams) Reset() {
 	*x = LiquidityPoolParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[27]
+	mi := &file_assay_v1_primitive_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1496,7 +1496,7 @@ func (x *LiquidityPoolParams) String() string {
 func (*LiquidityPoolParams) ProtoMessage() {}
 
 func (x *LiquidityPoolParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[27]
+	mi := &file_assay_v1_primitive_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1509,7 +1509,7 @@ func (x *LiquidityPoolParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LiquidityPoolParams.ProtoReflect.Descriptor instead.
 func (*LiquidityPoolParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{27}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *LiquidityPoolParams) GetEqualLevelToleranceTicks() uint32 {
@@ -1544,7 +1544,7 @@ type SweepParams struct {
 
 func (x *SweepParams) Reset() {
 	*x = SweepParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[28]
+	mi := &file_assay_v1_primitive_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1556,7 +1556,7 @@ func (x *SweepParams) String() string {
 func (*SweepParams) ProtoMessage() {}
 
 func (x *SweepParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[28]
+	mi := &file_assay_v1_primitive_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1569,7 +1569,7 @@ func (x *SweepParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SweepParams.ProtoReflect.Descriptor instead.
 func (*SweepParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{28}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *SweepParams) GetWickThroughTicks() uint32 {
@@ -1604,7 +1604,7 @@ type PremiumDiscountParams struct {
 
 func (x *PremiumDiscountParams) Reset() {
 	*x = PremiumDiscountParams{}
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[29]
+	mi := &file_assay_v1_primitive_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1616,7 +1616,7 @@ func (x *PremiumDiscountParams) String() string {
 func (*PremiumDiscountParams) ProtoMessage() {}
 
 func (x *PremiumDiscountParams) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_assay_v1_primitive_proto_msgTypes[29]
+	mi := &file_assay_v1_primitive_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1629,7 +1629,7 @@ func (x *PremiumDiscountParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PremiumDiscountParams.ProtoReflect.Descriptor instead.
 func (*PremiumDiscountParams) Descriptor() ([]byte, []int) {
-	return file_proto_assay_v1_primitive_proto_rawDescGZIP(), []int{29}
+	return file_assay_v1_primitive_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *PremiumDiscountParams) GetDealingRangeBars() uint32 {
@@ -1653,11 +1653,11 @@ func (x *PremiumDiscountParams) GetOteUpperMilli() uint32 {
 	return 0
 }
 
-var File_proto_assay_v1_primitive_proto protoreflect.FileDescriptor
+var File_assay_v1_primitive_proto protoreflect.FileDescriptor
 
-const file_proto_assay_v1_primitive_proto_rawDesc = "" +
+const file_assay_v1_primitive_proto_rawDesc = "" +
 	"\n" +
-	"\x1eproto/assay/v1/primitive.proto\x12\bassay.v1\"@\n" +
+	"\x18assay/v1/primitive.proto\x12\bassay.v1\"@\n" +
 	"\fSampleParams\x12\x16\n" +
 	"\x06period\x18\x01 \x01(\rR\x06period\x12\x18\n" +
 	"\aenabled\x18\x02 \x01(\bR\aenabled\"-\n" +
@@ -1764,23 +1764,23 @@ const file_proto_assay_v1_primitive_proto_rawDesc = "" +
 	"\x1bMITIGATION_RULE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bMITIGATION_RULE_FIRST_TOUCH\x10\x01\x12\x1d\n" +
 	"\x19MITIGATION_RULE_HALF_FILL\x10\x02\x12\x1d\n" +
-	"\x19MITIGATION_RULE_FULL_FILL\x10\x03B1Z/github.com/olumide/assay/proto/assay/v1;assayv1b\x06proto3"
+	"\x19MITIGATION_RULE_FULL_FILL\x10\x03B4Z2github.com/bcypher01/assay/gen/go/assay/v1;assayv1b\x06proto3"
 
 var (
-	file_proto_assay_v1_primitive_proto_rawDescOnce sync.Once
-	file_proto_assay_v1_primitive_proto_rawDescData []byte
+	file_assay_v1_primitive_proto_rawDescOnce sync.Once
+	file_assay_v1_primitive_proto_rawDescData []byte
 )
 
-func file_proto_assay_v1_primitive_proto_rawDescGZIP() []byte {
-	file_proto_assay_v1_primitive_proto_rawDescOnce.Do(func() {
-		file_proto_assay_v1_primitive_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_assay_v1_primitive_proto_rawDesc), len(file_proto_assay_v1_primitive_proto_rawDesc)))
+func file_assay_v1_primitive_proto_rawDescGZIP() []byte {
+	file_assay_v1_primitive_proto_rawDescOnce.Do(func() {
+		file_assay_v1_primitive_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_assay_v1_primitive_proto_rawDesc), len(file_assay_v1_primitive_proto_rawDesc)))
 	})
-	return file_proto_assay_v1_primitive_proto_rawDescData
+	return file_assay_v1_primitive_proto_rawDescData
 }
 
-var file_proto_assay_v1_primitive_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_proto_assay_v1_primitive_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
-var file_proto_assay_v1_primitive_proto_goTypes = []any{
+var file_assay_v1_primitive_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_assay_v1_primitive_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
+var file_assay_v1_primitive_proto_goTypes = []any{
 	(MitigationRule)(0),              // 0: assay.v1.MitigationRule
 	(*SampleParams)(nil),             // 1: assay.v1.SampleParams
 	(*MovingAverageParams)(nil),      // 2: assay.v1.MovingAverageParams
@@ -1813,7 +1813,7 @@ var file_proto_assay_v1_primitive_proto_goTypes = []any{
 	(*SweepParams)(nil),              // 29: assay.v1.SweepParams
 	(*PremiumDiscountParams)(nil),    // 30: assay.v1.PremiumDiscountParams
 }
-var file_proto_assay_v1_primitive_proto_depIdxs = []int32{
+var file_assay_v1_primitive_proto_depIdxs = []int32{
 	0, // 0: assay.v1.FairValueGapParams.mitigation_rule:type_name -> assay.v1.MitigationRule
 	1, // [1:1] is the sub-list for method output_type
 	1, // [1:1] is the sub-list for method input_type
@@ -1822,27 +1822,27 @@ var file_proto_assay_v1_primitive_proto_depIdxs = []int32{
 	0, // [0:1] is the sub-list for field type_name
 }
 
-func init() { file_proto_assay_v1_primitive_proto_init() }
-func file_proto_assay_v1_primitive_proto_init() {
-	if File_proto_assay_v1_primitive_proto != nil {
+func init() { file_assay_v1_primitive_proto_init() }
+func file_assay_v1_primitive_proto_init() {
+	if File_assay_v1_primitive_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_assay_v1_primitive_proto_rawDesc), len(file_proto_assay_v1_primitive_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_assay_v1_primitive_proto_rawDesc), len(file_assay_v1_primitive_proto_rawDesc)),
 			NumEnums:      1,
 			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_proto_assay_v1_primitive_proto_goTypes,
-		DependencyIndexes: file_proto_assay_v1_primitive_proto_depIdxs,
-		EnumInfos:         file_proto_assay_v1_primitive_proto_enumTypes,
-		MessageInfos:      file_proto_assay_v1_primitive_proto_msgTypes,
+		GoTypes:           file_assay_v1_primitive_proto_goTypes,
+		DependencyIndexes: file_assay_v1_primitive_proto_depIdxs,
+		EnumInfos:         file_assay_v1_primitive_proto_enumTypes,
+		MessageInfos:      file_assay_v1_primitive_proto_msgTypes,
 	}.Build()
-	File_proto_assay_v1_primitive_proto = out.File
-	file_proto_assay_v1_primitive_proto_goTypes = nil
-	file_proto_assay_v1_primitive_proto_depIdxs = nil
+	File_assay_v1_primitive_proto = out.File
+	file_assay_v1_primitive_proto_goTypes = nil
+	file_assay_v1_primitive_proto_depIdxs = nil
 }

@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/event"
-	"github.com/Bcypher01/Assay/internal/eventsource"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/event"
+	"github.com/bcypher01/assay/internal/eventsource"
 )
 
 const defaultBaseURL = "https://www.bls.gov"
@@ -160,7 +160,7 @@ func (c *Client) get(ctx context.Context, url string) (string, error) {
 	}
 	// BLS rejects requests with Go's default user agent. Identify the importer
 	// and request only its small official archive surface.
-	req.Header.Set("User-Agent", "Assay/1.0 (+https://github.com/Bcypher01/Assay)")
+	req.Header.Set("User-Agent", "Assay/1.0 (+https://github.com/bcypher01/assay)")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml")
 	res, err := h.Do(req)
 	if err != nil {

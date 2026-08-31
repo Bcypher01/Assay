@@ -14,14 +14,14 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/Bcypher01/Assay/internal/analytics"
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/engine"
-	"github.com/Bcypher01/Assay/internal/instrument"
-	"github.com/Bcypher01/Assay/internal/ir"
-	"github.com/Bcypher01/Assay/internal/packs/semantic"
-	"github.com/Bcypher01/Assay/internal/primitive"
-	"github.com/Bcypher01/Assay/internal/sim"
+	"github.com/bcypher01/assay/internal/analytics"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/engine"
+	"github.com/bcypher01/assay/internal/instrument"
+	"github.com/bcypher01/assay/internal/ir"
+	"github.com/bcypher01/assay/internal/packs/semantic"
+	"github.com/bcypher01/assay/internal/primitive"
+	"github.com/bcypher01/assay/internal/sim"
 )
 
 type Kind string

@@ -3,7 +3,7 @@ package store
 import (
 	"fmt"
 
-	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/bcypher01/assay/internal/core"
 )
 
 // EncodeForPublish validates and encodes one month of bars, returning the

@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/store"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/store"
 )
 
 func TestHTTPStoreReadsPublicObjectsAndManifests(t *testing.T) {

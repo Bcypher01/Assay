@@ -6,17 +6,17 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/Bcypher01/Assay/internal/event"
-	"github.com/Bcypher01/Assay/internal/instrument"
-	"github.com/Bcypher01/Assay/internal/library"
-	"github.com/Bcypher01/Assay/internal/rpc"
-	"github.com/Bcypher01/Assay/internal/runstore"
-	"github.com/Bcypher01/Assay/internal/store"
-	"github.com/Bcypher01/Assay/internal/telemetry"
-	"github.com/Bcypher01/Assay/internal/userdir"
-	"github.com/Bcypher01/Assay/internal/venue"
-	"github.com/Bcypher01/Assay/internal/venue/binance"
-	"github.com/Bcypher01/Assay/internal/venue/dukascopy"
+	"github.com/bcypher01/assay/internal/event"
+	"github.com/bcypher01/assay/internal/instrument"
+	"github.com/bcypher01/assay/internal/library"
+	"github.com/bcypher01/assay/internal/rpc"
+	"github.com/bcypher01/assay/internal/runstore"
+	"github.com/bcypher01/assay/internal/store"
+	"github.com/bcypher01/assay/internal/telemetry"
+	"github.com/bcypher01/assay/internal/userdir"
+	"github.com/bcypher01/assay/internal/venue"
+	"github.com/bcypher01/assay/internal/venue/binance"
+	"github.com/bcypher01/assay/internal/venue/dukascopy"
 )
 
 func main() {

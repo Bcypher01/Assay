@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Bcypher01/Assay/internal/store"
+	"github.com/bcypher01/assay/internal/store"
 )
 
 // R2Config contains the Cloudflare R2 S3-API settings.

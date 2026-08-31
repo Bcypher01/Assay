@@ -7,9 +7,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	_ "github.com/Bcypher01/Assay/internal/packs/indicator"
-	"github.com/Bcypher01/Assay/internal/primitive"
+	"github.com/bcypher01/assay/internal/core"
+	_ "github.com/bcypher01/assay/internal/packs/indicator"
+	"github.com/bcypher01/assay/internal/primitive"
 )
 
 func validStrategy() *Strategy {

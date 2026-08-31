@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/event"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/event"
 )
 
 const MethodologyVersion = "v2"

@@ -1,6 +1,6 @@
 package semantic
 
-import "github.com/Bcypher01/Assay/internal/core"
+import "github.com/bcypher01/assay/internal/core"
 
 // PrecedentCandle is one price-independent candle in a 0..1000 window range.
 // It is public so setup-test results can report the same score used by the

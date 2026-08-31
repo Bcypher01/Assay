@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Bcypher01/Assay/internal/onboarding"
+	"github.com/bcypher01/assay/internal/onboarding"
 )
 
 func TestOnboardingEndpointExposesWorkedMultiYearPlan(t *testing.T) {

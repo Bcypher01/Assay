@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/bcypher01/assay/internal/core"
 )
 
 // Manifest describes one Parquet bar file: what it holds, where it came from,

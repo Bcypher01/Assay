@@ -3,7 +3,7 @@ package ir
 import (
 	"encoding/json"
 
-	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/bcypher01/assay/internal/core"
 )
 
 // exampleSymbol is deliberately the catalogue identity rather than its display

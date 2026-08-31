@@ -3,7 +3,7 @@ package rpc
 import (
 	"sort"
 
-	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/bcypher01/assay/internal/core"
 )
 
 // ViewportPoint retains high and low separately, so a visual extreme cannot be

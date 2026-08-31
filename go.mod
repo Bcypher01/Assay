@@ -1,4 +1,4 @@
-module github.com/Bcypher01/Assay
+module github.com/bcypher01/assay
 
 go 1.24
 

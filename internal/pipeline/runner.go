@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/store"
-	"github.com/Bcypher01/Assay/internal/venue"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/store"
+	"github.com/bcypher01/assay/internal/venue"
 )
 
 // Job is one pipeline build request.

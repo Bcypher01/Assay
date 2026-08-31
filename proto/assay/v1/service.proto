@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package assay.v1;
 
-option go_package = "github.com/Bcypher01/Assay/proto/assay/v1;assayv1";
+option go_package = "github.com/bcypher01/assay/gen/go/assay/v1;assayv1";
 
 message Empty {}
 message Instrument {

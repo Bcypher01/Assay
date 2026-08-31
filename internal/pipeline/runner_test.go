@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/store"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/store"
 )
 
 func TestRunnerPublishesAndSecondRunIsNoop(t *testing.T) {

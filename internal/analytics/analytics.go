@@ -9,7 +9,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/Bcypher01/Assay/internal/ir"
+	"github.com/bcypher01/assay/internal/ir"
 )
 
 // Bounded is the mandatory representation for an ambiguity-affected metric.

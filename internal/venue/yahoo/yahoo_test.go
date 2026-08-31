@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/instrument"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/instrument"
 )
 
 func TestFetchDailyFXNormalisesChartJSON(t *testing.T) {

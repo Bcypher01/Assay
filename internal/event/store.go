@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/bcypher01/assay/internal/core"
 )
 
 const SchemaVersion = 1

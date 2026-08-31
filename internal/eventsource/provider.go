@@ -3,8 +3,8 @@ package eventsource
 import (
 	"context"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/event"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/event"
 )
 
 // Scope limits a provider request to records whose occurrence time is in

@@ -56,23 +56,38 @@ interface Blueprint {
   poi?: StrategyNode[]
   trigger: StrategyNode[]
   withinBars?: number
+  /** Per-rung timeframes for a genuine ladder; defaults to `timeframe`. */
+  ladder?: { bias: string; poi: string; entry: string }
+  /** Hold the point of interest live for this duration (e.g. "12h"). */
+  poiWindow?: string
+  /** Template version; bump when the rule structure changes. Defaults to 1. */
+  version?: number
 }
 
 function build(b: Blueprint): TemplateCard {
-  const stamp = (nodes: StrategyNode[] = []) =>
-    nodes.map((n) => ({ ...n, timeframe: b.timeframe }))
-  const bias = stamp(b.bias)
-  const poi = stamp(b.poi)
-  const trigger = stamp(b.trigger)
+  const biasTf = b.ladder?.bias ?? b.timeframe
+  const poiTf = b.ladder?.poi ?? b.timeframe
+  const entryTf = b.ladder?.entry ?? b.timeframe
+  const stamp = (nodes: StrategyNode[] = [], tf: string) =>
+    nodes.map((n) => ({ ...n, timeframe: tf }))
+  const bias = stamp(b.bias, biasTf)
+  const poi = stamp(b.poi, poiTf)
+  const trigger = stamp(b.trigger, entryTf)
   const ids = (nodes: StrategyNode[]) => nodes.map((n) => n.id)
+
+  // A point of interest can stay live for a window: a coarse level remains
+  // valid across the finer bars beneath it. It is stored as the duration the
+  // engine reads, wrapping the reference in an `occurred within`.
+  const ref = (id: string, held?: string) =>
+    held ? { within: { condition: { node: id }, window: held } } : { node: id }
 
   const document: StrategyDoc = {
     schema: SCHEMA_V2,
     name: b.name,
     universe: { symbols: [b.symbol] },
-    timeframes: { bias: b.timeframe, poi: b.timeframe, entry: b.timeframe },
+    timeframes: { bias: biasTf, poi: poiTf, entry: entryTf },
     risk: { stop: b.stop, target: b.target },
-    template: { id: b.id, version: 1 },
+    template: { id: b.id, version: b.version ?? 1 },
     nodes: [...bias, ...poi, ...trigger],
     entries: {
       timing: 'next_open',
@@ -80,9 +95,11 @@ function build(b: Blueprint): TemplateCard {
         enabled: true,
         name: `Long ${b.name}`,
         when: {
-          all: [...ids(bias), ...ids(poi), ...ids(trigger)].map((id) => ({
-            node: id,
-          })),
+          all: [
+            ...ids(bias).map((id) => ref(id)),
+            ...ids(poi).map((id) => ref(id, b.poiWindow)),
+            ...ids(trigger).map((id) => ref(id)),
+          ],
         },
       },
       short: { enabled: false, name: '', when: {} },
@@ -216,17 +233,74 @@ export const BUNDLED_TEMPLATES: TemplateCard[] = [
     ],
   }),
   build({
+    id: 'ladder-daily-h4-m15',
+    name: 'Daily bias, H4 sweep, M15 shift',
+    family: 'Multi-timeframe',
+    description:
+      'A genuine ladder. The daily chart sets the structural bias, a 4-hour liquidity sweep marks the level and holds it live for twelve hours, and a 15-minute structure shift is the trigger. Each rung is read at its own close and projected down to the entry chart.',
+    expectedFrequency: 'low',
+    symbol: 'DUKAS:EURUSD',
+    timeframe: 'm15',
+    ladder: { bias: 'd1', poi: 'h4', entry: 'm15' },
+    poiWindow: '12h',
+    stop: { unit: 'pips', value: 15 },
+    target: { unit: 'pips', value: 45 },
+    bias: [
+      node(
+        'daily-structure',
+        'smc',
+        'market_structure',
+        {
+          swingLookback: 5,
+          confirmByClose: true,
+          equalLevelToleranceTicks: 20,
+          trackInternal: false,
+        },
+        'd1',
+      ),
+    ],
+    poi: [
+      node(
+        'h4-sweep',
+        'smc',
+        'liquidity_sweep',
+        {
+          wickThroughTicks: 40,
+          closeBackBars: 2,
+          requireStructureShift: false,
+        },
+        'h4',
+      ),
+    ],
+    trigger: [
+      node(
+        'm15-shift',
+        'smc',
+        'market_structure',
+        {
+          swingLookback: 10,
+          confirmByClose: true,
+          equalLevelToleranceTicks: 6,
+          trackInternal: true,
+        },
+        'm15',
+      ),
+    ],
+  }),
+  build({
     id: 'sweep-shift',
     name: 'Liquidity sweep, then structure shift',
     family: 'SMC workflow',
     description:
-      'Waits for price to run the stops beyond a prior extreme and close back inside, then requires structure to shift before entering.',
+      'A genuine ladder: a 1-hour liquidity sweep marks the level and holds it live for five hours, and a 15-minute structure shift is the trigger. Each rung is read at its own close and projected down to the entry chart.',
     expectedFrequency: 'low',
     symbol: 'DUKAS:EURUSD',
     timeframe: 'm15',
     stop: { unit: 'pips', value: 15 },
     target: { unit: 'pips', value: 45 },
-    withinBars: 5,
+    ladder: { bias: 'h4', poi: 'h1', entry: 'm15' },
+    poiWindow: '5h',
+    version: 2,
     poi: [
       node(
         'sweep',
@@ -237,7 +311,7 @@ export const BUNDLED_TEMPLATES: TemplateCard[] = [
           closeBackBars: 2,
           requireStructureShift: false,
         },
-        'm15',
+        'h1',
       ),
     ],
     trigger: [
@@ -347,13 +421,15 @@ export const BUNDLED_TEMPLATES: TemplateCard[] = [
     name: 'Bitcoin liquidity sweep, then structure shift',
     family: 'Crypto SMC workflow',
     description:
-      'Waits for BTC to sweep a prior extreme and close back inside, then requires market structure to shift before entering.',
+      'A genuine ladder on BTC: a 1-hour liquidity sweep marks the level and holds it live for five hours, and a 15-minute structure shift is the trigger. Percentage exits match crypto volatility.',
     expectedFrequency: 'low',
     symbol: 'BINANCE:BTCUSDT',
     timeframe: 'h1',
     stop: { unit: 'percent', value: 1 },
     target: { unit: 'percent', value: 2.5 },
-    withinBars: 5,
+    ladder: { bias: 'h4', poi: 'h1', entry: 'm15' },
+    poiWindow: '5h',
+    version: 2,
     poi: [
       node(
         'sweep',
@@ -378,7 +454,7 @@ export const BUNDLED_TEMPLATES: TemplateCard[] = [
           equalLevelToleranceTicks: 40,
           trackInternal: false,
         },
-        'h1',
+        'm15',
       ),
     ],
   }),

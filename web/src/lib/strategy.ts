@@ -358,6 +358,192 @@ export function withStarterEntry(doc: StrategyDoc): StrategyDoc {
     },
   }
 }
+export const LADDER_SLOTS = ['bias', 'poi', 'entry'] as const
+export type LadderSlot = (typeof LADDER_SLOTS)[number]
+
+/** Index of a timeframe in the finest-first canonical order; -1 if unknown. */
+export function timeframeRank(tf: string): number {
+  return (TIMEFRAMES as readonly string[]).indexOf(tf)
+}
+
+/** True when the three ladder rungs are not all the same resolution. */
+export function isLadder(doc: StrategyDoc): boolean {
+  const { bias, poi, entry } = doc.timeframes
+  return new Set([bias, poi, entry].filter(Boolean)).size > 1
+}
+
+/**
+ * The timeframes a node may legally run on: the entry timeframe and anything
+ * coarser. A node finer than entry cannot be reconstructed from the bars a run
+ * loads, so the engine refuses it — the dropdown never offers it.
+ */
+export function timeframesAtOrAbove(entry: string): Timeframe[] {
+  const floor = timeframeRank(entry)
+  if (floor < 0) return [...TIMEFRAMES]
+  return TIMEFRAMES.filter((_, i) => i >= floor)
+}
+
+/**
+ * Move one rung of the ladder. Setting entry re-stamps every node that sat on
+ * the old entry (or had no timeframe) onto the new one, so the trigger follows
+ * the chart the user is looking at; a node deliberately parked on a coarser
+ * rung keeps its place. Bias and poi are intent and validation only — they
+ * carry no data of their own — so setting them just records the rung.
+ */
+export function withSlotTimeframe(
+  doc: StrategyDoc,
+  slot: LadderSlot,
+  tf: string,
+): StrategyDoc {
+  const timeframes = { ...doc.timeframes, [slot]: tf }
+  if (slot !== 'entry') return { ...doc, timeframes }
+  const oldEntry = doc.timeframes.entry
+  return {
+    ...doc,
+    timeframes,
+    nodes: doc.nodes.map((n) =>
+      n.timeframe === oldEntry || n.timeframe === ''
+        ? { ...n, timeframe: tf }
+        : n,
+    ),
+  }
+}
+
+/** Place a single node on a timeframe rung. */
+export function withNodeTimeframe(
+  doc: StrategyDoc,
+  id: string,
+  tf: string,
+): StrategyDoc {
+  return withNode(doc, id, { timeframe: tf })
+}
+
+/**
+ * Does this expression reference `id` at its top level — either a plain
+ * reference or one already wrapped in an `occurred within` window? Used to
+ * recognise the predecessor of an `occurs after` relationship.
+ */
+function refersToNode(expr: unknown, id: string): boolean {
+  if (!expr || typeof expr !== 'object' || Array.isArray(expr)) return false
+  const x = expr as Record<string, unknown>
+  if (x.node === id) return true
+  const within = x.within
+  if (within && typeof within === 'object' && !Array.isArray(within)) {
+    const cond = (within as Record<string, unknown>).condition
+    if (
+      cond &&
+      typeof cond === 'object' &&
+      (cond as Record<string, unknown>).node === id
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * The duration a node's reference is held live for, or null when it is an
+ * unconditioned reference. Two document shapes carry a window: the `within`
+ * wrapper the guided flow writes around a lone reference, and the `within` of
+ * an `occurs after` relationship, which belongs to its predecessor — the swept
+ * level that stays live for the span the confirming event may arrive in.
+ */
+export function nodeWindowOf(when: Expression, id: string): string | null {
+  let found: string | null = null
+  const visit = (item: unknown) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return
+    const x = item as Record<string, unknown>
+    const within = x.within
+    if (within && typeof within === 'object' && !Array.isArray(within)) {
+      const w = within as Record<string, unknown>
+      const cond = w.condition
+      if (
+        cond &&
+        typeof cond === 'object' &&
+        (cond as Record<string, unknown>).node === id &&
+        typeof w.window === 'string'
+      ) {
+        found = w.window
+      }
+    }
+    const after = x.after
+    if (after && typeof after === 'object' && !Array.isArray(after)) {
+      const a = after as Record<string, unknown>
+      if (refersToNode(a.predecessor, id) && typeof a.within === 'string') {
+        found = a.within
+      }
+    }
+    for (const value of Object.values(x)) {
+      if (Array.isArray(value)) value.forEach(visit)
+      else visit(value)
+    }
+  }
+  visit(when)
+  return found
+}
+
+/**
+ * Wrap (or unwrap) a node reference in an `occurred within` window. A window
+ * makes the reference true on the bar the condition fires and for the span
+ * after it, which is exactly what "the POI is still live" means on a ladder.
+ * Passing null removes the wrapper and restores the plain reference.
+ */
+export function withNodeWindow(
+  doc: StrategyDoc,
+  side: EntrySide,
+  id: string,
+  window: string | null,
+): StrategyDoc {
+  const wrap = (): Expression =>
+    window ? { within: { condition: { node: id }, window } } : { node: id }
+  const rewrite = (expr: Expression): Expression => {
+    if (!expr || typeof expr !== 'object' || Array.isArray(expr)) return expr
+    const x = expr as Record<string, unknown>
+    // The window of an `occurs after` relationship belongs to the predecessor.
+    // Set it on the relationship itself rather than wrapping the predecessor
+    // reference, which would leave the relationship's own window untouched and
+    // silently create a second, nested one.
+    const after = x.after
+    if (after && typeof after === 'object' && !Array.isArray(after)) {
+      const a = after as Record<string, unknown>
+      if (refersToNode(a.predecessor, id)) {
+        const nextAfter: Record<string, unknown> = { ...a }
+        if (window) nextAfter.within = window
+        else delete nextAfter.within
+        return { ...x, after: nextAfter } as Expression
+      }
+    }
+    if (x.node === id && Object.keys(x).length === 1) return wrap()
+    const within = x.within
+    if (within && typeof within === 'object' && !Array.isArray(within)) {
+      const cond = (within as Record<string, unknown>).condition
+      if (
+        cond &&
+        typeof cond === 'object' &&
+        (cond as Record<string, unknown>).node === id
+      ) {
+        return wrap()
+      }
+    }
+    const out: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(x)) {
+      if (Array.isArray(value))
+        out[key] = value.map((child) => rewrite(child as Expression))
+      else if (value && typeof value === 'object')
+        out[key] = rewrite(value as Expression)
+      else out[key] = value
+    }
+    return out
+  }
+  const entry = doc.entries[side]
+  const when = rewrite(entry.when)
+  const entries =
+    side === 'long'
+      ? { ...doc.entries, long: { ...doc.entries.long, when } }
+      : { ...doc.entries, short: { ...doc.entries.short, when } }
+  return { ...doc, entries }
+}
+
 export function symbolOf(doc: StrategyDoc): string {
   return doc.universe.symbols[0] ?? ''
 }

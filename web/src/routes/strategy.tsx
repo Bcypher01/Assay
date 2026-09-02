@@ -18,13 +18,19 @@ import {
   displayTimeframe,
   expressionNodeIDs,
   hasEntry,
+  LADDER_SLOTS,
+  nodeWindowOf,
   parseStrategy,
+  timeframesAtOrAbove,
   toEngineStrategy,
   withEntrySide,
   withNodeParams,
+  withNodeTimeframe,
+  withNodeWindow,
   withStarterEntry,
 } from '@/lib/strategy'
-import type { StrategyDoc, StrategyNode } from '@/lib/strategy'
+import type { LadderSlot, StrategyDoc, StrategyNode } from '@/lib/strategy'
+import { barsToDuration, displayDuration, durationToBars } from '@/lib/duration'
 import {
   isTimeframeSupportedForInstrument,
   sortTimeframes,
@@ -32,6 +38,12 @@ import {
 } from '@/lib/constraints'
 
 export const Route = createFileRoute('/strategy')({ component: DefineRules })
+
+const LADDER_LABELS: Record<LadderSlot, string> = {
+  bias: 'Bias',
+  poi: 'POI',
+  entry: 'Entry',
+}
 
 interface FieldError {
   path: string
@@ -233,33 +245,60 @@ function DefineRules() {
               ) : null}
             </Row>
 
-            <Row label="Timeframe" error={errorFor('timeframes.entry')}>
-              <div className="flex flex-wrap gap-1">
+            <Row
+              label="Analysis ladder"
+              error={
+                errorFor('timeframes.entry') ??
+                errorFor('timeframes.poi') ??
+                errorFor('timeframes.bias')
+              }
+            >
+              <div className="flex w-full flex-col gap-3">
                 {timeframes.length === 0 ? (
                   <span className="font-mono text-[11px] text-muted-foreground">
                     select a market first
                   </span>
-                ) : null}
-                {timeframes.map((tf) => (
-                  <Choice
-                    key={tf}
-                    active={document.timeframes.entry === tf}
-                    onClick={() => session.setMarket(symbol, tf)}
-                  >
-                    {displayTimeframe(tf)}
-                  </Choice>
-                ))}
-              </div>
-              {symbol &&
-              document.timeframes.entry &&
-              !isTimeframeSupportedForInstrument(
-                symbol,
-                document.timeframes.entry,
-              ) ? (
-                <span className="font-mono text-[11px] text-warning">
-                  this source cannot prepare that resolution
+                ) : (
+                  (LADDER_SLOTS as readonly LadderSlot[]).map((slot) => (
+                    <div
+                      key={slot}
+                      className="flex flex-wrap items-center gap-2"
+                    >
+                      <span className="w-14 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                        {LADDER_LABELS[slot]}
+                      </span>
+                      <div className="flex flex-wrap gap-1">
+                        {timeframes.map((tf) => (
+                          <Choice
+                            key={tf}
+                            active={document.timeframes[slot] === tf}
+                            onClick={() => session.setSlotTimeframe(slot, tf)}
+                          >
+                            {displayTimeframe(tf)}
+                          </Choice>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
+                <span className="text-sm text-muted-foreground">
+                  Bias sits at the top and entry at the bottom; each rung must be
+                  the same or finer than the one above it. Entry is the chart the
+                  run loads — coarser rungs are aggregated from it and read at
+                  their close. Leave all three the same for a single-timeframe
+                  study.
                 </span>
-              ) : null}
+                {symbol &&
+                document.timeframes.entry &&
+                !isTimeframeSupportedForInstrument(
+                  symbol,
+                  document.timeframes.entry,
+                ) ? (
+                  <span className="font-mono text-[11px] text-warning">
+                    this source cannot prepare the entry resolution
+                  </span>
+                ) : null}
+              </div>
             </Row>
 
             <Row label="Test direction">
@@ -303,8 +342,19 @@ function DefineRules() {
                     <ConditionRow
                       key={node.id}
                       node={node}
+                      entryTimeframe={document.timeframes.entry}
+                      timeframeError={errorFor(
+                        `nodes[${document.nodes.indexOf(node)}].timeframe`,
+                      )}
+                      heldFor={nodeWindowOf(entry.when, node.id)}
                       onChange={(params) =>
                         update(withNodeParams(document, node.id, params))
+                      }
+                      onTimeframe={(tf) =>
+                        update(withNodeTimeframe(document, node.id, tf))
+                      }
+                      onHeldFor={(window) =>
+                        update(withNodeWindow(document, side, node.id, window))
                       }
                     />
                   ))}
@@ -511,35 +561,95 @@ function humanise(key: string): string {
 
 function ConditionRow({
   node,
+  entryTimeframe,
+  timeframeError,
+  heldFor,
   onChange,
+  onTimeframe,
+  onHeldFor,
 }: {
   node: StrategyNode
+  entryTimeframe: string
+  timeframeError?: string
+  heldFor: string | null
   onChange: (params: Record<string, unknown>) => void
+  onTimeframe: (tf: string) => void
+  onHeldFor: (window: string | null) => void
 }) {
   const numeric = Object.entries(node.params).filter(
     ([, value]) => typeof value === 'number',
   ) as Array<[string, number]>
+  // A node runs on its own timeframe, defaulting to the entry rung. The window
+  // is authored in bars of that timeframe and stored as the duration the engine
+  // reads, so "3 bars of h4" and "12h" are the same window under either lens.
+  const tf = node.timeframe || entryTimeframe
+  const options = timeframesAtOrAbove(entryTimeframe)
+  const heldForBars = heldFor ? durationToBars(heldFor, tf) : null
 
   return (
     <div className="grid items-baseline gap-x-5 gap-y-2 border-b border-border/60 last:border-b-0 py-3 sm:grid-cols-[170px_minmax(0,1fr)]">
       <span className="font-mono text-[11px] text-muted-foreground">
         {node.pack}/{node.type}
       </span>
-      <div className="flex flex-wrap items-center gap-4">
-        <p className="text-sm">{describeNode(node)}</p>
-        {numeric.map(([key, value]) => (
-          <label key={key} className="flex items-center gap-2">
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-4">
+          <p className="text-sm">{describeNode(node)}</p>
+          {numeric.map(([key, value]) => (
+            <label key={key} className="flex items-center gap-2">
+              <span className="font-mono text-[11px] text-muted-foreground">
+                {humanise(key)}
+              </span>
+              <Input
+                type="number"
+                className="h-8 w-24 font-mono text-xs"
+                value={value}
+                onChange={(e) => onChange({ [key]: Number(e.target.value) })}
+              />
+            </label>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2">
             <span className="font-mono text-[11px] text-muted-foreground">
-              {humanise(key)}
+              timeframe
+            </span>
+            <select
+              className="h-8 border border-input bg-card pl-2 pr-7 text-xs"
+              value={tf}
+              onChange={(e) => onTimeframe(e.target.value)}
+            >
+              {options.map((option) => (
+                <option key={option} value={option}>
+                  {displayTimeframe(option)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2">
+            <span className="font-mono text-[11px] text-muted-foreground">
+              stays live for
             </span>
             <Input
               type="number"
-              className="h-8 w-24 font-mono text-xs"
-              value={value}
-              onChange={(e) => onChange({ [key]: Number(e.target.value) })}
+              min="0"
+              placeholder="—"
+              className="h-8 w-20 font-mono text-xs"
+              value={heldForBars ?? ''}
+              onChange={(e) => {
+                const n = Number(e.target.value)
+                onHeldFor(
+                  Number.isFinite(n) && n > 0 ? barsToDuration(n, tf) : null,
+                )
+              }}
             />
+            <span className="font-mono text-[11px] text-muted-foreground">
+              {tf}-bars{heldFor ? ` · ${displayDuration(heldFor)}` : ''}
+            </span>
           </label>
-        ))}
+        </div>
+        {timeframeError ? (
+          <p className="text-sm text-destructive">{timeframeError}</p>
+        ) : null}
       </div>
     </div>
   )

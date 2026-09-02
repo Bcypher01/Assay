@@ -15,6 +15,7 @@
  */
 
 import { assayHttpBaseUrl } from '@/lib/rpc'
+import { timeframeMinutes } from '@/lib/constraints'
 
 export type SetupKind =
   | 'drawn_precedent'
@@ -37,6 +38,8 @@ export interface Drawing {
   side: SetupSide
   symbol: string
   timeframe: string
+  /** Optional finer entry rung. Empty/undefined means single-timeframe. */
+  entryTimeframe?: string
   anchorTimeMs: number
   levelLow: number
   levelHigh: number
@@ -436,6 +439,13 @@ export function validateDrawing(d: Drawing): Record<string, string> {
   )
     errors.retestBars = 'Must be between 1 and 200 bars.'
   if (d.toleranceTicks < 0) errors.toleranceTicks = 'Must not be negative.'
+  if (d.entryTimeframe) {
+    const entry = timeframeMinutes(d.entryTimeframe)
+    const pattern = timeframeMinutes(d.timeframe)
+    if (entry !== null && pattern !== null && entry > pattern)
+      errors.entryTimeframe =
+        'Entry timeframe must be the same as or finer than the pattern timeframe.'
+  }
   if (d.kind === 'fair_value_gap_retest' && d.minSizeTicks < 1)
     errors.minSizeTicks = 'Must be at least 1 tick.'
   if (

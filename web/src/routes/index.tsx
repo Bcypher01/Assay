@@ -147,7 +147,7 @@ function StartingPoint() {
         <PlannedTile
           icon={<MessageSquare className="size-4" />}
           title="Describe my own strategy"
-          body="Turn a written idea into exact, testable rules. Waiting on the predicate layer: a condition like “RSI below 40” needs a numeric comparison, and a slot currently accepts boolean conditions only."
+          body="Turn a written idea into exact, testable rules. The rule vocabulary is here now — a numeric comparison like “RSI below 40” is expressible today, as the RSI pullback template shows — so what is left is the translation itself: turning a sentence into the exact document, reliably enough that the rule you read is the rule that runs."
         />
         <PlannedTile
           icon={<Bookmark className="size-4" />}

@@ -2,8 +2,11 @@ import {
   displaySymbol,
   displayTimeframe,
   expressionNodeIDs,
+  isLadder,
+  nodeWindowOf,
 } from '@/lib/strategy'
 import type { Distance, StrategyDoc, StrategyNode } from '@/lib/strategy'
+import { displayDuration } from '@/lib/duration'
 
 /**
  * A local rendering of a strategy in trading language.
@@ -118,10 +121,20 @@ export function conditionPhrases(
   doc: StrategyDoc,
   side: 'long' | 'short',
 ): string[] {
-  return expressionNodeIDs(doc.entries[side].when)
+  const entryTf = doc.timeframes.entry
+  const when = doc.entries[side].when
+  return expressionNodeIDs(when)
     .map((id) => doc.nodes.find((node) => node.id === id))
     .filter((node): node is StrategyNode => node !== undefined)
-    .map(describeNode)
+    .map((node) => {
+      let phrase = describeNode(node)
+      if (node.timeframe && node.timeframe !== entryTf) {
+        phrase += ` on the ${displayTimeframe(node.timeframe)} chart`
+      }
+      const held = nodeWindowOf(when, node.id)
+      if (held) phrase += ` (still live ${displayDuration(held)} later)`
+      return phrase
+    })
 }
 
 export function describeLocally(doc: StrategyDoc): LocalDescription {
@@ -140,7 +153,15 @@ export function describeLocally(doc: StrategyDoc): LocalDescription {
     ({ entry, conditions }) => entry.enabled && conditions.length > 0,
   )
 
-  let summary = `Trade ${market} on the ${entry} chart. `
+  let summary = isLadder(doc)
+    ? `Trade ${market} as a ladder: form the bias on the ${
+        doc.timeframes.bias
+          ? displayTimeframe(doc.timeframes.bias)
+          : 'an unselected'
+      } chart, locate the setup on the ${
+        doc.timeframes.poi ? displayTimeframe(doc.timeframes.poi) : 'an unselected'
+      } chart, and trigger on the ${entry} chart. `
+    : `Trade ${market} on the ${entry} chart. `
   summary +=
     active.length === 0
       ? 'No entry condition has been set yet, so nothing would ever trigger. '

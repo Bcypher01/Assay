@@ -1,5 +1,11 @@
 import { useEffect, useSyncExternalStore } from 'react'
-import { emptyStrategy, parseStrategy, withMarket } from '@/lib/strategy'
+import {
+  emptyStrategy,
+  parseStrategy,
+  withMarket,
+  withSlotTimeframe,
+} from '@/lib/strategy'
+import type { LadderSlot } from '@/lib/strategy'
 
 /**
  * A tiny cross-screen session store (no dependency). It threads the user's
@@ -289,6 +295,32 @@ export const session = {
       dataStatus: null,
       strategyText,
       validatedHash: null,
+    }
+    persist()
+    emit()
+  },
+  /**
+   * Move one rung of the analysis ladder. The entry rung is the resolution a
+   * run actually loads, so changing it re-points the data selection and clears
+   * the readiness check the way a market change does; bias and poi only edit
+   * the document. An unparseable document is left untouched — the user is
+   * mid-edit and overwriting it would lose their work.
+   */
+  setSlotTimeframe(slot: LadderSlot, tf: string) {
+    const document = parseStrategy(state.strategyText)
+    if (!document) return
+    const strategyText = JSON.stringify(
+      withSlotTimeframe(document, slot, tf),
+      null,
+      2,
+    )
+    state = {
+      ...state,
+      strategyText,
+      validatedHash: null,
+      ...(slot === 'entry'
+        ? { timeframe: tf, snapshot: '', dataStatus: null }
+        : {}),
     }
     persist()
     emit()

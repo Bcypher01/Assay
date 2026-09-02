@@ -36,6 +36,7 @@ import {
 import {
   sortTimeframes,
   supportedTimeframesForInstrument,
+  timeframeMinutes,
 } from '@/lib/constraints'
 import { dataApi } from '@/lib/rpc'
 import type {
@@ -233,6 +234,8 @@ function SetupTestScreen() {
   const [instruments, setInstruments] = useState<Array<InstrumentRow>>([])
   const [symbol, setSymbol] = useState('DUKAS:EURUSD')
   const [timeframe, setTimeframe] = useState('d1')
+  // Empty means the entry is the same rung as the pattern (single-timeframe).
+  const [entryTimeframe, setEntryTimeframe] = useState('')
   const [years, setYears] = useState(3)
 
   const [chart, setChart] = useState<ChartData | null>(null)
@@ -430,6 +433,17 @@ function SetupTestScreen() {
       })
       setChart(next)
       setPreview(null)
+      // A finer entry rung needs its own bars prepared: the pattern is detected
+      // on the drawing timeframe but the simulator fills on the entry timeframe.
+      if (entryTimeframe && entryTimeframe !== timeframe) {
+        await loadSetupChart({
+          symbol,
+          timeframe: entryTimeframe,
+          fromMs: range.fromMs,
+          toMs: range.toMs,
+          maxBars: MAX_BARS,
+        })
+      }
       const index = Math.max(0, next.bars.length - 2)
       const bar = next.bars.at(index)
       setAnchorIndex(bar ? index : null)
@@ -452,7 +466,17 @@ function SetupTestScreen() {
     } finally {
       setPreparing(false)
     }
-  }, [symbol, timeframe, years, side])
+  }, [symbol, timeframe, entryTimeframe, years, side])
+
+  // Entry may sit on the pattern rung or any finer supported rung.
+  const entryTimeframes = useMemo(() => {
+    const pattern = timeframeMinutes(timeframe)
+    if (pattern === null) return [timeframe]
+    return timeframes.filter((item) => {
+      const m = timeframeMinutes(item)
+      return m !== null && m <= pattern
+    })
+  }, [timeframes, timeframe])
 
   const drawing: Drawing | null = useMemo(() => {
     if (!chart || anchorIndex === null || !lines) return null
@@ -468,6 +492,7 @@ function SetupTestScreen() {
       side,
       symbol: chart.symbol,
       timeframe: chart.timeframe,
+      entryTimeframe: entryTimeframe || undefined,
       anchorTimeMs: bar.timeMs,
       levelLow: Math.round(lines.levelLow),
       levelHigh: Math.round(lines.levelHigh),
@@ -505,6 +530,7 @@ function SetupTestScreen() {
     zonePlaced,
     entryPlaced,
     precedentFromTimeMs,
+    entryTimeframe,
   ])
 
   // Structural checks on the bars that actually came back. A study is worth
@@ -744,6 +770,7 @@ function SetupTestScreen() {
                 value={timeframe}
                 onValueChange={(value) => {
                   setTimeframe(value)
+                  setEntryTimeframe('')
                   setChart(null)
                   setPreview(null)
                   setZonePlaced(false)
@@ -756,6 +783,28 @@ function SetupTestScreen() {
                 </SelectTrigger>
                 <SelectContent>
                   {timeframes.map((item) => (
+                    <SelectItem key={item} value={item}>
+                      {displayTimeframe(item)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="setup-field">
+              <label htmlFor="setup-entry-timeframe">Entry candles</label>
+              <Select
+                value={entryTimeframe || timeframe}
+                onValueChange={(value) => {
+                  setEntryTimeframe(value === timeframe ? '' : value)
+                  setPreview(null)
+                }}
+              >
+                <SelectTrigger id="setup-entry-timeframe" className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {entryTimeframes.map((item) => (
                     <SelectItem key={item} value={item}>
                       {displayTimeframe(item)}
                     </SelectItem>

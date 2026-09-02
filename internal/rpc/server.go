@@ -12,18 +12,19 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"github.com/Bcypher01/Assay/internal/analytics"
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/event"
-	"github.com/Bcypher01/Assay/internal/instrument"
-	"github.com/Bcypher01/Assay/internal/ir"
-	"github.com/Bcypher01/Assay/internal/onboarding"
-	"github.com/Bcypher01/Assay/internal/primitive"
-	"github.com/Bcypher01/Assay/internal/runstore"
-	"github.com/Bcypher01/Assay/internal/setuptest"
-	"github.com/Bcypher01/Assay/internal/sim"
-	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
-	"github.com/Bcypher01/Assay/proto/assay/v1/assayv1connect"
+
+	assayv1 "github.com/bcypher01/assay/gen/go/assay/v1"
+	"github.com/bcypher01/assay/gen/go/assay/v1/assayv1connect"
+	"github.com/bcypher01/assay/internal/analytics"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/event"
+	"github.com/bcypher01/assay/internal/instrument"
+	"github.com/bcypher01/assay/internal/ir"
+	"github.com/bcypher01/assay/internal/onboarding"
+	"github.com/bcypher01/assay/internal/primitive"
+	"github.com/bcypher01/assay/internal/runstore"
+	"github.com/bcypher01/assay/internal/setuptest"
+	"github.com/bcypher01/assay/internal/sim"
 )
 
 // ErrNotConfigured is returned when the executable has not supplied a backend

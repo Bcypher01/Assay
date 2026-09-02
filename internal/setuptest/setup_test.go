@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/instrument"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/instrument"
 )
 
 func drawing() Drawing {
@@ -90,6 +90,53 @@ func TestEvaluateRejectsAZoneThatDoesNotMatchDetectedStructure(t *testing.T) {
 	}
 	if !preview.RuleMatched || preview.DrawingMatched || preview.SampleMatched {
 		t.Fatalf("preview match state = rule:%v drawing:%v sample:%v", preview.RuleMatched, preview.DrawingMatched, preview.SampleMatched)
+	}
+}
+
+func TestCompileLowerTimeframeEntry(t *testing.T) {
+	d := drawing()
+	d.Timeframe = "h1"
+	d.EntryTimeframe = "m15"
+	strategy, err := Compile(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strategy.Timeframes["bias"] != core.TFH1 || strategy.Timeframes["poi"] != core.TFH1 || strategy.Timeframes["entry"] != core.TFM15 {
+		t.Fatalf("timeframes = %#v", strategy.Timeframes)
+	}
+	if len(strategy.Nodes) != 1 || strategy.Nodes[0].Timeframe != core.TFH1 {
+		t.Fatalf("pattern node must stay on the drawing timeframe: %#v", strategy.Nodes)
+	}
+}
+
+func TestEmptyEntryTimeframeMatchesExplicitSame(t *testing.T) {
+	a := drawing()
+	b := drawing()
+	b.EntryTimeframe = b.Timeframe
+	left, err := Compile(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	right, err := Compile(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if left.Hash() != right.Hash() {
+		t.Fatalf("empty and explicit-same entry timeframe changed identity: %s != %s", left.Hash(), right.Hash())
+	}
+}
+
+func TestValidateRejectsEntryTimeframeCoarserThanPattern(t *testing.T) {
+	d := drawing()
+	d.EntryTimeframe = "m5" // coarser than the m1 pattern timeframe
+	found := false
+	for _, e := range d.Validate() {
+		if e.Path == "entryTimeframe" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected an entryTimeframe error, got %#v", d.Validate())
 	}
 }
 

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Assay">
+  <title>Assay</title>
+  <rect width="32" height="32" fill="#15617f"/>
+  <path fill="#f2f4f5" fill-rule="evenodd"
+        d="M5 26 L13 6 L19 6 L27 26 L21.5 26 L18.7 21 L13.3 21 L10.5 26 Z
+           M16 10 L18.1 17.5 L13.9 17.5 Z"/>
+</svg>

@@ -7,6 +7,17 @@ UI, prebuilt bar library on object storage.
 Full product and architecture plan: `docs/architecture.md`.
 Work is organised into batches: `docs/batches/`.
 
+Recurring jobs have skills in `.claude/skills/`; invoke the matching one rather
+than reconstructing the steps:
+
+| Skill | Use it when |
+|---|---|
+| `assay-verify` | you have finished editing Go code — the done-gate |
+| `assay-primitive` | adding or changing a detector in a pack |
+| `assay-rpc-method` | adding or changing an RPC method or wire format |
+| `assay-venue` | adding or debugging a market-data source |
+| `assay-batch` | starting or finishing a batch from `docs/batches/` |
+
 ---
 
 ## The pipeline
@@ -82,6 +93,19 @@ Picking the favourable branch is the single most common way backtesters lie.
 Separate typed slices per field. Not `[]Bar`. Boolean signal streams are bitsets,
 not `[]bool`.
 
+**Nothing writes to the working directory.**
+The bar cache goes to the per-user cache directory and study history and event
+snapshots to the per-user data directory, both resolved by `internal/userdir`
+and overridable by flag. `internal/userdir` is wiring-only: nothing that
+participates in a run may call it, because a host path is not part of
+`(IR document, data snapshot, seed)`. The one exception is `cmd/pipeline`,
+which writes its local publish output to the gitignored `data/`.
+
+**Generated code is generated.**
+`gen/go` comes from `make proto`; `web/src/gen` comes from `npm run
+generate-rpc` in `web/`. Never hand-edit either, and never copy stubs between
+directories. CI fails if `gen/go` is stale.
+
 **No CGO.**
 The binary must cross-compile statically. That rules out DuckDB and any
 cgo-linked Parquet reader. If you believe a dependency needs cgo, raise it before
@@ -111,13 +135,19 @@ Every batch ships with:
 
 - Table tests for pure logic
 - A determinism test (same input twice, byte-identical output)
-- Golden-file tests where output is structured — fixtures in `testdata/golden/`
+- Golden-file tests where output is structured — fixtures in the package's own
+  `testdata/golden/`, never a repository-wide one
 - A benchmark for anything in the hot path, with `-benchmem`
 
 Detectors additionally assert against the annotated golden chart set. Fill logic
 is fuzzed.
 
 Nothing is "done" until `make test`, `make race`, and `make lint` are clean.
+`make lint` fails on unformatted files and runs `.golangci.yml`, which encodes
+the determinism rules above as lint errors rather than trusting review to catch
+them. A `//nolint:forbidigo` needs a reason on the same line explaining why the
+line cannot affect run output. The same three commands run in CI on every push
+and pull request.
 
 ---
 

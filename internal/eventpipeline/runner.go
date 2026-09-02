@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Bcypher01/Assay/internal/event"
-	"github.com/Bcypher01/Assay/internal/eventsource"
+	"github.com/bcypher01/assay/internal/event"
+	"github.com/bcypher01/assay/internal/eventsource"
 )
 
 // Job identifies one reproducible import request.

@@ -20,10 +20,10 @@ import (
 	"github.com/parquet-go/parquet-go"
 	_ "modernc.org/sqlite"
 
-	"github.com/Bcypher01/Assay/internal/analytics"
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/ir"
-	"github.com/Bcypher01/Assay/internal/sim"
+	"github.com/bcypher01/assay/internal/analytics"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/ir"
+	"github.com/bcypher01/assay/internal/sim"
 )
 
 var ErrNotFound = errors.New("runstore: run not found")
@@ -390,6 +390,7 @@ func (s *LocalStore) Export(ctx context.Context, id RunID, w io.Writer) error {
 }
 
 func makeSummary(id RunID, hash string, s *analytics.Study, r *analytics.StudyResult) RunSummary {
+	//nolint:forbidigo // CreatedAt stamps the history record, not the run's numbers
 	return RunSummary{ID: id, StrategyHash: hash, Snapshot: s.Snapshot, Name: s.Strategy.Name, Scope: canonicalScope(s.Scope, s.Strategy.Universe.Symbols), CreatedAt: time.Now().UTC(), Trades: r.OutOfSample.Trades, FinalEquity: r.OutOfSample.FinalEquity, Parameters: paramSummary(s.Strategy)}
 }
 func runID(strategy, snapshot string) RunID {
@@ -662,13 +663,13 @@ func readTrades(path string) ([]sim.Trade, error) {
 	}
 	defer f.Close()
 	r := parquet.NewGenericReader[tradeRow](f)
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 	var rows []tradeRow
 	buf := make([]tradeRow, 256)
 	for {
 		n, e := r.Read(buf)
 		rows = append(rows, buf[:n]...)
-		if e == io.EOF {
+		if errors.Is(e, io.EOF) {
 			break
 		}
 		if e != nil {

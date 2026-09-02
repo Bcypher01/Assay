@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/instrument"
-	"github.com/Bcypher01/Assay/internal/pipeline"
-	"github.com/Bcypher01/Assay/internal/venue"
-	"github.com/Bcypher01/Assay/internal/venue/binance"
-	"github.com/Bcypher01/Assay/internal/venue/dukascopy"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/instrument"
+	"github.com/bcypher01/assay/internal/pipeline"
+	"github.com/bcypher01/assay/internal/venue"
+	"github.com/bcypher01/assay/internal/venue/binance"
+	"github.com/bcypher01/assay/internal/venue/dukascopy"
 )
 
 func main() {
@@ -24,7 +24,7 @@ func main() {
 	}
 
 	publisherKind := flag.String("publisher", env("ASSAY_PUBLISHER", "r2"), "publisher backend: r2 or local")
-	localDir := flag.String("local-dir", env("ASSAY_LOCAL_PUBLISH_DIR", "published"), "local publisher directory")
+	localDir := flag.String("local-dir", env("ASSAY_LOCAL_PUBLISH_DIR", "data/published"), "local publisher directory")
 	symbolsFlag := flag.String("symbols", env("ASSAY_PIPELINE_SYMBOLS", ""), "comma-separated registry symbols")
 	tfsFlag := flag.String("tfs", env("ASSAY_PIPELINE_TFS", "m15,m30,h1,h4,d1,w1"), "comma-separated timeframes")
 	fromFlag := flag.String("from", env("ASSAY_PIPELINE_FROM", ""), "inclusive UTC date, YYYY-MM-DD")
@@ -83,7 +83,13 @@ func main() {
 		To:           to,
 		BuildVersion: *buildVersion,
 	}
-	report, err := (pipeline.Runner{Fetcher: fetcher, Publisher: pub}).Run(ctx, job)
+	report, err := (pipeline.Runner{
+		Fetcher:   fetcher,
+		Publisher: pub,
+		Progress: func(progress pipeline.Progress) {
+			log.Printf("%s %s %s: %s", progress.Symbol, progress.TF, progress.Month, progress.Stage)
+		},
+	}).Run(ctx, job)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -239,7 +245,9 @@ func loadDotEnv(path string) error {
 		key = strings.TrimSpace(key)
 		val = strings.Trim(strings.TrimSpace(val), `"'`)
 		if key != "" && os.Getenv(key) == "" {
-			os.Setenv(key, val)
+			if err := os.Setenv(key, val); err != nil {
+				return fmt.Errorf("setting %s from env file: %w", key, err)
+			}
 		}
 	}
 	return sc.Err()

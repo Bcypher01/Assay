@@ -1,0 +1,21 @@
+Copyright (c) 2026 Olumide Babayemi. All rights reserved.
+
+This software and its source code are proprietary and confidential.
+
+No licence, express or implied, is granted to any person to use, copy, modify,
+merge, publish, distribute, sublicense, or sell copies of this software, in
+source or binary form, without the prior written permission of the copyright
+holder. Access to this repository does not confer any such licence.
+
+Third-party dependencies remain under their own licences, listed in go.mod and
+web/package.json.
+
+Market data obtained through this software is licensed by its respective
+venues, not by the copyright holder. Redistribution of that data is governed by
+each venue's terms; see the Dukascopy note in README.md.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED. A BACKTEST DESCRIBES WHAT A RULE DID ON ONE HISTORICAL SAMPLE. IT IS
+NOT INVESTMENT ADVICE AND IT DOES NOT DESCRIBE FUTURE RESULTS. THE COPYRIGHT
+HOLDER IS NOT LIABLE FOR ANY CLAIM, DAMAGES, OR TRADING LOSS ARISING FROM THE
+USE OF THIS SOFTWARE.

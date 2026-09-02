@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/instrument"
-	"github.com/Bcypher01/Assay/internal/pipeline"
-	"github.com/Bcypher01/Assay/internal/store"
-	"github.com/Bcypher01/Assay/internal/venue"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/instrument"
+	"github.com/bcypher01/assay/internal/pipeline"
+	"github.com/bcypher01/assay/internal/store"
+	"github.com/bcypher01/assay/internal/venue"
 )
 
 func TestDeriveRequestRejectsUnsupportedResolution(t *testing.T) {
@@ -341,6 +341,32 @@ func TestStatusAllowsDailyFXHolidayAtPartitionBoundary(t *testing.T) {
 	})
 	if status.Readiness != ReadinessReady || len(status.MissingPartitions) != 0 {
 		t.Fatalf("status = %+v, want ready daily FX data despite a holiday boundary", status)
+	}
+}
+
+func TestStatusDoesNotRequireIntradayFXBarsWhileMarketIsClosed(t *testing.T) {
+	ctx := context.Background()
+	cache := store.NewLocalStore(t.TempDir())
+	registry := instrument.MustDefault()
+	series := core.NewSeries("DUKAS:EURUSD", core.TFH1, 2)
+	series.Append(core.MustParseTime("2025-10-01T00:00:00Z"), 110000, 110002, 109998, 110001, 100)
+	series.Append(core.MustParseTime("2025-10-31T20:00:00Z"), 110001, 110003, 109999, 110002, 100)
+	if err := cache.Write(ctx, series, store.Manifest{
+		Symbol: "DUKAS:EURUSD", TF: core.TFH1, Month: "2025-10", Source: "dukascopy-bid", BuildVersion: "test",
+	}); err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
+	loader := New(cache, nil, nil)
+	loader.Registry = registry
+
+	status := loader.Status(ctx, Request{
+		Symbols: []string{"DUKAS:EURUSD"},
+		TFs:     []core.TF{core.TFH1},
+		From:    core.MustParseTime("2025-10-01T00:00:00Z"),
+		To:      core.MustParseTime("2025-11-01T00:00:00Z"),
+	})
+	if status.Readiness != ReadinessReady || len(status.MissingPartitions) != 0 {
+		t.Fatalf("status = %+v, want ready without closed-weekend boundary bars", status)
 	}
 }
 

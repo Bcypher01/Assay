@@ -5,19 +5,20 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/ir"
-	_ "github.com/Bcypher01/Assay/internal/packs/indicator"
-	_ "github.com/Bcypher01/Assay/internal/packs/priceaction"
-	_ "github.com/Bcypher01/Assay/internal/packs/semantic"
-	_ "github.com/Bcypher01/Assay/internal/packs/smc"
-	_ "github.com/Bcypher01/Assay/internal/packs/timeofday"
-	"github.com/Bcypher01/Assay/internal/primitive"
-	"github.com/Bcypher01/Assay/internal/sim"
-	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
+
+	assayv1 "github.com/bcypher01/assay/gen/go/assay/v1"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/ir"
+	_ "github.com/bcypher01/assay/internal/packs/indicator"
+	_ "github.com/bcypher01/assay/internal/packs/priceaction"
+	_ "github.com/bcypher01/assay/internal/packs/semantic"
+	_ "github.com/bcypher01/assay/internal/packs/smc"
+	_ "github.com/bcypher01/assay/internal/packs/timeofday"
+	"github.com/bcypher01/assay/internal/primitive"
+	"github.com/bcypher01/assay/internal/sim"
 )
 
 type Data struct {
@@ -26,6 +27,10 @@ type Data struct {
 	Snapshot     string
 	Cache        primitive.Cache
 	Registry     *primitive.Registry
+	// Stale bounds how long a higher-timeframe result stays usable once its
+	// bar has closed. The zero value holds a coarse value for its own period
+	// plus one entry bar, so a gap reports invalid rather than a stale bias.
+	Stale primitive.StalePolicy
 }
 type NearMiss struct {
 	Bars         []Miss
@@ -77,9 +82,14 @@ func Run(ctx context.Context, strategy *ir.Strategy, data Data) (sim.RunResult, 
 		if !tf.Valid() || (tf == core.TFTick && data.Series.TF != core.TFTick) {
 			tf = data.Series.TF
 		}
-		v, _, e := primitive.Evaluate(ctx, p, params, tf, data.Series, data.Snapshot, data.Cache)
+		// A node coarser than the entry series is detected on its own completed
+		// bars and then projected back down onto the entry index space, so that
+		// a closed higher-timeframe result is visible to the entry bar that
+		// closes with it. A node finer than the entry series cannot be
+		// aggregated from it at all and is refused here rather than degraded.
+		v, _, e := primitive.EvaluateAligned(ctx, p, params, tf, data.Series, data.Snapshot, data.Cache, data.Stale)
 		if e != nil {
-			return result, miss, e
+			return result, miss, fmt.Errorf("engine: node %s: %w", n.ID, e)
 		}
 		if v.Len() != data.Series.Len() {
 			return result, miss, fmt.Errorf("engine: node %s timeframe output cannot be aligned to entry series", n.ID)
@@ -89,6 +99,8 @@ func Run(ctx context.Context, strategy *ir.Strategy, data Data) (sim.RunResult, 
 	sig := sim.Signals{Enter: core.NewBitset(data.Series.Len())}
 	useRelativeExits := strategy.Slots.Invalidation == "" && strategy.Slots.Target == ""
 	poiAt := -1
+	poiWindow := resolveWindow(data.Series, strategy.Slots.Trigger.Within, strategy.Slots.Trigger.WithinBars)
+	windowed := strategy.Slots.Trigger.Within > 0 || strategy.Slots.Trigger.WithinBars > 0
 	for bar := 0; bar < data.Series.Len(); bar++ {
 		if strategy.Schema == ir.SchemaV2 {
 			runV2Bar(strategy, data.Series, values, &sig, &miss, bar, useRelativeExits)
@@ -102,8 +114,8 @@ func Run(ctx context.Context, strategy *ir.Strategy, data Data) (sim.RunResult, 
 		}
 		poiOK := poi
 		triggerOK := trigger
-		if strategy.Slots.Trigger.WithinBars > 0 {
-			poiOK = poiAt >= 0 && bar-poiAt <= strategy.Slots.Trigger.WithinBars
+		if windowed {
+			poiOK = poiAt >= 0 && poiWindow.contains(data.Series, bar, poiAt)
 			triggerOK = trigger && poiOK
 		}
 		if bias && poiOK && triggerOK {
@@ -428,19 +440,28 @@ func holdsExpression(series *core.Series, expression ir.Expression, vals map[str
 		}
 	}
 	if expression.Within != nil {
-		for age := 0; age <= expression.Within.Bars && age <= bar; age++ {
-			if holdsExpression(series, expression.Within.Condition, vals, bar-age) {
+		w := resolveWindow(series, expression.Within.Window, expression.Within.Bars)
+		for i := bar; i >= 0 && w.contains(series, bar, i); i-- {
+			if holdsExpression(series, expression.Within.Condition, vals, i) {
 				return true
 			}
 		}
 		return false
 	}
 	if expression.Persists != nil {
-		if expression.Persists.Bars > bar+1 {
+		w := resolveWindow(series, expression.Persists.Window, expression.Persists.Bars)
+		first := bar
+		for first > 0 && w.spans(series, bar, first-1) {
+			first--
+		}
+		// A window the series does not fully cover cannot be reported as an
+		// unbroken condition: the bars before the series began were not
+		// observed, and an unobserved bar is not a holding one.
+		if !w.covered(series, bar, first) {
 			return false
 		}
-		for age := 0; age < expression.Persists.Bars; age++ {
-			if !holdsExpression(series, expression.Persists.Condition, vals, bar-age) {
+		for i := first; i <= bar; i++ {
+			if !holdsExpression(series, expression.Persists.Condition, vals, i) {
 				return false
 			}
 		}
@@ -450,8 +471,9 @@ func holdsExpression(series *core.Series, expression ir.Expression, vals map[str
 		if !holdsExpression(series, expression.After.Event, vals, bar) {
 			return false
 		}
-		for age := 1; age <= expression.After.WithinBars && age <= bar; age++ {
-			if holdsExpression(series, expression.After.Predecessor, vals, bar-age) {
+		w := resolveWindow(series, expression.After.Within, expression.After.WithinBars)
+		for i := bar - 1; i >= 0 && w.contains(series, bar, i); i-- {
+			if holdsExpression(series, expression.After.Predecessor, vals, i) {
 				return true
 			}
 		}
@@ -471,6 +493,56 @@ func holdsExpression(series *core.Series, expression ir.Expression, vals map[str
 		}
 	}
 	return false
+}
+
+// window is a resolved temporal window on the entry series.
+//
+// Windows are durations in the IR, because a bar count means different spans
+// to nodes on different timeframes. They are resolved against bar close times
+// here, which also makes them behave correctly across a weekend gap, where a
+// bar count silently means something else. A document written before windows
+// were durations carries a bar count instead; it is converted using the entry
+// timeframe, which is what it meant when it was written.
+type window struct {
+	span core.Duration
+	bars int // Only for a tick series, where bars have no fixed span.
+}
+
+func resolveWindow(series *core.Series, span core.Duration, bars int) window {
+	if span > 0 {
+		return window{span: span}
+	}
+	if d := core.TFDuration(series.TF); d > 0 {
+		return window{span: core.Duration(bars) * d}
+	}
+	return window{bars: bars}
+}
+
+// contains reports whether bar i lies within the window ending at bar's close.
+// Both bars are on the entry series, so comparing open times compares closes.
+func (w window) contains(series *core.Series, bar, i int) bool {
+	if w.span > 0 {
+		return core.Duration(series.Time[bar]-series.Time[i]) <= w.span
+	}
+	return bar-i <= w.bars
+}
+
+// spans is contains with an exclusive bound: a window of one bar covers only
+// the bar it ends on.
+func (w window) spans(series *core.Series, bar, i int) bool {
+	if w.span > 0 {
+		return core.Duration(series.Time[bar]-series.Time[i]) < w.span
+	}
+	return bar-i < w.bars
+}
+
+// covered reports whether the series reaches back far enough for bars first
+// through bar to span the whole window.
+func (w window) covered(series *core.Series, bar, first int) bool {
+	if w.span > 0 {
+		return core.Duration(series.Time[bar]-series.Time[first])+core.TFDuration(series.TF) >= w.span
+	}
+	return bar-first+1 >= w.bars
 }
 
 func priceAt(series *core.Series, source ir.PriceSource, bar int) core.Price {

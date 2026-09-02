@@ -3,7 +3,7 @@ package ir
 import (
 	"encoding/json"
 
-	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/bcypher01/assay/internal/core"
 )
 
 // exampleSymbol is deliberately the catalogue identity rather than its display
@@ -25,13 +25,13 @@ const (
 	SessionBreakoutTemplateID              = "london-session-breakout"
 	SessionBreakoutTemplateVersion         = 1
 	LiquiditySweepStructureTemplateID      = "liquidity-sweep-structure-confirmation"
-	LiquiditySweepStructureTemplateVersion = 1
+	LiquiditySweepStructureTemplateVersion = 2
 	BitcoinPullbackTemplateID              = "bitcoin-pullback-20sma"
 	BitcoinPullbackTemplateVersion         = 1
 	EthereumBreakoutTemplateID             = "ethereum-range-breakout"
 	EthereumBreakoutTemplateVersion        = 1
 	BitcoinSweepShiftTemplateID            = "bitcoin-sweep-structure-shift"
-	BitcoinSweepShiftTemplateVersion       = 1
+	BitcoinSweepShiftTemplateVersion       = 2
 )
 
 // TemplateDefinition is stable catalogue metadata for a strategy that can be
@@ -256,7 +256,7 @@ func NewLiquiditySweepStructure() *Strategy {
 		Name:     "Liquidity sweep with market-structure confirmation",
 		Universe: Universe{Symbols: []string{exampleSymbol}},
 		Timeframes: map[string]core.TF{
-			"bias": core.TFH1, "poi": core.TFH1, "entry": core.TFH1,
+			"bias": core.TFH4, "poi": core.TFH1, "entry": core.TFM15,
 		},
 		Risk: Risk{
 			Stop:     core.Distance{Unit: core.UnitPips, Value: core.RatioFromInt(30)},
@@ -267,17 +267,17 @@ func NewLiquiditySweepStructure() *Strategy {
 		Entries: Entries{
 			Timing: EntryTimingNextOpen,
 			Long: EntryBranch{Enabled: true, Name: "Bullish sweep followed by bullish structure", When: Expression{After: &OccursAfter{
-				Event: Expression{Node: "bullish-structure"}, Predecessor: Expression{Node: "bullish-sweep"}, WithinBars: 5,
+				Event: Expression{Node: "bullish-structure"}, Predecessor: Expression{Node: "bullish-sweep"}, Within: 5 * core.Hour,
 			}}},
 			Short: EntryBranch{Enabled: true, Name: "Bearish sweep followed by bearish structure", When: Expression{After: &OccursAfter{
-				Event: Expression{Node: "bearish-structure"}, Predecessor: Expression{Node: "bearish-sweep"}, WithinBars: 5,
+				Event: Expression{Node: "bearish-structure"}, Predecessor: Expression{Node: "bearish-sweep"}, Within: 5 * core.Hour,
 			}}},
 		},
 		Nodes: []Node{
 			{ID: "bullish-sweep", Pack: "smc", Type: "liquidity_sweep_bullish", Params: sweepParams(), Timeframe: core.TFH1},
 			{ID: "bearish-sweep", Pack: "smc", Type: "liquidity_sweep_bearish", Params: sweepParams(), Timeframe: core.TFH1},
-			{ID: "bullish-structure", Pack: "smc", Type: "market_structure_bullish", Params: structureParams(), Timeframe: core.TFH1},
-			{ID: "bearish-structure", Pack: "smc", Type: "market_structure_bearish", Params: structureParams(), Timeframe: core.TFH1},
+			{ID: "bullish-structure", Pack: "smc", Type: "market_structure_bullish", Params: structureParams(), Timeframe: core.TFM15},
+			{ID: "bearish-structure", Pack: "smc", Type: "market_structure_bearish", Params: structureParams(), Timeframe: core.TFM15},
 		},
 	}
 }
@@ -339,18 +339,18 @@ func NewBitcoinSweepShift() *Strategy {
 	return &Strategy{
 		Schema: SchemaV2, Name: "Bitcoin liquidity sweep, then structure shift",
 		Universe:   Universe{Symbols: []string{bitcoinSymbol}},
-		Timeframes: map[string]core.TF{"bias": core.TFH1, "poi": core.TFH1, "entry": core.TFH1},
+		Timeframes: map[string]core.TF{"bias": core.TFH4, "poi": core.TFH1, "entry": core.TFM15},
 		Risk:       cryptoRisk(1.0, 2.5),
 		Template:   Template{ID: BitcoinSweepShiftTemplateID, Version: BitcoinSweepShiftTemplateVersion},
 		Entries: Entries{Timing: EntryTimingNextOpen,
-			Long:  EntryBranch{Enabled: true, Name: "Bullish sweep followed by bullish structure", When: Expression{After: &OccursAfter{Event: Expression{Node: "bullish-structure"}, Predecessor: Expression{Node: "bullish-sweep"}, WithinBars: 5}}},
-			Short: EntryBranch{Enabled: true, Name: "Bearish sweep followed by bearish structure", When: Expression{After: &OccursAfter{Event: Expression{Node: "bearish-structure"}, Predecessor: Expression{Node: "bearish-sweep"}, WithinBars: 5}}},
+			Long:  EntryBranch{Enabled: true, Name: "Bullish sweep followed by bullish structure", When: Expression{After: &OccursAfter{Event: Expression{Node: "bullish-structure"}, Predecessor: Expression{Node: "bullish-sweep"}, Within: 5 * core.Hour}}},
+			Short: EntryBranch{Enabled: true, Name: "Bearish sweep followed by bearish structure", When: Expression{After: &OccursAfter{Event: Expression{Node: "bearish-structure"}, Predecessor: Expression{Node: "bearish-sweep"}, Within: 5 * core.Hour}}},
 		},
 		Nodes: []Node{
 			{ID: "bullish-sweep", Pack: "smc", Type: "liquidity_sweep_bullish", Params: sweepParams(), Timeframe: core.TFH1},
 			{ID: "bearish-sweep", Pack: "smc", Type: "liquidity_sweep_bearish", Params: sweepParams(), Timeframe: core.TFH1},
-			{ID: "bullish-structure", Pack: "smc", Type: "market_structure_bullish", Params: structureParams(), Timeframe: core.TFH1},
-			{ID: "bearish-structure", Pack: "smc", Type: "market_structure_bearish", Params: structureParams(), Timeframe: core.TFH1},
+			{ID: "bullish-structure", Pack: "smc", Type: "market_structure_bullish", Params: structureParams(), Timeframe: core.TFM15},
+			{ID: "bearish-structure", Pack: "smc", Type: "market_structure_bearish", Params: structureParams(), Timeframe: core.TFM15},
 		},
 	}
 }

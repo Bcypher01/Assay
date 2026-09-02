@@ -2,7 +2,7 @@
 
 **Depends on:** 07
 **Blocks:** 12
-**Packages:** `proto/assay/v1`, `internal/rpc`, `gen`
+**Packages:** `proto/assay/v1`, `internal/rpc`, `gen/go`
 
 ## Goal
 

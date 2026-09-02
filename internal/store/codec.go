@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 
 	"github.com/parquet-go/parquet-go"
 
-	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/bcypher01/assay/internal/core"
 )
 
 // SchemaVersion is the version of the on-disk bar format. It is recorded in
@@ -158,7 +159,7 @@ func decodeColumn(col int, chunk parquet.ColumnChunk, s *core.Series, off *int, 
 	for {
 		page, err := pages.ReadPage()
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				return nil
 			}
 			return fmt.Errorf("store: reading page for column %d: %w", col, err)
@@ -177,7 +178,7 @@ func decodeColumn(col int, chunk parquet.ColumnChunk, s *core.Series, off *int, 
 				*off += m
 			}
 			if rerr != nil {
-				if rerr == io.EOF {
+				if errors.Is(rerr, io.EOF) {
 					break
 				}
 				return fmt.Errorf("store: decoding column %d: %w", col, rerr)

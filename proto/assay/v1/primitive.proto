@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package assay.v1;
 
-option go_package = "github.com/olumide/assay/proto/assay/v1;assayv1";
+option go_package = "github.com/bcypher01/assay/gen/go/assay/v1;assayv1";
 
 // SampleParams proves the parameter contract used by every primitive pack:
 // this one definition generates the Go model and the standalone UI's model.

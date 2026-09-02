@@ -8,9 +8,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/primitive"
-	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
+	assayv1 "github.com/bcypher01/assay/gen/go/assay/v1"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/primitive"
 )
 
 func TestFairValueGapMitigationAndExpiry(t *testing.T) {

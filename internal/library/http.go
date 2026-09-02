@@ -9,8 +9,9 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
-	"github.com/Bcypher01/Assay/internal/store"
+	"github.com/bcypher01/assay/internal/store"
 )
 
 // HTTPStore reads published library objects from a public, read-only HTTP
@@ -21,8 +22,10 @@ type HTTPStore struct {
 	Client  *http.Client
 }
 
+var defaultHTTPStoreClient = &http.Client{Timeout: 30 * time.Second}
+
 func (s *HTTPStore) Head(ctx context.Context, key string) (store.Manifest, bool, error) {
-	b, ok, err := s.read(ctx, key+".manifest.json")
+	b, ok, err := s.read(ctx, publishedManifestKey(key))
 	if err != nil || !ok {
 		return store.Manifest{}, ok, err
 	}
@@ -32,6 +35,10 @@ func (s *HTTPStore) Head(ctx context.Context, key string) (store.Manifest, bool,
 	}
 	return m, true, nil
 }
+
+func publishedManifestKey(key string) string {
+	return strings.TrimSuffix(key, ".parquet") + ".manifest.json"
+}
 func (s *HTTPStore) Get(ctx context.Context, key string) (io.ReadCloser, bool, error) {
 	u, err := s.objectURL(key)
 	if err != nil {
@@ -39,7 +46,7 @@ func (s *HTTPStore) Get(ctx context.Context, key string) (io.ReadCloser, bool, e
 	}
 	c := s.Client
 	if c == nil {
-		c = http.DefaultClient
+		c = defaultHTTPStoreClient
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {

@@ -1,10 +1,10 @@
 version: v1
 plugins:
   - plugin: buf.build/protocolbuffers/go
-    out: .
+    out: gen/go
     opt: paths=source_relative
   - plugin: buf.build/connectrpc/go
-    out: .
+    out: gen/go
     opt: paths=source_relative
-  # The standalone UI consumes this same source through its own buf generation
-  # target (for example buf.build/bufbuild/es). No UI code lives in this repo.
+  # The web client generates its own TypeScript stubs from the same source;
+  # see web/ (npm run generate-rpc). No UI code lives in this repo.

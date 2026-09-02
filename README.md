@@ -10,44 +10,80 @@ storage. Runs entirely on the user's machine.
 
 ## Layout
 
-```
-cmd/assay          user-facing binary: serves API + UI on localhost
-cmd/pipeline     bar library builder, runs on a schedule, ships to nobody
+The Go module stays at the repository root so import paths remain stable; the
+browser application is a sibling in `web/`.
 
-internal/core        fixed-point prices, time, timeframes, series, bitsets
-internal/instrument  instrument specs, calendars, cost models
-internal/store       Parquet bar format, manifests, local cache
-internal/event       immutable structured-event snapshots and query model
-internal/eventsource reviewed event-source adapters (curated catalogue first)
+```
+cmd/assay              user-facing binary: serves the API on localhost
+cmd/pipeline           bar library builder, runs on a schedule, ships to nobody
+cmd/event-pipeline     imports official event releases into local snapshots
+
+internal/core          fixed-point prices, time, timeframes, series, bitsets
+internal/instrument    instrument specs, calendars, cost models
+internal/store         Parquet bar format, manifests, local cache
+internal/event         immutable structured-event snapshots and query model
+internal/eventsource   reviewed event-source adapters (curated catalogue first)
 internal/eventpipeline imports event sources into local snapshots
-internal/library     library fetch + direct-from-venue fallback
-internal/venue/*     per-venue download and decode
-internal/primitive   primitive interface, registry, memoisation cache
-internal/packs/*     indicator, price-action, time and SMC detectors
-internal/packs/semantic chart-drawing setup detectors
-internal/setuptest    semantic drawing -> IR compilation and preview
-internal/sim         trade simulation, costs, ambiguity bounding
-internal/ir          strategy document, validation, content hashing
-internal/engine      IR execution: primitives -> signals -> trades
-internal/analytics   walk-forward, sweeps, Monte Carlo, sensitivity
-internal/runstore    run history, trial counting, comparison
-internal/rpc         ConnectRPC handlers
+internal/eventstudy    event-anchored study execution
+internal/library       library fetch + direct-from-venue fallback
+internal/venue/*       per-venue download and decode
+internal/primitive     primitive interface, registry, memoisation cache
+internal/packs/*       indicator, price-action, time, SMC and semantic detectors
+internal/setuptest     semantic drawing -> IR compilation and preview
+internal/sim           trade simulation, costs, ambiguity bounding
+internal/ir            strategy document, validation, content hashing
+internal/engine        IR execution: primitives -> signals -> trades
+internal/analytics     walk-forward, sweeps, Monte Carlo, sensitivity
+internal/runstore      run history, trial counting, comparison
+internal/rpc           ConnectRPC handlers
+internal/telemetry     opt-in, local-only product metrics
+internal/userdir       per-user default directories (cmd/ wiring only)
 
-proto/assay/v1     service and primitive-parameter definitions
-gen/             generated Go and TypeScript clients
-docs/            architecture, conventions, batch specs
-testdata/golden  golden fixtures, including annotated charts
+proto/assay/v1         service and primitive-parameter definitions
+gen/go/assay/v1        generated Go + ConnectRPC stubs (do not edit)
+web/                   browser application; generates its own TS stubs
+deploy/                Dockerfiles and proxy config used by compose.yaml
+docs/                  architecture, conventions, batch specs
+data/                  local pipeline output (gitignored)
 ```
+
+Generated code is never edited by hand: `make proto` rewrites `gen/go`, and
+`npm run generate-rpc` in `web` rewrites `web/src/gen`.
+
+Golden fixtures live beside the package that uses them, e.g.
+`internal/packs/smc/testdata/golden`.
+
+Assay writes nothing into the working directory by default. The bar cache is
+regenerable and goes to the per-user cache directory (`~/Library/Caches/assay`
+on macOS, `$XDG_CACHE_HOME/assay` on Linux); study history and event snapshots
+must survive a cache wipe, so they go to the per-user data directory
+(`~/Library/Application Support/assay`, `$XDG_DATA_HOME/assay`). Override any
+of them with `-cache-dir`, `-history-dir` and `-event-dir`, or move all three at
+once with `ASSAY_HOME`. Only `cmd/pipeline` writes into the repository, to the
+gitignored `data/published`, and `-local-dir` moves that too.
 
 ## Getting started
 
 ```
-make build      # bin/assay and bin/pipeline
-make test
-make race
-make lint
-make bench
+make build      # bin/assay, bin/pipeline, bin/event-pipeline
+make test       # unit and golden tests
+make race       # the same suite under -race
+make lint       # gofmt, go vet and golangci-lint
+make bench      # hot-path benchmarks with -benchmem
 ```
+
+Run the Go server from the root and the UI beside it:
+
+```
+./bin/assay
+make web-install
+npm --prefix web run dev
+```
+
+For a single-host deployment, copy `deploy/.env.example` to `deploy/.env`, set
+your domain and email, point the domain's DNS at the host, then run
+`docker compose up --build -d`. Caddy terminates TLS and serves the UI and API
+through one origin; persistent state lives in the `assay-data` Docker volume.
 
 FX and spot-metal candles use Dukascopy's public, broker-native BID feed. It
 requires no API key. Intraday candles are deterministically aggregated from
@@ -62,13 +98,13 @@ blocked unless redistribution rights have been confirmed and
 To import ten years of official BLS CPI and Employment Situation releases:
 
 ```
-go run ./cmd/event-pipeline -provider bls -dir event-data -build-version v1
+go run ./cmd/event-pipeline -provider bls -build-version v1
 ```
 
 The checked-in curated catalogue remains available only for offline fixtures:
 `-provider curated`.
 
-The **Setup Test** chart lives in the Assay UI (`assay-ui`, the `/setup`
+The **Setup Test** chart lives in the web client (`web/`, the `/setup`
 screen) and talks to this server over the `/api/setup/*` endpoints. It lets a
 trader label and test break-and-retest, order-block, and breaker-block drawings
 without treating the drawing's absolute price as a historical rule. This server

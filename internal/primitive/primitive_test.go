@@ -6,9 +6,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
 	"google.golang.org/protobuf/proto"
+
+	assayv1 "github.com/bcypher01/assay/gen/go/assay/v1"
+	"github.com/bcypher01/assay/internal/core"
 )
 
 type probePrimitive struct {
@@ -20,7 +21,7 @@ func (p probePrimitive) Spec() Spec {
 	return Spec{Pack: "test", Type: "probe", Out: KindBool, Params: (*assayv1.SampleParams)(nil).ProtoReflect().Descriptor(), Timeframed: true}
 }
 func (p probePrimitive) New(proto.Message, core.TF) (Instance, error) {
-	return probeInstance{calls: p.calls, mu: p.mu}, nil
+	return probeInstance(p), nil
 }
 
 type probeInstance struct {

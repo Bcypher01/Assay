@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/primitive"
 	"google.golang.org/protobuf/types/known/structpb"
+
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/primitive"
 )
 
 func testSeries() *core.Series {

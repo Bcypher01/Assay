@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/Bcypher01/Assay/internal/event"
-	"github.com/Bcypher01/Assay/internal/eventsource"
+	"github.com/bcypher01/assay/internal/event"
+	"github.com/bcypher01/assay/internal/eventsource"
 )
 
 //go:embed events.json

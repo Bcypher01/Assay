@@ -9,19 +9,19 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Bcypher01/Assay/internal/analytics"
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/engine"
-	"github.com/Bcypher01/Assay/internal/event"
-	"github.com/Bcypher01/Assay/internal/eventstudy"
-	"github.com/Bcypher01/Assay/internal/instrument"
-	"github.com/Bcypher01/Assay/internal/ir"
-	"github.com/Bcypher01/Assay/internal/library"
-	"github.com/Bcypher01/Assay/internal/runstore"
-	"github.com/Bcypher01/Assay/internal/setuptest"
-	"github.com/Bcypher01/Assay/internal/sim"
-	"github.com/Bcypher01/Assay/internal/store"
-	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
+	assayv1 "github.com/bcypher01/assay/gen/go/assay/v1"
+	"github.com/bcypher01/assay/internal/analytics"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/engine"
+	"github.com/bcypher01/assay/internal/event"
+	"github.com/bcypher01/assay/internal/eventstudy"
+	"github.com/bcypher01/assay/internal/instrument"
+	"github.com/bcypher01/assay/internal/ir"
+	"github.com/bcypher01/assay/internal/library"
+	"github.com/bcypher01/assay/internal/runstore"
+	"github.com/bcypher01/assay/internal/setuptest"
+	"github.com/bcypher01/assay/internal/sim"
+	"github.com/bcypher01/assay/internal/store"
 )
 
 // NewLocalServer wires the local bar cache to the engine. v0 deliberately
@@ -50,6 +50,7 @@ func NewLocalServerWithServices(cache *store.LocalStore, registry *instrument.Re
 			return dataStatusResponse(loader.Status(ctx, r)), nil
 		}
 		s.EnsureDataFn = func(ctx context.Context, req *assayv1.EnsureDataRequest, report func(*assayv1.Progress) error) error {
+			//nolint:forbidigo // measures wall-clock duration for telemetry; no run output depends on it
 			started := time.Now()
 			request, err := dataRequest(loader, req)
 			if err != nil {
@@ -68,6 +69,7 @@ func NewLocalServerWithServices(cache *store.LocalStore, registry *instrument.Re
 		}
 	}
 	s.RunFn = func(ctx context.Context, req *assayv1.RunRequest, send func(*assayv1.RunUpdate) error) (summary *assayv1.RunSummary, runErr error) {
+		//nolint:forbidigo // measures wall-clock duration for telemetry; no run output depends on it
 		started := time.Now()
 		costFree, costKnown := runCostFree(registry, req)
 		s.record(ctx, "study_started", map[string]any{"timeframe_window_ms": req.ToMs - req.FromMs})
@@ -89,7 +91,7 @@ func NewLocalServerWithServices(cache *store.LocalStore, registry *instrument.Re
 			if err := json.Unmarshal(req.StrategyJson, &strategy); err != nil {
 				return nil, fmt.Errorf("rpc: decode strategy: %w", err)
 			}
-			tf, ok := strategy.Timeframes["entry"]
+			tf, ok := strategy.BaseTimeframe()
 			if !ok {
 				return nil, fmt.Errorf("rpc: strategy entry timeframe is required")
 			}
@@ -157,22 +159,43 @@ func NewLocalServerWithServices(cache *store.LocalStore, registry *instrument.Re
 		if req.FromMS >= req.ToMS {
 			return setuptest.Preview{}, fmt.Errorf("setup preview: fromMs must be before toMs")
 		}
-		tf, err := core.ParseTF(req.Drawing.Timeframe)
+		// The pattern is detected on the drawing timeframe, but the entry may sit
+		// on a finer one. The simulator runs on the base (finest) series while the
+		// per-pattern scoring reads the coarse detection series, so load both.
+		strategy, err := setuptest.Compile(req.Drawing)
 		if err != nil {
 			return setuptest.Preview{}, err
 		}
-		series, manifests, err := cache.Load(ctx, req.Drawing.Symbol, tf, core.Time(req.FromMS), core.Time(req.ToMS))
+		baseTF, ok := strategy.BaseTimeframe()
+		if !ok {
+			return setuptest.Preview{}, fmt.Errorf("setup preview: strategy entry timeframe is required")
+		}
+		detectionTF, err := core.ParseTF(req.Drawing.Timeframe)
 		if err != nil {
 			return setuptest.Preview{}, err
-		}
-		if len(manifests) == 0 || series.Len() == 0 {
-			return setuptest.Preview{}, fmt.Errorf("setup preview: prepare the requested historical window first")
 		}
 		spec, err := registry.Get(req.Drawing.Symbol)
 		if err != nil {
 			return setuptest.Preview{}, err
 		}
-		return setuptest.Evaluate(ctx, req.Drawing, series, *spec, store.SnapshotHash(manifests))
+		base, baseManifests, err := cache.Load(ctx, req.Drawing.Symbol, baseTF, core.Time(req.FromMS), core.Time(req.ToMS))
+		if err != nil {
+			return setuptest.Preview{}, err
+		}
+		if len(baseManifests) == 0 || base.Len() == 0 {
+			return setuptest.Preview{}, fmt.Errorf("setup preview: prepare the entry timeframe for this window first")
+		}
+		detection, detectionManifests := base, baseManifests
+		if detectionTF != baseTF {
+			detection, detectionManifests, err = cache.Load(ctx, req.Drawing.Symbol, detectionTF, core.Time(req.FromMS), core.Time(req.ToMS))
+			if err != nil {
+				return setuptest.Preview{}, err
+			}
+			if len(detectionManifests) == 0 || detection.Len() == 0 {
+				return setuptest.Preview{}, fmt.Errorf("setup preview: prepare the pattern timeframe for this window first")
+			}
+		}
+		return setuptest.EvaluateMultiTimeframe(ctx, req.Drawing, base, detection, *spec, store.SnapshotHash(baseManifests), store.SnapshotHash(detectionManifests))
 	}
 	s.SetupRunFn = func(ctx context.Context, req setuptest.RunRequest) (*assayv1.RunSummary, error) {
 		strategy, err := setuptest.Compile(req.Drawing)
@@ -252,33 +275,86 @@ func NewLocalServerWithEventServices(cache *store.LocalStore, registry *instrume
 			return nil, err
 		}
 		windows := make([]core.TF, 0, len(req.Windows))
+		seriesFrom := filter.From
+		seriesTo := filter.To
 		for _, raw := range req.Windows {
 			w, err := core.ParseTF(raw)
 			if err != nil {
 				return nil, err
 			}
 			windows = append(windows, w)
+			if end := filter.To + core.Time(w.Millis()); end > seriesTo {
+				seriesTo = end
+			}
 		}
-		series, manifests, err := cache.Load(ctx, req.Symbol, tf, filter.From, filter.To)
+		trade, err := eventTradeConfig(req.Trade)
+		if err != nil {
+			return nil, err
+		}
+		if trade != nil {
+			if trade.CostPerTrade == 0 {
+				spec, err := registry.Get(req.Symbol)
+				if err != nil {
+					return nil, err
+				}
+				trade.EstimateCosts = true
+				trade.CostSpec = spec
+			}
+			if end := filter.To + core.Time(trade.EntryDelay.Millis()+trade.HoldFor.Millis()+tf.Millis()); end > seriesTo {
+				seriesTo = end
+			}
+			if trade.EntryTiming == eventstudy.EntryBeforeRelease {
+				seriesFrom = filter.From - core.Time(trade.EntryDelay.Millis()+tf.Millis())
+			}
+		}
+		// Measurement and trade exits can occur after the event filter boundary.
+		// Load the complete execution window rather than truncating the last event.
+		series, manifests, err := cache.Load(ctx, req.Symbol, tf, seriesFrom, seriesTo)
 		if err != nil {
 			return nil, err
 		}
 		if len(manifests) == 0 {
 			return nil, fmt.Errorf("rpc: event study bars are not prepared locally")
 		}
-		result, err := eventstudy.Run(eventstudy.Request{Events: snapshot, Series: series, Filter: filter, Windows: windows, BarSnapshot: store.SnapshotHash(manifests)})
+		result, err := eventstudy.Run(eventstudy.Request{Events: snapshot, Series: series, Filter: filter, Windows: windows, BarSnapshot: store.SnapshotHash(manifests), Trade: trade})
 		if err != nil {
 			return nil, err
 		}
 		out := &assayv1.EventStudyResponse{EventSnapshot: result.EventSnapshot, BarSnapshot: result.BarSnapshot, MethodologyVersion: result.MethodologyVersion}
 		for _, o := range result.Eligible {
-			out.EligibleEvents = append(out.EligibleEvents, &assayv1.EventObservation{EventId: o.EventID, OccurredAtMs: int64(o.OccurredAt), AlignedBarMs: int64(o.AlignedBar), Returns: o.Returns})
+			out.EligibleEvents = append(out.EligibleEvents, &assayv1.EventObservation{
+				EventId: o.EventID, OccurredAtMs: int64(o.OccurredAt), AlignedBarMs: int64(o.AlignedBar), Returns: o.Returns,
+				Actual: o.Actual, Forecast: o.Forecast, Previous: o.Previous, Surprise: o.Surprise, SurpriseZ: o.SurpriseZ, HasSurprise: o.HasSurprise,
+			})
 		}
 		for _, x := range result.Excluded {
 			out.ExcludedEvents = append(out.ExcludedEvents, &assayv1.EventExclusion{EventId: x.EventID, Reason: x.Reason})
 		}
 		for _, w := range result.Windows {
-			out.Windows = append(out.Windows, &assayv1.EventWindowSummary{Window: w.Window, Count: uint32(w.Count), Mean: w.Mean, Median: w.Median})
+			out.Windows = append(out.Windows, &assayv1.EventWindowSummary{
+				Window: w.Window, Count: uint32(w.Count), Mean: w.Mean, Median: w.Median,
+				MeanAbs: w.MeanAbs, MedianAbs: w.MedianAbs, UpCount: uint32(w.UpCount), DownCount: uint32(w.DownCount),
+				BaselineMeanAbs: w.BaselineMeanAbs, ImpactRatio: w.ImpactRatio,
+			})
+		}
+		if result.TradeSummary != nil {
+			summary := result.TradeSummary
+			out.TradeSummary = &assayv1.EventTradeSummary{
+				Trades: uint32(summary.Trades), Wins: uint32(summary.Wins), Losses: uint32(summary.Losses),
+				Whipsaws: uint32(summary.Whipsaws), Ambiguous: uint32(summary.Ambiguous), GrossPnl: summary.GrossPnL,
+				Costs: summary.Costs, NetPnl: summary.NetPnL, EndingEquity: summary.EndingEquity,
+				MaxDrawdown: summary.MaxDrawdown, Expectancy: summary.Expectancy, ProfitFactor: summary.ProfitFactor,
+				AverageMfe: summary.AverageMFE, AverageMae: summary.AverageMAE,
+			}
+		}
+		for _, trade := range result.Trades {
+			out.Trades = append(out.Trades, &assayv1.EventTrade{
+				EventId: trade.EventID, EventTimeMs: int64(trade.EventTime), EntryTimeMs: int64(trade.EntryTime), ExitTimeMs: int64(trade.ExitTime),
+				Side: trade.Side, MarketReturn: trade.MarketReturn, StrategyReturn: trade.StrategyReturn,
+				GrossPnl: trade.GrossPnL, Costs: trade.Costs, NetPnl: trade.NetPnL, Mfe: trade.MFE, Mae: trade.MAE,
+				Surprise: trade.Surprise, SurpriseZ: trade.SurpriseZ, HasSurprise: trade.HasSurprise,
+				ExitReason: trade.ExitReason, Ambiguous: trade.Ambiguous, Whipsaw: trade.Whipsaw,
+			})
 		}
 		return out, nil
 	}
@@ -301,7 +377,39 @@ func eventFilter(in *assayv1.EventFilter) (event.Filter, error) {
 	return out, nil
 }
 func eventRecord(e event.Event) *assayv1.EventRecord {
-	return &assayv1.EventRecord{Id: e.ID, OccurredAtMs: int64(e.OccurredAt), KnowledgeAtMs: int64(e.KnowledgeAt), Precision: string(e.Precision), Kind: string(e.Kind), Title: e.Title, Jurisdiction: e.Jurisdiction, Currencies: append([]string(nil), e.Currencies...), Impact: string(e.Impact), Status: string(e.Status), Source: e.Source.Provider}
+	return &assayv1.EventRecord{
+		Id: e.ID, OccurredAtMs: int64(e.OccurredAt), KnowledgeAtMs: int64(e.KnowledgeAt), Precision: string(e.Precision),
+		Kind: string(e.Kind), Title: e.Title, Jurisdiction: e.Jurisdiction, Currencies: append([]string(nil), e.Currencies...),
+		Impact: string(e.Impact), Status: string(e.Status), Source: e.Source.Provider,
+		Actual: decimalString(e.Actual), Forecast: decimalString(e.Forecast), Previous: decimalString(e.Previous), RevisionOf: e.RevisionOf,
+	}
+}
+
+func eventTradeConfig(in *assayv1.EventTradeConfig) (*eventstudy.TradeConfig, error) {
+	if in == nil {
+		return nil, nil
+	}
+	entryDelay, err := core.ParseTF(in.EntryDelay)
+	if err != nil {
+		return nil, fmt.Errorf("rpc: invalid event entry delay: %w", err)
+	}
+	holdFor, err := core.ParseTF(in.HoldFor)
+	if err != nil {
+		return nil, fmt.Errorf("rpc: invalid event holding period: %w", err)
+	}
+	return &eventstudy.TradeConfig{
+		EntryTiming: in.EntryTiming, DirectionRule: in.DirectionRule, EntryDelay: entryDelay, HoldFor: holdFor,
+		MinimumSurpriseZ: in.MinimumSurpriseZ, SurpriseFilter: in.SurpriseFilter,
+		StartingEquity: in.StartingEquity, PositionSize: in.PositionSize, CostPerTrade: in.CostPerTrade,
+		StopLoss: in.StopLoss, TakeProfit: in.TakeProfit,
+	}, nil
+}
+
+func decimalString(value *event.Decimal) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
 }
 
 // runCostFree reports the effective simulator configuration, not merely wire
@@ -417,8 +525,11 @@ func runLocal(ctx context.Context, cache *store.LocalStore, registry *instrument
 	if req.FromMs >= req.ToMs {
 		return nil, fmt.Errorf("rpc: run window must have from_ms before to_ms")
 	}
-	tf, ok := strategy.Timeframes["entry"]
-	if !ok || !tf.Valid() {
+	// The series a run loads is the finest resolution the document needs, not
+	// whatever "entry" says in isolation. Validation keeps the two equal; this
+	// derives it so the loader and the engine cannot drift apart.
+	tf, ok := strategy.BaseTimeframe()
+	if !ok {
 		return nil, fmt.Errorf("rpc: strategy entry timeframe is required")
 	}
 	symbol := strategy.Universe.Symbols[0]

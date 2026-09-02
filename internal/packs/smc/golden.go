@@ -8,11 +8,12 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/primitive"
-	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+
+	assayv1 "github.com/bcypher01/assay/gen/go/assay/v1"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/primitive"
 )
 
 // GoldenFixture is a portable, annotator-owned SMC window. Prices and times

@@ -17,10 +17,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/instrument"
-	"github.com/Bcypher01/Assay/internal/venue"
 	"github.com/ulikunitz/xz/lzma"
+
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/instrument"
+	"github.com/bcypher01/assay/internal/venue"
 )
 
 const (
@@ -28,6 +29,8 @@ const (
 	workers        = 4
 	bi5RecordSize  = 24
 )
+
+var defaultHTTPClient = &http.Client{Timeout: 30 * time.Second}
 
 // Client downloads Dukascopy BID candles. Intraday timeframes are aggregated
 // from native one-minute artifacts, and completed daily history uses annual
@@ -40,6 +43,7 @@ type Client struct {
 
 	mu            sync.Mutex
 	artifactCache map[string]artifactEntry
+	retryDelay    func(attempt int, retryAfter string) time.Duration
 }
 
 var _ venue.Fetcher = (*Client)(nil)
@@ -96,9 +100,8 @@ func (c *Client) Fetch(ctx context.Context, sym string, tf core.TF, from, to cor
 				raw = aggregate(raw, core.TFD1)
 			}
 		}
-	} else if tf == core.TFH1 || tf == core.TFH4 {
-		raw, err = c.fetchMinutes(ctx, sym, rawFrom, rawTo)
 	} else {
+		// Every other timeframe is deterministically aggregated from M1.
 		raw, err = c.fetchMinutes(ctx, sym, rawFrom, rawTo)
 	}
 	if err != nil {
@@ -142,6 +145,13 @@ func (c *Client) fetchMinutes(ctx context.Context, sym string, from, to core.Tim
 	items := make([]artifact, 0, int(end.Sub(start)/(24*time.Hour)))
 	today := core.TFD1.AlignDown(core.FromStd(time.Now().UTC())).Std()
 	for day := start; day.Before(end); day = day.AddDate(0, 0, 1) {
+		// Dukascopy's FX/CFD feed has no Saturday session. Most absent
+		// Saturday artifacts answer 404, but the upstream hosts occasionally
+		// answer 503 instead. Treating that closed-market date as required made
+		// one nonexistent file fail an otherwise complete calendar month.
+		if day.Weekday() == time.Saturday {
+			continue
+		}
 		var ttl time.Duration
 		if day.Equal(today) {
 			ttl = 10 * time.Second
@@ -169,46 +179,53 @@ type artifactEntry struct {
 }
 
 func (c *Client) fetchArtifacts(ctx context.Context, sym string, tf core.TF, items []artifact, from, to core.Time) (*core.Series, error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 	parts := make([]*core.Series, len(items))
 	errs := make([]error, len(items))
 	jobs := make(chan int)
 	var wg sync.WaitGroup
+	fetch := func(i int) {
+		body, err := c.download(ctx, items[i].url, items[i].ttl)
+		if err == nil {
+			parts[i], err = decodeBI5(sym, tf, body, items[i].base, from, to)
+		}
+		errs[i] = err
+	}
 	workerCount := min(workers, len(items))
 	for range workerCount {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for i := range jobs {
-				body, err := c.download(ctx, items[i].url, items[i].ttl)
-				if err == nil {
-					parts[i], err = decodeBI5(sym, tf, body, items[i].base, from, to)
-				}
-				errs[i] = err
-				if err != nil {
-					cancel()
-				}
+				fetch(i)
 			}
 		}()
 	}
-feedLoop:
 	for i := range items {
 		select {
 		case jobs <- i:
 		case <-ctx.Done():
-			break feedLoop
+			close(jobs)
+			wg.Wait()
+			return nil, ctx.Err()
 		}
 	}
 	close(jobs)
 	wg.Wait()
-	for i, err := range errs {
-		if err != nil {
-			return nil, fmt.Errorf("dukascopy: %s: %w", items[i].base.Format("2006-01-02"), err)
-		}
-	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	// A transient failure on one day must not cancel successful sibling
+	// downloads or surface another worker's context-canceled error. Retry only
+	// the failed artifacts, sequentially, so the upstream gets a quiet recovery
+	// pass before the month is rejected.
+	for i, err := range errs {
+		if err == nil {
+			continue
+		}
+		fetch(i)
+		if errs[i] != nil {
+			return nil, fmt.Errorf("dukascopy: %s: %w", items[i].base.Format("2006-01-02"), errs[i])
+		}
 	}
 
 	out := core.NewSeries(sym, tf, 0)
@@ -346,16 +363,14 @@ func (c *Client) download(ctx context.Context, rawURL string, ttl time.Duration)
 				err = fmt.Errorf("mirror status %s", res.Status)
 			case res.StatusCode < 500 && res.StatusCode != http.StatusTooManyRequests:
 				return nil, fmt.Errorf("status %s", res.Status)
+			default:
+				err = fmt.Errorf("status %s", res.Status)
 			}
-			err = fmt.Errorf("status %s", res.Status)
 		}
 		if attempt == 5 {
 			return nil, fmt.Errorf("download failed after retries: %w", err)
 		}
-		delay := time.Duration(1<<attempt) * time.Second
-		if seconds, parseErr := strconv.Atoi(retryAfter); parseErr == nil && seconds > 0 && seconds <= 60 {
-			delay = time.Duration(seconds) * time.Second
-		}
+		delay := c.downloadRetryDelay(attempt, retryAfter)
 		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
@@ -367,6 +382,17 @@ func (c *Client) download(ctx context.Context, rawURL string, ttl time.Duration)
 		}
 	}
 	panic("unreachable")
+}
+
+func (c *Client) downloadRetryDelay(attempt int, retryAfter string) time.Duration {
+	if c.retryDelay != nil {
+		return c.retryDelay(attempt, retryAfter)
+	}
+	delay := time.Duration(1<<attempt) * time.Second
+	if seconds, err := strconv.Atoi(retryAfter); err == nil && seconds > 0 && seconds <= 60 {
+		delay = time.Duration(seconds) * time.Second
+	}
+	return delay
 }
 
 func mirrorURL(rawURL string, attempt int) string {
@@ -418,7 +444,7 @@ func (c *Client) client() *http.Client {
 	if c.HTTPClient != nil {
 		return c.HTTPClient
 	}
-	return http.DefaultClient
+	return defaultHTTPClient
 }
 
 func (c *Client) base() string {

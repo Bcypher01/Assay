@@ -3,7 +3,7 @@ package instrument
 import (
 	"testing"
 
-	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/bcypher01/assay/internal/core"
 )
 
 func TestContinuousCalendarIsAlwaysOpen(t *testing.T) {

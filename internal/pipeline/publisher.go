@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/store"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/store"
 )
 
 // Publisher writes immutable bar-library objects and reads their manifests.

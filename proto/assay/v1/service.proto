@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package assay.v1;
 
-option go_package = "github.com/Bcypher01/Assay/proto/assay/v1;assayv1";
+option go_package = "github.com/bcypher01/assay/gen/go/assay/v1;assayv1";
 
 message Empty {}
 message Instrument {
@@ -96,14 +96,105 @@ message EventRecord {
   string impact = 9;
   string status = 10;
   string source = 11;
+  string actual = 12;
+  string forecast = 13;
+  string previous = 14;
+  string revision_of = 15;
 }
 message QueryEventsRequest { string snapshot = 1; EventFilter filter = 2; }
 message QueryEventsResponse { string snapshot = 1; repeated EventRecord events = 2; }
-message EventStudyRequest { string snapshot = 1; string symbol = 2; string timeframe = 3; EventFilter filter = 4; repeated string windows = 5; }
-message EventObservation { string event_id = 1; sint64 occurred_at_ms = 2; sint64 aligned_bar_ms = 3; map<string, double> returns = 4; }
+message EventTradeConfig {
+  string entry_timing = 1;
+  string direction_rule = 2;
+  string entry_delay = 3;
+  string hold_for = 4;
+  double minimum_surprise_z = 5;
+  string surprise_filter = 6;
+  sint64 starting_equity = 7;
+  sint64 position_size = 8;
+  sint64 cost_per_trade = 9;
+  double stop_loss = 10;
+  double take_profit = 11;
+}
+message EventStudyRequest {
+  string snapshot = 1;
+  string symbol = 2;
+  string timeframe = 3;
+  EventFilter filter = 4;
+  repeated string windows = 5;
+  EventTradeConfig trade = 6;
+}
+message EventObservation {
+  string event_id = 1;
+  sint64 occurred_at_ms = 2;
+  sint64 aligned_bar_ms = 3;
+  map<string, double> returns = 4;
+  string actual = 5;
+  string forecast = 6;
+  string previous = 7;
+  double surprise = 8;
+  double surprise_z = 9;
+  bool has_surprise = 10;
+}
 message EventExclusion { string event_id = 1; string reason = 2; }
-message EventWindowSummary { string window = 1; uint32 count = 2; double mean = 3; double median = 4; }
-message EventStudyResponse { string event_snapshot = 1; string bar_snapshot = 2; string methodology_version = 3; repeated EventObservation eligible_events = 4; repeated EventExclusion excluded_events = 5; repeated EventWindowSummary windows = 6; }
+message EventWindowSummary {
+  string window = 1;
+  uint32 count = 2;
+  double mean = 3;
+  double median = 4;
+  double mean_abs = 5;
+  double median_abs = 6;
+  uint32 up_count = 7;
+  uint32 down_count = 8;
+  double baseline_mean_abs = 9;
+  double impact_ratio = 10;
+}
+message EventTrade {
+  string event_id = 1;
+  sint64 event_time_ms = 2;
+  sint64 entry_time_ms = 3;
+  sint64 exit_time_ms = 4;
+  string side = 5;
+  double market_return = 6;
+  double strategy_return = 7;
+  sint64 gross_pnl = 8;
+  sint64 costs = 9;
+  sint64 net_pnl = 10;
+  double mfe = 11;
+  double mae = 12;
+  double surprise = 13;
+  double surprise_z = 14;
+  bool has_surprise = 15;
+  string exit_reason = 16;
+  bool ambiguous = 17;
+  bool whipsaw = 18;
+}
+message EventTradeSummary {
+  uint32 trades = 1;
+  uint32 wins = 2;
+  uint32 losses = 3;
+  uint32 whipsaws = 4;
+  uint32 ambiguous = 5;
+  sint64 gross_pnl = 6;
+  sint64 costs = 7;
+  sint64 net_pnl = 8;
+  sint64 ending_equity = 9;
+  sint64 max_drawdown = 10;
+  double expectancy = 11;
+  double profit_factor = 12;
+  double average_mfe = 13;
+  double average_mae = 14;
+}
+message EventStudyResponse {
+  string event_snapshot = 1;
+  string bar_snapshot = 2;
+  string methodology_version = 3;
+  repeated EventObservation eligible_events = 4;
+  repeated EventExclusion excluded_events = 5;
+  repeated EventWindowSummary windows = 6;
+  EventTradeSummary trade_summary = 7;
+  repeated EventTrade trades = 8;
+}
 service EventStudyService {
   rpc QueryEvents(QueryEventsRequest) returns (QueryEventsResponse);
   rpc RunEventStudy(EventStudyRequest) returns (EventStudyResponse);

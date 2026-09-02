@@ -3,7 +3,7 @@ package store
 import (
 	"testing"
 
-	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/bcypher01/assay/internal/core"
 )
 
 // benchSeries builds n aligned M1 bars in memory for benchmarking. It does not

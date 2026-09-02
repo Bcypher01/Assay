@@ -1,18 +1,30 @@
+# Build output
 /bin/
 /dist/
+
+# Local runtime state: bar cache, study history, event snapshots, local publishes
 /data/
-/cache/
-/history/
-/event-data/
+
+# Generated artefacts and profiles
 *.parquet
 *.test
 *.prof
+cover.out
+coverage.out
+
+# Local secrets
+.env
+/deploy/.env
+
+# JavaScript dependencies and build output. Also covered by web/.gitignore;
+# repeated here so a checkout without that file can never expose node_modules.
+node_modules/
+web/dist/
+.output/
+
+# Tooling and OS noise
 .DS_Store
-*.tgz
-/_to_delete/
 .fuse_hidden*
 __pycache__/
 *.py[cod]
-
-.env
-/published/
+*.tgz

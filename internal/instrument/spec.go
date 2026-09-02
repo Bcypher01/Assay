@@ -3,7 +3,7 @@ package instrument
 import (
 	"fmt"
 
-	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/bcypher01/assay/internal/core"
 )
 
 // AssetClass groups instruments by the conventions they follow.

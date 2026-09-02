@@ -3,11 +3,11 @@ package ir
 import (
 	"testing"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	_ "github.com/Bcypher01/Assay/internal/packs/indicator"
-	_ "github.com/Bcypher01/Assay/internal/packs/smc"
-	_ "github.com/Bcypher01/Assay/internal/packs/timeofday"
-	"github.com/Bcypher01/Assay/internal/primitive"
+	"github.com/bcypher01/assay/internal/core"
+	_ "github.com/bcypher01/assay/internal/packs/indicator"
+	_ "github.com/bcypher01/assay/internal/packs/smc"
+	_ "github.com/bcypher01/assay/internal/packs/timeofday"
+	"github.com/bcypher01/assay/internal/primitive"
 )
 
 func TestNewMovingAverageCrossover(t *testing.T) {
@@ -107,10 +107,10 @@ func TestNewLiquiditySweepStructure(t *testing.T) {
 	if strategy.Template.ID != LiquiditySweepStructureTemplateID || strategy.Template.Version != LiquiditySweepStructureTemplateVersion {
 		t.Fatalf("template identity = %#v", strategy.Template)
 	}
-	if strategy.Timeframes["entry"] != core.TFH1 || strategy.Entries.Long.When.After == nil || strategy.Entries.Short.When.After == nil {
+	if strategy.Timeframes["entry"] != core.TFM15 || strategy.Entries.Long.When.After == nil || strategy.Entries.Short.When.After == nil {
 		t.Fatalf("unexpected confirmation rules: %#v", strategy)
 	}
-	if strategy.Entries.Long.When.After.WithinBars != 5 || strategy.Nodes[0].Type != "liquidity_sweep_bullish" || strategy.Nodes[3].Type != "market_structure_bearish" {
+	if strategy.Entries.Long.When.After.Within != 5*core.Hour || strategy.Nodes[0].Type != "liquidity_sweep_bullish" || strategy.Nodes[3].Type != "market_structure_bearish" {
 		t.Fatalf("unexpected directional nodes: %#v", strategy)
 	}
 }
@@ -129,7 +129,7 @@ func TestPopularTemplatesGoldenStrategies(t *testing.T) {
 		{"Donchian breakout", NewDonchianBreakout, "e9473c54432d6766db3bd4eeb34103100017e003c3685d66db8efdce08fcfc86"},
 		{"Bollinger reversion", NewBollingerReversion, "709cbc3bebe8fa5ffc2c0c566cbc042c1023e41b76eff5444cf456c9d840fb1d"},
 		{"session breakout", NewSessionBreakout, "8a891a9e8c8aee3903caf097586b644cd956838fad2f4afccfc8d4cc0673f58c"},
-		{"liquidity sweep structure", NewLiquiditySweepStructure, "67fa1871d595cccfe06fc2b09d9181de0887678b0adaca41c2c62f89c177fdc2"},
+		{"liquidity sweep structure", NewLiquiditySweepStructure, "fcb97efb4a4c77865da9f6b954f1b91c7f3e56e1d25bd7ef237e10655e35ed97"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

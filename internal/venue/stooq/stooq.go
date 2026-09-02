@@ -4,6 +4,7 @@ package stooq
 import (
 	"context"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/instrument"
-	"github.com/Bcypher01/Assay/internal/venue"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/instrument"
+	"github.com/bcypher01/assay/internal/venue"
 )
 
 const defaultBaseURL = "https://stooq.com/q/d/l/"
@@ -157,7 +158,7 @@ func decodeCSV(symbol string, tf core.TF, spec *instrument.Spec, data []byte, fr
 	out := core.NewSeries(symbol, tf, 0)
 	for {
 		rec, err := r.Read()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

@@ -11,16 +11,17 @@ import (
 	"math"
 	"strings"
 
-	"github.com/Bcypher01/Assay/internal/analytics"
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/engine"
-	"github.com/Bcypher01/Assay/internal/instrument"
-	"github.com/Bcypher01/Assay/internal/ir"
-	"github.com/Bcypher01/Assay/internal/packs/semantic"
-	"github.com/Bcypher01/Assay/internal/primitive"
-	"github.com/Bcypher01/Assay/internal/sim"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
+
+	"github.com/bcypher01/assay/internal/analytics"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/engine"
+	"github.com/bcypher01/assay/internal/instrument"
+	"github.com/bcypher01/assay/internal/ir"
+	"github.com/bcypher01/assay/internal/packs/semantic"
+	"github.com/bcypher01/assay/internal/primitive"
+	"github.com/bcypher01/assay/internal/sim"
 )
 
 type Kind string
@@ -51,6 +52,7 @@ type Drawing struct {
 	Side                  string         `json:"side"`
 	Symbol                string         `json:"symbol"`
 	Timeframe             string         `json:"timeframe"`
+	EntryTimeframe        string         `json:"entryTimeframe,omitempty"`
 	AnchorTimeMS          int64          `json:"anchorTimeMs"`
 	LevelLow              core.Price     `json:"levelLow"`
 	LevelHigh             core.Price     `json:"levelHigh"`
@@ -145,17 +147,28 @@ func (d Drawing) Validate() []ValidationError {
 	if _, err := core.ParseTF(d.Timeframe); err != nil {
 		add("timeframe", "unsupported timeframe")
 	}
+	if d.EntryTimeframe != "" {
+		entryTf, err := core.ParseTF(d.EntryTimeframe)
+		patternTf, patternErr := core.ParseTF(d.Timeframe)
+		switch {
+		case err != nil:
+			add("entryTimeframe", "unsupported timeframe")
+		case patternErr == nil && patternTf.Finer(entryTf):
+			add("entryTimeframe", "entry timeframe must be the same as or finer than the pattern timeframe")
+		}
+	}
 	if d.AnchorTimeMS <= 0 {
 		add("anchorTimeMs", "select a setup candle")
 	}
 	if d.LevelLow <= 0 || d.LevelHigh <= 0 || d.LevelLow > d.LevelHigh {
 		add("levelLow", "draw a valid level or zone")
 	}
-	if d.Entry <= 0 || d.Stop <= 0 || d.Target <= 0 {
+	switch {
+	case d.Entry <= 0 || d.Stop <= 0 || d.Target <= 0:
 		add("entry", "entry, stop, and target must be positive prices")
-	} else if d.Side == "long" && !(d.Stop < d.Entry && d.Entry < d.Target) {
+	case d.Side == "long" && !(d.Stop < d.Entry && d.Entry < d.Target):
 		add("stop", "a long setup requires stop < entry < target")
-	} else if d.Side == "short" && !(d.Target < d.Entry && d.Entry < d.Stop) {
+	case d.Side == "short" && !(d.Target < d.Entry && d.Entry < d.Stop):
 		add("stop", "a short setup requires target < entry < stop")
 	}
 	if d.LookbackBars < 2 || d.LookbackBars > 500 {
@@ -228,6 +241,10 @@ func Compile(d Drawing) (*ir.Strategy, error) {
 		return nil, errs[0]
 	}
 	tf, _ := core.ParseTF(d.Timeframe)
+	entryTf := tf
+	if d.EntryTimeframe != "" {
+		entryTf, _ = core.ParseTF(d.EntryTimeframe)
+	}
 	params, err := json.Marshal(detectorParams{
 		LookbackBars: d.LookbackBars, RetestBars: d.RetestBars,
 		ToleranceTicks: d.ToleranceTicks, ExpiryBars: d.ExpiryBars,
@@ -262,7 +279,7 @@ func Compile(d Drawing) (*ir.Strategy, error) {
 		Schema:     ir.SchemaV2,
 		Name:       title(d),
 		Universe:   ir.Universe{Symbols: []string{d.Symbol}},
-		Timeframes: map[string]core.TF{"bias": tf, "poi": tf, "entry": tf},
+		Timeframes: map[string]core.TF{"bias": tf, "poi": tf, "entry": entryTf},
 		Risk: ir.Risk{
 			Stop:     stopDistance,
 			Target:   targetDistance,
@@ -338,31 +355,52 @@ type Preview struct {
 // Evaluate compiles and runs a drawing over immutable prepared bars. It is a
 // preview rather than a persisted experiment; the returned strategy JSON is
 // the exact document to pass to the normal StudyService for a full run.
+// Evaluate runs a single-timeframe drawing: the pattern is detected and the
+// entry is filled on the same prepared series. It is the collapsed case of
+// EvaluateMultiTimeframe and preserves the behaviour of earlier callers exactly.
 func Evaluate(ctx context.Context, d Drawing, series *core.Series, spec instrument.Spec, snapshot string) (Preview, error) {
+	return EvaluateMultiTimeframe(ctx, d, series, series, spec, snapshot, snapshot)
+}
+
+// EvaluateMultiTimeframe runs a drawing whose entry may sit on a finer timeframe
+// than the pattern. The pattern is detected on the coarse detection series (the
+// timeframe the user drew on); the simulator fills on the fine base series (the
+// entry rung). When base and detection are the same series the result is
+// identical to the single-timeframe path.
+func EvaluateMultiTimeframe(ctx context.Context, d Drawing, base, detection *core.Series, spec instrument.Spec, baseSnapshot, detectionSnapshot string) (Preview, error) {
 	strategy, err := Compile(d)
 	if err != nil {
 		return Preview{}, err
 	}
-	if series == nil || series.Symbol != d.Symbol {
+	if base == nil || base.Symbol != d.Symbol || detection == nil || detection.Symbol != d.Symbol {
 		return Preview{}, fmt.Errorf("setup test: prepared series does not match drawing symbol")
 	}
+	detectionTF, _ := core.ParseTF(d.Timeframe)
 	strategyJSON, err := json.Marshal(strategy)
 	if err != nil {
 		return Preview{}, fmt.Errorf("setup test: encode strategy: %w", err)
 	}
 	cfg := sim.Config{Spec: spec, Risk: sim.RiskModel{InitialEquity: 1_000_000, RiskPerTrade: core.RatioFromFloat(d.RiskPerTrade)}}
-	result, _, err := engine.Run(ctx, strategy, engine.Data{Series: series, Config: cfg, Snapshot: snapshot})
+	result, _, err := engine.Run(ctx, strategy, engine.Data{Series: base, Config: cfg, Snapshot: baseSnapshot})
 	if err != nil {
 		return Preview{}, err
 	}
 	returns := analytics.Returns{Pessimistic: make([]float64, 0, len(result.Trades)), Optimistic: make([]float64, 0, len(result.Trades))}
-	out := Preview{Snapshot: snapshot, StrategyJSON: strategyJSON, StrategyHash: strategy.Hash(), Interpretation: ir.Describe(strategy).Summary, Matches: make([]Match, 0, len(result.Trades))}
-	anchorBar := seriesIndexAtTime(series, d.AnchorTimeMS)
+	out := Preview{Snapshot: baseSnapshot, StrategyJSON: strategyJSON, StrategyHash: strategy.Hash(), Interpretation: ir.Describe(strategy).Summary, Matches: make([]Match, 0, len(result.Trades))}
+	anchorBar := seriesIndexAtTime(detection, d.AnchorTimeMS)
 	precedent := semanticPrecedent(d.Precedent)
 	for _, trade := range result.Trades {
-		signalBar := trade.EntryBar - 1
+		signalBase := trade.EntryBar - 1
+		if signalBase < 0 {
+			signalBase = trade.EntryBar
+		}
+		// The simulator fires on the fine base series; the drawn level, the
+		// precedent window and the sample check all live on the coarse detection
+		// series, so map the fine signal bar back to the detection bar whose close
+		// produced it. With one timeframe this is the identity.
+		signalBar := detectionBarForBaseBar(base, detection, detectionTF, signalBase)
 		if signalBar < 0 {
-			signalBar = trade.EntryBar
+			continue
 		}
 		// The user's source window proves only that the detector can recognize
 		// its input. It is not independent historical evidence and must not be
@@ -371,7 +409,7 @@ func Evaluate(ctx context.Context, d Drawing, series *core.Series, spec instrume
 			continue
 		}
 		match := Match{
-			SignalTimeMS:          series.Time[signalBar].Millis(),
+			SignalTimeMS:          detection.Time[signalBar].Millis(),
 			EntryTimeMS:           trade.EntryTime.Millis(),
 			ExitTimeMSPessimistic: trade.Pessimistic.ExitTime.Millis(),
 			ExitTimeMSOptimistic:  trade.Optimistic.ExitTime.Millis(),
@@ -385,10 +423,10 @@ func Evaluate(ctx context.Context, d Drawing, series *core.Series, spec instrume
 			Ambiguous:             trade.Ambiguous,
 		}
 		if d.Kind == FairValueGapRetest {
-			match.LevelLow, match.LevelHigh = fairValueGapAtSignal(d, series, signalBar)
+			match.LevelLow, match.LevelHigh = fairValueGapAtSignal(d, detection, signalBar)
 		} else if d.Kind == DrawnPrecedent {
-			match.LevelLow, match.LevelHigh = precedentRangeAtSignal(d, series, signalBar)
-			score := semantic.ScoreSeriesPrecedent(precedent, series, signalBar, d.SimilarityMilli)
+			match.LevelLow, match.LevelHigh = precedentRangeAtSignal(d, detection, signalBar)
+			score := semantic.ScoreSeriesPrecedent(precedent, detection, signalBar, d.SimilarityMilli)
 			match.SimilarityMilli = score.Overall
 			match.ShapeMilli = score.Shape
 			match.StructureMilli = score.Structure
@@ -411,7 +449,7 @@ func Evaluate(ctx context.Context, d Drawing, series *core.Series, spec instrume
 	if len(out.Matches) < 10 {
 		out.Warnings = append(out.Warnings, "Fewer than 10 historical matches; this is too little evidence for a strategy conclusion.")
 	}
-	out.DrawingMatched, err = drawingMatchesDetectedStructure(ctx, d, strategy, series, snapshot)
+	out.DrawingMatched, err = drawingMatchesDetectedStructure(ctx, d, strategy, detection, detectionSnapshot)
 	if err != nil {
 		return Preview{}, err
 	}
@@ -449,6 +487,22 @@ func seriesIndexAtTime(series *core.Series, timeMS int64) int {
 		}
 	}
 	return -1
+}
+
+// detectionBarForBaseBar maps a bar on the fine base series to the bar on the
+// coarse detection series that contains it, so drawn levels and precedent
+// windows are read on the timeframe the pattern was found on. When base and
+// detection are the same series it is the identity, leaving the
+// single-timeframe path unchanged.
+func detectionBarForBaseBar(base, detection *core.Series, detectionTF core.TF, baseBar int) int {
+	if base == detection {
+		return baseBar
+	}
+	if base == nil || detection == nil || baseBar < 0 || baseBar >= base.Len() {
+		return -1
+	}
+	aligned := detectionTF.AlignDown(base.Time[baseBar])
+	return seriesIndexAtTime(detection, aligned.Millis())
 }
 
 func windowsOverlap(leftSignal, rightSignal, length int) bool {

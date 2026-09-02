@@ -3,9 +3,10 @@ package primitive
 import (
 	"errors"
 
-	"github.com/Bcypher01/Assay/internal/core"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
+
+	"github.com/bcypher01/assay/internal/core"
 )
 
 var (

@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/bcypher01/assay/internal/core"
 )
 
 const SchemaVersion = 1
@@ -207,7 +207,7 @@ func writeAtomic(path string, data []byte) error {
 	name := f.Name()
 	defer os.Remove(name)
 	if _, err := f.Write(data); err != nil {
-		f.Close()
+		_ = f.Close()
 		return err
 	}
 	if err := f.Close(); err != nil {

@@ -5,7 +5,7 @@ R2 credentials or reads the bar library directly. Run `assay` with a public,
 read-only R2 custom-domain/CDN URL:
 
 ```sh
-assay -library-url https://data.example.com -cache-dir cache -cache-max-mb 5120 -history-dir history
+assay -library-url https://data.example.com -cache-max-mb 5120
 ```
 
 On first launch, fetch `GET /onboarding.json` before showing a blank builder.
@@ -28,8 +28,9 @@ ready.
 
 Run responses contain `run_id`. Use it with `RunService.GetRun`; use two IDs
 with `RunService.Compare`, whose response contains ordered parameter changes and
-bounded metric deltas. The TypeScript client is generated under
-`gen/typescript/src`; run `npm run generate` after a protobuf change.
+bounded metric deltas. The TypeScript client is generated into
+`web/src/gen`; run `npm run generate-rpc` in `web` after a protobuf
+change.
 
 For the result page, call `RunService.GetDetails` with the `run_id`. It returns
 the persisted strategy/data identity, effective execution assumptions, bounded

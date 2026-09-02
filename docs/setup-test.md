@@ -3,7 +3,7 @@
 Setup Test is Assay's chart-first path for evaluating a labelled EUR/USD setup
 without turning arbitrary drawing coordinates into hindsight-fitted rules.
 
-The interface is the `/setup` screen in the Assay UI (`assay-ui`); this server
+The interface is the `/setup` screen in the web client (`web/`); this server
 exposes only the JSON endpoints below. Start `assay`, then run the UI and open
 its Setup test tool.
 

@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/store"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/store"
 )
 
 func TestHTTPStoreReadsPublicObjectsAndManifests(t *testing.T) {
@@ -18,7 +18,7 @@ func TestHTTPStoreReadsPublicObjectsAndManifests(t *testing.T) {
 	}
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/library/BINANCE:BTCUSDT/m15/2025-01.parquet.manifest.json":
+		case "/library/BINANCE:BTCUSDT/m15/2025-01.manifest.json":
 			_, _ = w.Write(mb)
 		case "/library/BINANCE:BTCUSDT/m15/2025-01.parquet":
 			_, _ = w.Write([]byte("parquet"))

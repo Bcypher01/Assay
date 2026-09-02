@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/instrument"
-	"github.com/Bcypher01/Assay/internal/venue"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/instrument"
+	"github.com/bcypher01/assay/internal/venue"
 )
 
 const defaultBaseURL = "https://data.binance.vision"
@@ -199,7 +199,7 @@ func appendZipCSV(dst *core.Series, spec *instrument.Spec, data []byte, from, to
 	r.FieldsPerRecord = -1
 	for {
 		rec, err := r.Read()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

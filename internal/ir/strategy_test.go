@@ -7,9 +7,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	_ "github.com/Bcypher01/Assay/internal/packs/indicator"
-	"github.com/Bcypher01/Assay/internal/primitive"
+	"github.com/bcypher01/assay/internal/core"
+	_ "github.com/bcypher01/assay/internal/packs/indicator"
+	"github.com/bcypher01/assay/internal/primitive"
 )
 
 func validStrategy() *Strategy {
@@ -165,7 +165,7 @@ func TestValidateV2TemporalExpressions(t *testing.T) {
 	}
 	s.Entries.Long.When.After.WithinBars = 0
 	errs := s.Validate(primitive.DefaultRegistry)
-	if len(errs) != 1 || errs[0].Path != "entries.long.when.after.withinBars" {
+	if len(errs) != 1 || errs[0].Path != "entries.long.when.after.within" {
 		t.Fatalf("bad temporal validation errors: %#v", errs)
 	}
 }
@@ -254,5 +254,91 @@ func TestMigrateV1ToV2PreservesTemporalTrigger(t *testing.T) {
 	}
 	if errs := migrated.Validate(primitive.DefaultRegistry); len(errs) != 0 {
 		t.Fatalf("migrated temporal document invalid: %#v", errs)
+	}
+}
+
+func hasError(errs []ValidationError, path string) bool {
+	for _, e := range errs {
+		if e.Path == path {
+			return true
+		}
+	}
+	return false
+}
+
+// The ladder must descend the whole way down. An M15 point of interest under
+// an M5 entry reads as a ladder and is not one.
+func TestValidateRejectsPOICoarserThanEntry(t *testing.T) {
+	s := validStrategy()
+	s.Timeframes = map[string]core.TF{"bias": core.TFD1, "poi": core.TFM5, "entry": core.TFM15}
+	if errs := s.Validate(primitive.DefaultRegistry); !hasError(errs, "timeframes.entry") {
+		t.Fatalf("an M5 poi under an M15 entry was accepted: %#v", errs)
+	}
+	s.Timeframes = map[string]core.TF{"bias": core.TFD1, "poi": core.TFH4, "entry": core.TFM15}
+	if errs := s.Validate(primitive.DefaultRegistry); len(errs) != 0 {
+		t.Fatalf("a genuine D1/H4/M15 ladder was rejected: %#v", errs)
+	}
+}
+
+// A node coarser than the entry series is projected down. A node finer than it
+// cannot be reconstructed from bars that do not contain it.
+func TestValidateRejectsNodeFinerThanEntry(t *testing.T) {
+	s := validStrategy()
+	s.Timeframes = map[string]core.TF{"bias": core.TFD1, "poi": core.TFH4, "entry": core.TFM15}
+	s.Nodes[0].Timeframe = core.TFH4
+	if errs := s.Validate(primitive.DefaultRegistry); len(errs) != 0 {
+		t.Fatalf("an H4 node under an M15 entry was rejected: %#v", errs)
+	}
+	s.Nodes[0].Timeframe = core.TFM5
+	if errs := s.Validate(primitive.DefaultRegistry); !hasError(errs, "nodes[0].timeframe") {
+		t.Fatalf("an M5 node under an M15 entry was accepted: %#v", errs)
+	}
+}
+
+func TestBaseTimeframeDerivesTheSeriesToLoad(t *testing.T) {
+	s := validStrategy()
+	s.Timeframes = map[string]core.TF{"bias": core.TFD1, "poi": core.TFH4, "entry": core.TFM15}
+	s.Nodes[0].Timeframe = core.TFH4
+	tf, ok := s.BaseTimeframe()
+	if !ok || tf != core.TFM15 {
+		t.Fatalf("base timeframe = %s (%v), want m15", tf, ok)
+	}
+	// Documents written before node timeframes existed decode to TFTick. That
+	// is an omitted value, not a tick node, and must not pull the run down to
+	// tick resolution.
+	s.Nodes[1].Timeframe = core.TFTick
+	if tf, _ := s.BaseTimeframe(); tf != core.TFM15 {
+		t.Fatalf("an omitted node timeframe changed the base timeframe to %s", tf)
+	}
+	delete(s.Timeframes, "entry")
+	if _, ok := s.BaseTimeframe(); ok {
+		t.Fatal("a document without an entry timeframe has no base timeframe")
+	}
+}
+
+func TestValidateRequiresExactlyOneWindowForm(t *testing.T) {
+	s := validStrategy()
+	s.Schema = SchemaV2
+	s.Direction = ""
+	s.Slots = Slots{}
+	s.Template = Template{ID: "session-breakout", Version: 1}
+	s.Entries = Entries{Long: EntryBranch{Enabled: true, Name: "Setup held", When: Expression{
+		Within: &OccurredWithin{Condition: Expression{Node: "a"}, Window: 45 * core.Minute},
+	}}}
+	if errs := s.Validate(primitive.DefaultRegistry); len(errs) != 0 {
+		t.Fatalf("a duration window was rejected: %#v", errs)
+	}
+	// Both forms together leave the reader, and the engine, to guess.
+	s.Entries.Long.When.Within.Bars = 3
+	if errs := s.Validate(primitive.DefaultRegistry); !hasError(errs, "entries.long.when.within.window") {
+		t.Fatalf("a duration and a bar count together were accepted: %#v", errs)
+	}
+	s.Entries.Long.When.Within.Window = 0
+	if errs := s.Validate(primitive.DefaultRegistry); len(errs) != 0 {
+		t.Fatalf("a document saved with a bar count was rejected: %#v", errs)
+	}
+	s.Entries.Long.When.Within.Bars = 0
+	if errs := s.Validate(primitive.DefaultRegistry); !hasError(errs, "entries.long.when.within.window") {
+		t.Fatalf("an empty window was accepted: %#v", errs)
 	}
 }

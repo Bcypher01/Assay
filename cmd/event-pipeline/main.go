@@ -7,20 +7,27 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"path/filepath"
 	"time"
 
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/event"
-	"github.com/Bcypher01/Assay/internal/eventpipeline"
-	"github.com/Bcypher01/Assay/internal/eventsource"
-	"github.com/Bcypher01/Assay/internal/eventsource/bls"
-	"github.com/Bcypher01/Assay/internal/eventsource/curated"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/event"
+	"github.com/bcypher01/assay/internal/eventpipeline"
+	"github.com/bcypher01/assay/internal/eventsource"
+	"github.com/bcypher01/assay/internal/eventsource/bls"
+	"github.com/bcypher01/assay/internal/eventsource/curated"
+	"github.com/bcypher01/assay/internal/userdir"
 )
 
 func main() {
-	dir := flag.String("dir", "event-data", "directory for immutable event snapshots")
+	// Snapshots are written where the assay server reads them from by default.
+	defaultDir, err := userdir.Data("events")
+	if err != nil {
+		log.Fatal(err)
+	}
+	dir := flag.String("dir", defaultDir, "directory for immutable event snapshots")
 	providerName := flag.String("provider", "bls-archive", "event provider: bls-archive, bls, or curated")
-	archiveDir := flag.String("archive-dir", "event-data/bls-archive", "locally captured official BLS release documents")
+	archiveDir := flag.String("archive-dir", filepath.Join(defaultDir, "bls-archive"), "locally captured official BLS release documents")
 	fromFlag := flag.String("from", "", "inclusive UTC date, YYYY-MM-DD")
 	toFlag := flag.String("to", "", "exclusive UTC date, YYYY-MM-DD")
 	buildVersion := flag.String("build-version", "dev", "pipeline build version")

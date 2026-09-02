@@ -3,7 +3,7 @@ package rpc
 import (
 	"sort"
 
-	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/bcypher01/assay/internal/core"
 )
 
 // ViewportPoint retains high and low separately, so a visual extreme cannot be
@@ -50,11 +50,12 @@ func DownsampleViewport(s *core.Series, maxPoints int) []ViewportPoint {
 				hi = i
 			}
 		}
-		if lo == hi {
+		switch {
+		case lo == hi:
 			out = append(out, viewportAt(s, lo))
-		} else if lo < hi {
+		case lo < hi:
 			out = append(out, viewportAt(s, lo), viewportAt(s, hi))
-		} else {
+		default:
 			out = append(out, viewportAt(s, hi), viewportAt(s, lo))
 		}
 	}

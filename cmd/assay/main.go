@@ -4,26 +4,43 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"os"
 
-	"github.com/Bcypher01/Assay/internal/event"
-	"github.com/Bcypher01/Assay/internal/instrument"
-	"github.com/Bcypher01/Assay/internal/library"
-	"github.com/Bcypher01/Assay/internal/rpc"
-	"github.com/Bcypher01/Assay/internal/runstore"
-	"github.com/Bcypher01/Assay/internal/store"
-	"github.com/Bcypher01/Assay/internal/telemetry"
-	"github.com/Bcypher01/Assay/internal/venue"
-	"github.com/Bcypher01/Assay/internal/venue/binance"
-	"github.com/Bcypher01/Assay/internal/venue/dukascopy"
+	"github.com/bcypher01/assay/internal/event"
+	"github.com/bcypher01/assay/internal/instrument"
+	"github.com/bcypher01/assay/internal/library"
+	"github.com/bcypher01/assay/internal/rpc"
+	"github.com/bcypher01/assay/internal/runstore"
+	"github.com/bcypher01/assay/internal/store"
+	"github.com/bcypher01/assay/internal/telemetry"
+	"github.com/bcypher01/assay/internal/userdir"
+	"github.com/bcypher01/assay/internal/venue"
+	"github.com/bcypher01/assay/internal/venue/binance"
+	"github.com/bcypher01/assay/internal/venue/dukascopy"
 )
 
 func main() {
+	// Defaults are per-user directories, not the working directory: the bar
+	// cache is regenerable, study history and event snapshots are not. Every
+	// one of them is overridable, and deploy/ passes explicit paths.
+	defaultCache, err := userdir.Cache("cache")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defaultHistory, err := userdir.Data("history")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defaultEvents, err := userdir.Data("events")
+	if err != nil {
+		log.Fatal(err)
+	}
 	addr := flag.String("addr", "127.0.0.1:8080", "local HTTP listen address")
-	cacheDir := flag.String("cache-dir", "cache", "local bar-cache directory")
+	cacheDir := flag.String("cache-dir", defaultCache, "local bar-cache directory")
 	cacheMaxMB := flag.Int64("cache-max-mb", 5120, "maximum local bar-cache size in MiB; zero disables eviction")
-	historyDir := flag.String("history-dir", "history", "persistent study history directory")
-	eventDir := flag.String("event-dir", "event-data", "immutable event-snapshot directory")
-	libraryURL := flag.String("library-url", "", "public read-only R2/CDN library URL")
+	historyDir := flag.String("history-dir", defaultHistory, "persistent study history directory")
+	eventDir := flag.String("event-dir", defaultEvents, "immutable event-snapshot directory")
+	libraryURL := flag.String("library-url", os.Getenv("ASSAY_LIBRARY_URL"), "public read-only R2/CDN library URL")
 	metricsDir := flag.String("metrics-dir", "", "opt-in local-only product metrics directory; no telemetry is recorded when empty")
 	flag.Parse()
 	registry, err := instrument.Default()

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/bcypher01/assay/internal/core"
 )
 
 // Manifest describes one Parquet bar file: what it holds, where it came from,
@@ -31,8 +31,9 @@ type Manifest struct {
 	SchemaVersion int    `json:"schemaVersion"` // on-disk format version
 }
 
-// TF marshals to its canonical string name rather than a bare integer, so a
-// manifest is legible and stable if the enum's numeric values ever shift.
+// MarshalJSON writes TF as its canonical string name rather than a bare
+// integer, so a manifest stays legible and stable if the enum's numeric values
+// ever shift.
 func (m Manifest) MarshalJSON() ([]byte, error) {
 	type alias struct {
 		Symbol        string    `json:"symbol"`
@@ -129,7 +130,7 @@ func SnapshotHash(ms []Manifest) string {
 		m := &sorted[i]
 		// A fixed, delimiter-separated line per manifest. The record separator
 		// bytes cannot appear in any field, so records are unambiguous.
-		fmt.Fprintf(h, "%s\x1f%s\x1f%s\x1f%d\x1f%d\x1f%d\x1f%s\x1f%d\x1e",
+		_, _ = fmt.Fprintf(h, "%s\x1f%s\x1f%s\x1f%d\x1f%d\x1f%d\x1f%s\x1f%d\x1e",
 			m.Symbol, m.TF.String(), m.Month,
 			m.Rows, int64(m.First), int64(m.Last),
 			m.ContentHash, m.SchemaVersion)

@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Bcypher01/Assay/internal/store"
+	"github.com/bcypher01/assay/internal/store"
 )
 
 // R2Config contains the Cloudflare R2 S3-API settings.
@@ -35,6 +36,8 @@ type R2Publisher struct {
 	now    func() time.Time
 }
 
+var defaultR2HTTPClient = &http.Client{Timeout: 30 * time.Second}
+
 // NewR2Publisher returns an R2 publisher. The endpoint should look like
 // https://<account-id>.r2.cloudflarestorage.com.
 func NewR2Publisher(cfg R2Config, client *http.Client) (*R2Publisher, error) {
@@ -48,7 +51,7 @@ func NewR2Publisher(cfg R2Config, client *http.Client) (*R2Publisher, error) {
 		return nil, fmt.Errorf("pipeline: incomplete R2 configuration")
 	}
 	if client == nil {
-		client = http.DefaultClient
+		client = defaultR2HTTPClient
 	}
 	return &R2Publisher{cfg: cfg, client: client}, nil
 }
@@ -73,7 +76,8 @@ func (p *R2Publisher) Put(ctx context.Context, key string, body io.Reader, meta 
 func (p *R2Publisher) Head(ctx context.Context, key string) (store.Manifest, bool, error) {
 	var data []byte
 	err := p.do(ctx, http.MethodGet, manifestKey(key), nil, "", &data)
-	if errStatus, ok := err.(*statusError); ok && errStatus.code == http.StatusNotFound {
+	var errStatus *statusError
+	if errors.As(err, &errStatus) && errStatus.code == http.StatusNotFound {
 		return store.Manifest{}, false, nil
 	}
 	if err != nil {
@@ -89,7 +93,8 @@ func (p *R2Publisher) Head(ctx context.Context, key string) (store.Manifest, boo
 func (p *R2Publisher) Get(ctx context.Context, key string) (io.ReadCloser, bool, error) {
 	var data []byte
 	err := p.do(ctx, http.MethodGet, key, nil, "", &data)
-	if errStatus, ok := err.(*statusError); ok && errStatus.code == http.StatusNotFound {
+	var errStatus *statusError
+	if errors.As(err, &errStatus) && errStatus.code == http.StatusNotFound {
 		return nil, false, nil
 	}
 	if err != nil {
@@ -158,7 +163,7 @@ func (p *R2Publisher) sign(req *http.Request, body []byte) {
 	signedHeaders := signedHeaderNames(req.Header)
 	canonical := strings.Join([]string{
 		req.Method,
-		uriEncodePath(req.URL.EscapedPath()),
+		uriEncodePath(req.URL.Path),
 		"",
 		canonicalHeaders(req.Header, signedHeaders),
 		strings.Join(signedHeaders, ";"),
@@ -207,7 +212,24 @@ func uriEncodePath(p string) string {
 	if p == "" {
 		return "/"
 	}
-	return p
+	const hexChars = "0123456789ABCDEF"
+	var out strings.Builder
+	out.Grow(len(p))
+	for i := 0; i < len(p); i++ {
+		ch := p[i]
+		if ch == '/' ||
+			(ch >= 'a' && ch <= 'z') ||
+			(ch >= 'A' && ch <= 'Z') ||
+			(ch >= '0' && ch <= '9') ||
+			ch == '-' || ch == '_' || ch == '.' || ch == '~' {
+			out.WriteByte(ch)
+			continue
+		}
+		out.WriteByte('%')
+		out.WriteByte(hexChars[ch>>4])
+		out.WriteByte(hexChars[ch&15])
+	}
+	return out.String()
 }
 
 func signingKey(secret, date, region, service string) []byte {

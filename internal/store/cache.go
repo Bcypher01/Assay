@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/bcypher01/assay/internal/core"
 )
 
 // Reader loads bars for a symbol, timeframe and time window, returning the
@@ -341,11 +341,11 @@ func writeFileAtomic(path string, data []byte) error {
 	defer os.Remove(tmpName) // no-op after a successful rename
 
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("store: writing %s: %w", tmpName, err)
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("store: syncing %s: %w", tmpName, err)
 	}
 	if err := tmp.Close(); err != nil {

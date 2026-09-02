@@ -1,6 +1,6 @@
 package event
 
-import "github.com/Bcypher01/Assay/internal/core"
+import "github.com/bcypher01/assay/internal/core"
 
 // Kind is a controlled event category. Values are versioned by TaxonomyVersion.
 type Kind string

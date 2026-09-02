@@ -3,7 +3,7 @@ package instrument
 import (
 	"time"
 
-	"github.com/Bcypher01/Assay/internal/core"
+	"github.com/bcypher01/assay/internal/core"
 )
 
 // Window is a trading window on a given weekday, expressed in minutes from
@@ -105,6 +105,23 @@ func (c *Calendar) NextOpen(t core.Time) (core.Time, bool) {
 	const step = core.Time(60 * 1000)
 	limit := t + core.Time(14*24*60*60*1000)
 	for cur := t; cur <= limit; cur += step {
+		if c.IsOpen(cur) {
+			return cur, true
+		}
+	}
+	return t, false
+}
+
+// PreviousOpen returns the last instant at or before t at which the instrument
+// trades. Like NextOpen, it scans for at most two weeks so malformed calendars
+// fail closed instead of looping forever.
+func (c *Calendar) PreviousOpen(t core.Time) (core.Time, bool) {
+	if c == nil || c.loc == nil {
+		return t, true
+	}
+	const step = core.Time(60 * 1000)
+	limit := t - core.Time(14*24*60*60*1000)
+	for cur := t; cur >= limit; cur -= step {
 		if c.IsOpen(cur) {
 			return cur, true
 		}

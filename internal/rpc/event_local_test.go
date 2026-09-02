@@ -8,11 +8,12 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
-	"github.com/Bcypher01/Assay/internal/core"
-	"github.com/Bcypher01/Assay/internal/event"
-	"github.com/Bcypher01/Assay/internal/instrument"
-	"github.com/Bcypher01/Assay/internal/store"
-	assayv1 "github.com/Bcypher01/Assay/proto/assay/v1"
+
+	assayv1 "github.com/bcypher01/assay/gen/go/assay/v1"
+	"github.com/bcypher01/assay/internal/core"
+	"github.com/bcypher01/assay/internal/event"
+	"github.com/bcypher01/assay/internal/instrument"
+	"github.com/bcypher01/assay/internal/store"
 )
 
 func TestLocalEventServicesReadSnapshotAndPreparedBars(t *testing.T) {
@@ -27,7 +28,8 @@ func TestLocalEventServicesReadSnapshotAndPreparedBars(t *testing.T) {
 		t.Fatal(err)
 	}
 	events := event.NewStore(dir + "/events")
-	e := event.Event{ID: "cpi", OccurredAt: base, KnowledgeAt: base, Precision: event.PrecisionExact, Kind: event.KindUSCPI, Title: "CPI", Jurisdiction: "US", Currencies: []string{"USD"}, Impact: event.ImpactHigh, Status: event.StatusReleased, Source: event.SourceRef{Provider: "test", RecordID: "cpi"}}
+	actual, forecast, previous := event.Decimal("250"), event.Decimal("200"), event.Decimal("180")
+	e := event.Event{ID: "cpi", OccurredAt: base, KnowledgeAt: base, Precision: event.PrecisionExact, Kind: event.KindUSCPI, Title: "CPI", Jurisdiction: "US", Currencies: []string{"USD"}, Impact: event.ImpactHigh, Status: event.StatusReleased, Actual: &actual, Forecast: &forecast, Previous: &previous, Source: event.SourceRef{Provider: "test", RecordID: "cpi"}}
 	mf, err := events.Write(ctx, []event.Event{e}, event.Manifest{Source: "test", BuildVersion: "test"})
 	if err != nil {
 		t.Fatal(err)
@@ -44,12 +46,25 @@ func TestLocalEventServicesReadSnapshotAndPreparedBars(t *testing.T) {
 	if err != nil || len(q.Msg.Events) != 1 {
 		t.Fatalf("query %v %#v", err, q)
 	}
-	r, err := server.RunEventStudy(ctx, connect.NewRequest(&assayv1.EventStudyRequest{Snapshot: mf.ContentHash, Symbol: s.Symbol, Timeframe: "m1", Filter: &assayv1.EventFilter{FromMs: int64(base), ToMs: int64(base + 180000)}, Windows: []string{"m1"}}))
+	if q.Msg.Events[0].Actual != "250" || q.Msg.Events[0].Forecast != "200" || q.Msg.Events[0].Previous != "180" {
+		t.Fatalf("event values %#v", q.Msg.Events[0])
+	}
+	r, err := server.RunEventStudy(ctx, connect.NewRequest(&assayv1.EventStudyRequest{
+		Snapshot: mf.ContentHash, Symbol: s.Symbol, Timeframe: "m1",
+		Filter: &assayv1.EventFilter{FromMs: int64(base), ToMs: int64(base + 180000)}, Windows: []string{"m1"},
+		Trade: &assayv1.EventTradeConfig{
+			EntryTiming: "after_release", DirectionRule: "follow_surprise", EntryDelay: "m1", HoldFor: "m1",
+			SurpriseFilter: "all", StartingEquity: 1_000_000, PositionSize: 1_000_000, CostPerTrade: 500,
+		},
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(r.Msg.EligibleEvents) != 1 || r.Msg.EventSnapshot != mf.ContentHash {
 		t.Fatalf("study %#v", r.Msg)
+	}
+	if !r.Msg.EligibleEvents[0].HasSurprise || r.Msg.TradeSummary == nil || r.Msg.TradeSummary.Trades != 1 || len(r.Msg.Trades) != 1 || r.Msg.Trades[0].Side != "short" {
+		t.Fatalf("trade study %#v", r.Msg)
 	}
 }
 

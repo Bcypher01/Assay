@@ -45,8 +45,12 @@ type Edge struct {
 	To   string `json:"to"`
 }
 type SlotSpec struct {
-	All        []string `json:"all"`
-	WithinBars int      `json:"withinBars,omitempty"`
+	All []string `json:"all"`
+	// Within is the span the point of interest stays live for. WithinBars is
+	// the same window counted in entry bars, kept readable for documents saved
+	// before windows became durations; see OccurredWithin.
+	Within     core.Duration `json:"within,omitempty"`
+	WithinBars int           `json:"withinBars,omitempty"`
 }
 type Slots struct {
 	Bias         SlotSpec `json:"bias"`
@@ -127,26 +131,43 @@ type ZonePredicate struct {
 	Relation ZoneRelation `json:"relation"`
 }
 
-// OccurredWithin is true when Condition held on this bar or one of the prior
-// Bars bars. It is causal: future bars are never consulted.
+// OccurredWithin is true when Condition held on this bar or on an earlier bar
+// whose close is no more than Window before this bar's close. It is causal:
+// future bars are never consulted.
+//
+// The window is a duration rather than a bar count because a bar count is
+// ambiguous the moment two nodes sit on different timeframes: "within 3 bars
+// of the H4 point of interest" is either 12 hours or 45 minutes, a factor of
+// 16, and both readings are what someone meant. A duration also behaves
+// correctly across a weekend, where a bar count silently means something else.
+//
+// Bars is the pre-duration form, resolved against the entry timeframe so that
+// documents saved before the change keep their original meaning. Exactly one
+// of the two is set.
 type OccurredWithin struct {
-	Condition Expression `json:"condition"`
-	Bars      int        `json:"bars"`
+	Condition Expression    `json:"condition"`
+	Window    core.Duration `json:"window,omitempty"`
+	Bars      int           `json:"bars,omitempty"`
 }
 
-// RemainsTrue is true only when Condition held on this bar and the preceding
-// Bars-1 bars.
+// RemainsTrue is true only when Condition held on every bar of the Window
+// ending at this bar's close. A window the series does not fully cover reports
+// false: an unobserved bar is not an unbroken condition. See OccurredWithin
+// for why the window is a duration and what Bars means.
 type RemainsTrue struct {
-	Condition Expression `json:"condition"`
-	Bars      int        `json:"bars"`
+	Condition Expression    `json:"condition"`
+	Window    core.Duration `json:"window,omitempty"`
+	Bars      int           `json:"bars,omitempty"`
 }
 
-// OccursAfter is true when Event holds now and Predecessor held on an earlier
-// bar no more than WithinBars bars ago.
+// OccursAfter is true when Event holds now and Predecessor held on a strictly
+// earlier bar whose close is no more than Within before this bar's close. See
+// OccurredWithin for why the window is a duration and what WithinBars means.
 type OccursAfter struct {
-	Event       Expression `json:"event"`
-	Predecessor Expression `json:"predecessor"`
-	WithinBars  int        `json:"withinBars"`
+	Event       Expression    `json:"event"`
+	Predecessor Expression    `json:"predecessor"`
+	Within      core.Duration `json:"within,omitempty"`
+	WithinBars  int           `json:"withinBars,omitempty"`
 }
 
 type ComparisonOp string
@@ -257,6 +278,13 @@ func (s *Strategy) Validate(reg *primitive.Registry) []ValidationError {
 			add("timeframes.entry", "must not be coarser than bias")
 		}
 	}
+	// The ladder must descend the whole way. Nothing previously stopped an M15
+	// point of interest sitting under an M5 entry, which reads as a ladder and
+	// is not one.
+	entryTF, hasEntry := s.Timeframes["entry"]
+	if p, ok := s.Timeframes["poi"]; ok && hasEntry && !p.Coarser(entryTF) && p != entryTF {
+		add("timeframes.entry", "must not be coarser than poi")
+	}
 	if s.Risk.Stop.Value <= 0 {
 		add("risk.stop", "must be positive")
 	}
@@ -279,6 +307,13 @@ func (s *Strategy) Validate(reg *primitive.Registry) []ValidationError {
 				add(p, "unknown primitive")
 			}
 		}
+		// A node coarser than the entry series is aggregated from it and then
+		// projected back down. A node finer than it cannot be reconstructed
+		// from bars that do not contain it, so it is refused rather than
+		// quietly degraded to the entry timeframe.
+		if hasEntry && n.Timeframe.Valid() && n.Timeframe != core.TFTick && n.Timeframe.Finer(entryTF) {
+			add(p+".timeframe", "must not be finer than the entry timeframe")
+		}
 	}
 	check := func(name string, slot SlotSpec) {
 		if len(slot.All) > 3 {
@@ -299,6 +334,12 @@ func (s *Strategy) Validate(reg *primitive.Registry) []ValidationError {
 		}
 		if slot.WithinBars < 0 {
 			add("slots."+name+".withinBars", "must not be negative")
+		}
+		if slot.Within < 0 {
+			add("slots."+name+".within", "must not be negative")
+		}
+		if slot.Within > 0 && slot.WithinBars > 0 {
+			add("slots."+name+".within", "set a duration or a bar count, not both")
 		}
 	}
 	if s.Schema != SchemaV2 {
@@ -348,6 +389,26 @@ func (s *Strategy) Validate(reg *primitive.Registry) []ValidationError {
 		}
 	}
 	return out
+}
+
+// BaseTimeframe reports the bar resolution a run must load: the finest
+// timeframe anything in the document needs. Validation keeps every node at or
+// above the entry timeframe, so this is the entry timeframe for a valid
+// document — but the loader and the engine derive it here rather than each
+// assuming it, because two places assuming the same thing is how they come to
+// disagree.
+func (s *Strategy) BaseTimeframe() (core.TF, bool) {
+	base, ok := s.Timeframes["entry"]
+	if !ok || !base.Valid() {
+		return 0, false
+	}
+	for _, n := range s.Nodes {
+		// TFTick is the omitted value in early documents, not a tick node.
+		if n.Timeframe.Valid() && n.Timeframe != core.TFTick && n.Timeframe.Finer(base) {
+			base = n.Timeframe
+		}
+	}
+	return base, true
 }
 
 // Hash is a SHA-256 of canonical JSON: object keys are sorted, and omitted
@@ -498,17 +559,15 @@ func validateExpression(add func(string, string), path string, e Expression, ids
 		return
 	}
 	if e.Within != nil {
-		validateTemporal(add, path+".within", e.Within.Condition, e.Within.Bars, ids, reg)
+		validateTemporal(add, path+".within", e.Within.Condition, e.Within.Window, e.Within.Bars, ids, reg)
 		return
 	}
 	if e.Persists != nil {
-		validateTemporal(add, path+".persists", e.Persists.Condition, e.Persists.Bars, ids, reg)
+		validateTemporal(add, path+".persists", e.Persists.Condition, e.Persists.Window, e.Persists.Bars, ids, reg)
 		return
 	}
 	if e.After != nil {
-		if e.After.WithinBars <= 0 {
-			add(path+".after.withinBars", "must be positive")
-		}
+		validateWindow(add, path+".after", "within", e.After.Within, e.After.WithinBars)
 		validateExpression(add, path+".after.event", e.After.Event, ids, reg)
 		validateExpression(add, path+".after.predecessor", e.After.Predecessor, ids, reg)
 		return
@@ -561,11 +620,23 @@ func validateZonePredicate(add func(string, string), path string, predicate Zone
 	}
 }
 
-func validateTemporal(add func(string, string), path string, condition Expression, bars int, ids map[string]Node, reg *primitive.Registry) {
-	if bars <= 0 {
-		add(path+".bars", "must be positive")
-	}
+func validateTemporal(add func(string, string), path string, condition Expression, window core.Duration, bars int, ids map[string]Node, reg *primitive.Registry) {
+	validateWindow(add, path, "window", window, bars)
 	validateExpression(add, path+".condition", condition, ids, reg)
+}
+
+// validateWindow requires exactly one of the duration and the legacy bar
+// count. Accepting both would leave the reader — and the engine — to guess
+// which one the author meant.
+func validateWindow(add func(string, string), path, field string, window core.Duration, bars int) {
+	switch {
+	case window > 0 && bars > 0:
+		add(path+"."+field, "set a duration or a bar count, not both")
+	case window < 0:
+		add(path+"."+field, "must be positive")
+	case window == 0 && bars <= 0:
+		add(path+"."+field, "must be positive")
+	}
 }
 
 func (e Expression) empty() bool {
@@ -573,10 +644,12 @@ func (e Expression) empty() bool {
 }
 
 func (s Slots) empty() bool {
-	return len(s.Bias.All) == 0 && s.Bias.WithinBars == 0 &&
-		len(s.POI.All) == 0 && s.POI.WithinBars == 0 &&
-		len(s.Trigger.All) == 0 && s.Trigger.WithinBars == 0 &&
+	return s.Bias.empty() && s.POI.empty() && s.Trigger.empty() &&
 		s.Invalidation == "" && s.Target == ""
+}
+
+func (s SlotSpec) empty() bool {
+	return len(s.All) == 0 && s.WithinBars == 0 && s.Within == 0
 }
 
 // MigrateV1ToV2 returns a deterministic v2 document with the same v1 entry
@@ -617,8 +690,8 @@ func legacyExpression(slots Slots) Expression {
 	}
 	poi := slotExpression(slots.POI)
 	if !poi.empty() {
-		if slots.Trigger.WithinBars > 0 {
-			poi = Expression{Within: &OccurredWithin{Condition: poi, Bars: slots.Trigger.WithinBars}}
+		if slots.Trigger.Within > 0 || slots.Trigger.WithinBars > 0 {
+			poi = Expression{Within: &OccurredWithin{Condition: poi, Window: slots.Trigger.Within, Bars: slots.Trigger.WithinBars}}
 		}
 		children = append(children, poi)
 	}

@@ -17,6 +17,10 @@ A batch is done when its exit criteria pass, `make test`, `make race` and
       ├── 06 base packs   │                    └── 10 analytics ── 11 run store
       └── 09 SMC pack ────┘
                                                     12 packaging (last)
+
+07 IR + engine ── 13 multi-timeframe projection
+
+01 + 02 + 04 + 10 ── 14 equities (corporate actions, total return)
 ```
 
 ## Order
@@ -36,6 +40,8 @@ A batch is done when its exit criteria pass, `make test`, `make race` and
 | 10 | Analytics | The reason the product exists. Needs 07 stable underneath it. |
 | 11 | Run store | Trial counting and comparison, which analytics makes necessary. |
 | 12 | Packaging | Last, because everything it packages must exist. |
+| 13 | Multi-timeframe projection | The ladder the IR always described but the engine could not execute. Needs 07 stable, and blocks every higher-timeframe strategy family. |
+| 14 | Equities | A new asset vertical. Needs storage, venue adapters, the simulator and analytics already stable, because corporate actions touch all four. |
 
 ## Doc template
 

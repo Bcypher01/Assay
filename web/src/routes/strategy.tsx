@@ -282,11 +282,11 @@ function DefineRules() {
                   ))
                 )}
                 <span className="text-sm text-muted-foreground">
-                  Bias sits at the top and entry at the bottom; each rung must be
-                  the same or finer than the one above it. Entry is the chart the
-                  run loads — coarser rungs are aggregated from it and read at
-                  their close. Leave all three the same for a single-timeframe
-                  study.
+                  Bias sits at the top and entry at the bottom; each rung must
+                  be the same or finer than the one above it. Entry is the chart
+                  the run loads — coarser rungs are aggregated from it and read
+                  at their close. Leave all three the same for a
+                  single-timeframe study.
                 </span>
                 {symbol &&
                 document.timeframes.entry &&

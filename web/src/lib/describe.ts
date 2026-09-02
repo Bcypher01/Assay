@@ -159,7 +159,9 @@ export function describeLocally(doc: StrategyDoc): LocalDescription {
           ? displayTimeframe(doc.timeframes.bias)
           : 'an unselected'
       } chart, locate the setup on the ${
-        doc.timeframes.poi ? displayTimeframe(doc.timeframes.poi) : 'an unselected'
+        doc.timeframes.poi
+          ? displayTimeframe(doc.timeframes.poi)
+          : 'an unselected'
       } chart, and trigger on the ${entry} chart. `
     : `Trade ${market} on the ${entry} chart. `
   summary +=

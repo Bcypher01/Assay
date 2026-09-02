@@ -510,7 +510,7 @@ export function withNodeWindow(
         const nextAfter: Record<string, unknown> = { ...a }
         if (window) nextAfter.within = window
         else delete nextAfter.within
-        return { ...x, after: nextAfter } as Expression
+        return { ...x, after: nextAfter }
       }
     }
     if (x.node === id && Object.keys(x).length === 1) return wrap()

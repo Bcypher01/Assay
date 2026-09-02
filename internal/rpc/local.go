@@ -91,7 +91,7 @@ func NewLocalServerWithServices(cache *store.LocalStore, registry *instrument.Re
 			if err := json.Unmarshal(req.StrategyJson, &strategy); err != nil {
 				return nil, fmt.Errorf("rpc: decode strategy: %w", err)
 			}
-			tf, ok := strategy.Timeframes["entry"]
+			tf, ok := strategy.BaseTimeframe()
 			if !ok {
 				return nil, fmt.Errorf("rpc: strategy entry timeframe is required")
 			}
@@ -159,22 +159,43 @@ func NewLocalServerWithServices(cache *store.LocalStore, registry *instrument.Re
 		if req.FromMS >= req.ToMS {
 			return setuptest.Preview{}, fmt.Errorf("setup preview: fromMs must be before toMs")
 		}
-		tf, err := core.ParseTF(req.Drawing.Timeframe)
+		// The pattern is detected on the drawing timeframe, but the entry may sit
+		// on a finer one. The simulator runs on the base (finest) series while the
+		// per-pattern scoring reads the coarse detection series, so load both.
+		strategy, err := setuptest.Compile(req.Drawing)
 		if err != nil {
 			return setuptest.Preview{}, err
 		}
-		series, manifests, err := cache.Load(ctx, req.Drawing.Symbol, tf, core.Time(req.FromMS), core.Time(req.ToMS))
+		baseTF, ok := strategy.BaseTimeframe()
+		if !ok {
+			return setuptest.Preview{}, fmt.Errorf("setup preview: strategy entry timeframe is required")
+		}
+		detectionTF, err := core.ParseTF(req.Drawing.Timeframe)
 		if err != nil {
 			return setuptest.Preview{}, err
-		}
-		if len(manifests) == 0 || series.Len() == 0 {
-			return setuptest.Preview{}, fmt.Errorf("setup preview: prepare the requested historical window first")
 		}
 		spec, err := registry.Get(req.Drawing.Symbol)
 		if err != nil {
 			return setuptest.Preview{}, err
 		}
-		return setuptest.Evaluate(ctx, req.Drawing, series, *spec, store.SnapshotHash(manifests))
+		base, baseManifests, err := cache.Load(ctx, req.Drawing.Symbol, baseTF, core.Time(req.FromMS), core.Time(req.ToMS))
+		if err != nil {
+			return setuptest.Preview{}, err
+		}
+		if len(baseManifests) == 0 || base.Len() == 0 {
+			return setuptest.Preview{}, fmt.Errorf("setup preview: prepare the entry timeframe for this window first")
+		}
+		detection, detectionManifests := base, baseManifests
+		if detectionTF != baseTF {
+			detection, detectionManifests, err = cache.Load(ctx, req.Drawing.Symbol, detectionTF, core.Time(req.FromMS), core.Time(req.ToMS))
+			if err != nil {
+				return setuptest.Preview{}, err
+			}
+			if len(detectionManifests) == 0 || detection.Len() == 0 {
+				return setuptest.Preview{}, fmt.Errorf("setup preview: prepare the pattern timeframe for this window first")
+			}
+		}
+		return setuptest.EvaluateMultiTimeframe(ctx, req.Drawing, base, detection, *spec, store.SnapshotHash(baseManifests), store.SnapshotHash(detectionManifests))
 	}
 	s.SetupRunFn = func(ctx context.Context, req setuptest.RunRequest) (*assayv1.RunSummary, error) {
 		strategy, err := setuptest.Compile(req.Drawing)
@@ -504,8 +525,11 @@ func runLocal(ctx context.Context, cache *store.LocalStore, registry *instrument
 	if req.FromMs >= req.ToMs {
 		return nil, fmt.Errorf("rpc: run window must have from_ms before to_ms")
 	}
-	tf, ok := strategy.Timeframes["entry"]
-	if !ok || !tf.Valid() {
+	// The series a run loads is the finest resolution the document needs, not
+	// whatever "entry" says in isolation. Validation keeps the two equal; this
+	// derives it so the loader and the engine cannot drift apart.
+	tf, ok := strategy.BaseTimeframe()
+	if !ok {
 		return nil, fmt.Errorf("rpc: strategy entry timeframe is required")
 	}
 	symbol := strategy.Universe.Symbols[0]

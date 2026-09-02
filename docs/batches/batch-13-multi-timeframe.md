@@ -1,4 +1,4 @@
-# Batch 14 — Multi-timeframe projection
+# Batch 13 — Multi-timeframe projection
 
 ## Goal
 
@@ -17,7 +17,8 @@ Design and rationale: `docs/multi-timeframe.md`.
 Depends on 05 (primitive registry), 06 (base packs), 07 (IR + engine).
 
 Blocks the honesty surfaces the ladder makes necessary (effective sample size,
-bias-conditional breakdown, ladder sensitivity, lag ablation — batch 14), and
+bias-conditional breakdown, ladder sensitivity, lag ablation — its own batch,
+still unnumbered), and
 every strategy family in `docs/multi-timeframe.md` §5.
 
 ## Packages

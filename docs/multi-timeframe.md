@@ -1,18 +1,18 @@
 # Multi-timeframe: higher-timeframe analysis, lower-timeframe entry
 
-Status: steps 1-3 of §6 are implemented (batch 14). Steps 4 onward are still
+Status: steps 1-3 of §6 are implemented (batch 13). Steps 4 onward are still
 proposal. §3.1 was wrong and is corrected in place below.
 
 The most common workflow among discretionary traders is a ladder: form a bias on
 a coarse timeframe, locate a point of interest on a middle one, and trigger on a
-fine one. Assay's IR already described this ladder; until batch 14 its engine
+fine one. Assay's IR already described this ladder; until batch 13 its engine
 could not execute it. This document states the gap precisely, defines the
 semantics that close it, and lists the honesty surfaces that the ladder makes
 newly necessary.
 
 ---
 
-## 1. What existed before batch 14
+## 1. What existed before batch 13
 
 `ir.Strategy` carries a `Timeframes` map with `bias`, `poi` and `entry` keys, and
 every `ir.Node` carries its own `Timeframe`. `Strategy.Validate` enforces that
@@ -363,12 +363,12 @@ the multiple-testing disclosure earns its keep.
 
 1. ~~`primitive.Project` + `StalePolicy`, with table tests over the full
    timeframe ladder, explicitly asserting the coincident-close case and the
-   warmup case.~~ Done — batch 14.
+   warmup case.~~ Done — batch 13.
 2. ~~Engine: replace the `v.Len() != Series.Len()` rejection with a projection
    call. Determinism test: byte-identical output over two runs of a ladder
-   strategy.~~ Done — batch 14.
+   strategy.~~ Done — batch 13.
 3. ~~IR: duration-valued windows (§3.2); the poi ⊒ entry and node ⊒ entry
-   validation rules (§3.3).~~ Done — batch 14. The cross rule (§3.1) turned out
+   validation rules (§3.3).~~ Done — batch 13. The cross rule (§3.1) turned out
    to be unnecessary; see the correction there.
 4. Templates: convert at least two to genuine ladders — the SMC sweep/shift one
    is the obvious candidate (H4 bias, H1 POI, M15 trigger).
@@ -390,7 +390,7 @@ Then, in dependency order, the families from §5:
     as a narrow accessor.
 11. Multi-symbol series (§5.4) — its own batch, deliberately last.
 
-Steps 1-3 are one batch — `docs/batches/batch-14-multi-timeframe.md` — and
+Steps 1-3 are one batch — `docs/batches/batch-13-multi-timeframe.md` — and
 unblock everything else. Step 6 is a second, and it
 is the one that makes the feature match the product's thesis rather than merely
 matching competitors — I would not ship 7 onward without it, because the families

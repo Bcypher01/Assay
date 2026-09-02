@@ -150,7 +150,7 @@ export function describeLocally(doc: StrategyDoc): LocalDescription {
     conditions: conditionPhrases(doc, side),
   }))
   const active = branches.filter(
-    ({ entry, conditions }) => entry.enabled && conditions.length > 0,
+    ({ entry: e, conditions }) => e.enabled && conditions.length > 0,
   )
 
   let summary = isLadder(doc)
@@ -170,12 +170,12 @@ export function describeLocally(doc: StrategyDoc): LocalDescription {
       : `Enter at the next bar open when either enabled rule fires. `
   summary += `Fill at the next bar open, place the stop ${distanceText(doc.risk.stop)} away and the target ${distanceText(doc.risk.target)} away.`
 
-  const rules: LocalRule[] = branches.map(({ side, entry, conditions }) => ({
+  const rules: LocalRule[] = branches.map(({ side, entry: e, conditions }) => ({
     branch: side,
     text:
-      entry.name ||
+      e.name ||
       `${side === 'long' ? 'Buy' : 'Sell'} when ${joinClauses(conditions)}`,
-    enabled: entry.enabled,
+    enabled: e.enabled,
   }))
 
   return { summary, rules }

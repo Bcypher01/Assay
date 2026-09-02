@@ -493,7 +493,7 @@ function buildScenario(pack: string, type: string): Scenario {
     const signal: number[] = []
     let v = -0.6
     let s = -0.6
-    for (let i = 0; i < candles.length; i++) {
+    for (const _ of candles) {
       v += (rnd() - 0.35) * 0.5
       s = s * 0.7 + v * 0.3
       series.push(v)
@@ -540,7 +540,7 @@ function buildScenario(pack: string, type: string): Scenario {
     const d: number[] = []
     let v = 40
     let dv = 40
-    for (let i = 0; i < candles.length; i++) {
+    for (const _ of candles) {
       v += (rnd() - 0.45) * 26
       v = Math.max(6, Math.min(94, v))
       dv = dv * 0.6 + v * 0.4

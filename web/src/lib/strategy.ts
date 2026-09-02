@@ -263,9 +263,9 @@ export function expressionNodeIDs(value: Expression): string[] {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return
     const x = item as Record<string, unknown>
     if (typeof x.node === 'string') ids.add(x.node)
-    for (const value of Object.values(x)) {
-      if (Array.isArray(value)) value.forEach(visit)
-      else visit(value)
+    for (const child of Object.values(x)) {
+      if (Array.isArray(child)) child.forEach(visit)
+      else visit(child)
     }
   }
   visit(value)

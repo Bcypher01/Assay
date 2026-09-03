@@ -19,10 +19,13 @@ SMC / smart-money crowd (`order_block`, `breaker`, `fair_value_gap`,
 a lower-timeframe entry; and session traders (`session_high/low`,
 `bar_of_session`). Top-down multi-timeframe workflows work across the whole app.
 
-## The lever: the simulator already does what the author surface hides
+## The lever: the simulator already did what the author surface hid
 
-The single most important fact for prioritisation. `internal/sim/types.go`
-already implements, and the sim loop in `internal/sim/run.go` already executes:
+The observation that set the priority order below. Workstreams 1, 1a and 2 have
+since acted on it; this section is kept because it explains why they came first.
+
+`internal/sim/types.go` already implemented, and the sim loop in
+`internal/sim/run.go` already executed:
 
 - **Entry order types** — `Order{Type: OrderMarket | OrderLimit | OrderStop,
   Level}`, aligned to `Signals.Enter`.
@@ -34,26 +37,60 @@ A single `TargetPlan` already supports partial-close **and** break-even **and**
 trailing the remainder at once (see `realizePartial`, `MoveStopToBreakEven`,
 `updateTrailing` in `internal/sim/run.go`).
 
-But `internal/engine/engine.go` only ever emits `sim.TargetPlan{Level: target}`
-(around line 620) or an empty plan, and never populates `Signals.Orders`, so
-every simulated trade is a market entry with one fixed target and no management.
-`internal/ir/strategy.go` has no fields for any of it — `Risk` is just `Stop`,
-`Target`, `PerTrade`, and `EntryTiming` is only `next_open`.
+But `internal/engine/engine.go` only ever emitted `sim.TargetPlan{Level: target}`
+or an empty plan, and never populated `Signals.Orders`, so every simulated trade
+was a market entry with one fixed target and no management. `internal/ir/strategy.go`
+had no fields for any of it — `Risk` was just `Stop`, `Target`, `PerTrade`, and
+`EntryTiming` was only `next_open`.
 
-Consequence: the two highest-value workstreams below are **wiring already-tested
-simulation into the IR and the builder**, not new simulation. That is where the
-best return is.
+Consequence: the two highest-value workstreams below were **wiring existing
+simulation into the IR and the builder**, not new simulation. That held, with one
+correction — "already tested" did not: none of these paths had a test, and
+writing them found a bug in each. See Workstreams 1 and 2.
 
 ## Workstreams, in priority order
 
-### 1. Trade-management authoring — trailing, partial exits, break-even
+### 1. Trade-management authoring — trailing, partial exits, break-even — **done**
 
 Unlocks: nearly every serious trader manages trades, so this alone moves a large
 share of the population from "can't express my exit" to "can".
 
-Current state: fully simulated (above), fully hidden from the author.
+Shipped as `ir.Management`, an optional block on `Risk`:
 
-Design: extend the v2 exit surface in `internal/ir/strategy.go`. The minimal,
+```json
+"risk": {
+  "stop":   {"unit": "pips", "value": 20},
+  "target": {"unit": "pips", "value": 40},
+  "management": {"close": 0.5, "breakEven": true, "trail": {"unit": "pips", "value": 15}}
+}
+```
+
+The close fraction is decimal at the authoring boundary for the same reason a
+`Distance` is; the trail carries a unit and is resolved from the actual entry
+fill by the simulator, via the new `TargetPlan.TrailSpec`, exactly as
+`StopSpec`/`TargetSpec` are. Absent management serialises to nothing, so every
+document written before this keeps its `Strategy.Hash()`. The engine populates
+the plan in `targetPlan`; the builder authors it under "Trade management" and
+`describe.ts` reads it back in plain English.
+
+Two corrections to the survey above, found while building it:
+
+- The management path was **implemented but had no test at all** — `internal/sim`
+  covered neither partials, break-even, nor trailing. It does now
+  (`internal/sim/management_test.go`).
+- Writing those tests surfaced a real bug: `Run` added a partial close to the
+  equity curve and then **cleared it from the position**, so a partially closed
+  trade's own `Pessimistic`/`Optimistic` totals omitted the realised part. Every
+  per-trade statistic — win rate, expectancy, profit factor — would have
+  disagreed with the equity curve. `realizePartial` now returns the outcome it
+  realised, the caller applies that to equity once, and the trade keeps it.
+
+Validation refuses management the simulator would not perform, rather than
+ignoring a control the user ticked: break-even without a partial close (a full
+exit leaves nothing to protect) and an ATR trail are both field errors. On ATR,
+see "Known gap" below.
+
+Design (as built): extend the v2 exit surface in `internal/ir/strategy.go`. The minimal,
 sim-matching shape needs no engine simulation change because one `TargetPlan`
 already carries all three behaviours:
 
@@ -79,25 +116,81 @@ Follow-up (needs sim work, not v1): multiple laddered partial targets per
 position. `Signals.TargetPlan` is one plan per entry today; a target ladder means
 a list of targets per position and sequenced realisation in `run.go`.
 
-Effort: medium. Sim risk: low (capability exists and is tested).
+Effort: medium. Sim risk: low (capability existed; it is now also tested).
 
-### 2. Entry order types — limit and stop entries
+### 1a. ATR distances actually resolve — **done**
+
+A silent-failure path found while building Workstream 1, and fixed with it.
+
+`internal/sim/run.go` resolved every unit-carrying distance with
+`Ticks(cfg.Spec.PipTicks, fill, 0)` — the ATR argument was always zero. A
+`{"unit":"atr"}` stop or target therefore resolved to a zero distance, `sizeFor`
+returned zero lots, and the entry was dropped: an **ATR-based study produced no
+trades and gave no reason**, while the builder offered `× ATR` in both unit
+pickers.
+
+The fix threads a real ATR through the pipeline without breaking any layer:
+
+- `Signals.ATR` carries the reading per entry, aligned to `Enter`'s set bits
+  like `Side` and `StopLevel`. The simulator holds no indicators of its own, so
+  the value has to come from the caller.
+- The engine resolves it in `resolvePlan` by evaluating the registered
+  `indicator/atr` primitive through the same registry, cache and alignment as
+  any other node, so the number matches the detector exactly rather than
+  reimplementing Wilder's average.
+- A `Distance` carries no period, so `engine.ATRPeriod` commits to the standard
+  14 and every surface that offers the unit now says `× ATR(14)` instead of
+  letting each one assume its own.
+- The reading is taken at the **signal** bar, not the fill bar, because the fill
+  happens on a bar the signal cannot see.
+- A rule that fires before the ATR has warmed up is reported as an
+  `atr_warmup` near miss and persisted with the other diagnostics, rather than
+  being sized to nothing and vanishing.
+
+### 2. Entry order types — limit and stop entries — **done**
 
 Unlocks: "enter at my level" and "buy the breakout beyond X" — how most traders
-actually enter, versus the current next-bar-open market fill only.
+actually enter, versus the previous next-bar-open market fill only.
 
-Current state: `sim.Order{Type, Level}` exists and the sim aligns and fills it;
-the engine never emits it; the IR has no order concept.
+Shipped as `ir.Order`, optional on `Entries`:
 
-Design: add an optional order to each entry branch in `internal/ir/strategy.go`
-— a type (`market` default, `limit`, `stop`) and a trigger level. The level can
-reference a level primitive (as `Slots.Invalidation`/`Target` already do) or be a
-fixed offset from the signal bar. Validation: limit/stop require a level; a
-market order forbids one. Emit `sim.Order` per entry in the engine.
+```json
+"entries": {
+  "timing": "next_open",
+  "order": {"type": "limit", "offset": {"unit": "pips", "value": 10}},
+  "long": { "...": "..." }
+}
+```
 
-Builder: an order-type control on the entry, with a level picker when not market.
+The trigger is either a **level primitive** read at the signal bar (`"node"`) or
+an **offset** from the signal bar's close (`"offset"`), never both, and a market
+order may carry neither — all three are field errors rather than settings the
+run quietly ignores. The offset is resolved by the simulator through the new
+`Order.Spec`/`Order.Ref`, for the same reason the trail is: only the simulator
+knows the tick size. Sign is derived from the order type, so a long limit rests
+below the close and a long stop above it.
 
-Effort: medium. Sim risk: low (capability exists).
+The order lives on `Entries` rather than on each branch, because the engine runs
+one side per study; it is honoured only for schema v2, since a v1 document
+hashes without `Entries` and two documents with the same identity must not run
+differently.
+
+**The honesty problem this creates, and the fix.** A resting order is good for
+one bar and is then withdrawn — it does not wait for price to come back. Under
+the old code an unfilled order was `continue`d away, so a limit study would have
+reported "50 signals, 12 trades" with nothing to explain the gap. `RunResult`
+now carries `Unfilled`, it is on the wire in `RunSummary` and `RunDetails`, and
+the run view says plainly that fewer trades is the rule's own behaviour rather
+than missing setups.
+
+Builder: an entry-order control offering market, limit and stop with a
+distance-and-unit offset. The level-primitive form is supported by the document,
+validation and engine but is not in the guided picker, because the client has no
+primitive-kind metadata to filter the node list with — worth adding when that
+metadata reaches the client.
+
+Effort: medium, as estimated. Sim risk: low (the fill logic existed and is
+gap-aware); the new work was the offset resolution and the unfilled reporting.
 
 ### 3. Reference levels and VWAP
 
@@ -166,8 +259,9 @@ than backlog items:
 
 ## Recommended sequence
 
-1 → 2 → 3 → 4. Workstreams 1 and 2 are pure exposure of already-simulated,
-already-tested engine behaviour: highest return, lowest risk. Workstream 3 is
+1, 1a and 2 are done. Next is 3, then 4. Workstreams 1 and 2 were largely
+exposure of already-simulated engine behaviour, which is why they came first —
+though both turned out to hide a reporting bug that had to be fixed with them. Workstream 3 is
 cheap now that projection has landed and opens a large new segment. Workstream 4
 is additive and demand-driven.
 

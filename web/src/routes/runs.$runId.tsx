@@ -238,6 +238,21 @@ function ResultPage() {
         </Alert>
       ) : null}
 
+      {details.unfilled ? (
+        <Alert variant="warning">
+          <AlertTriangle />
+          <AlertTitle>Some entries never filled</AlertTitle>
+          <AlertDescription>
+            {details.unfilled} entry signal
+            {details.unfilled === 1 ? '' : 's'} placed a limit or stop order
+            that the following bar never reached, so no position was opened. The
+            order is good for that bar only; it does not rest until price comes
+            back. Fewer trades here is the strategy&rsquo;s own behaviour, not
+            missing setups.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       {/* The verdict and the headline numbers are the answer to the
           question the user actually asked. Everything below them is the
           working, and is kept out of the way until it is wanted. */}

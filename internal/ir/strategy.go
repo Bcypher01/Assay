@@ -32,7 +32,73 @@ type Risk struct {
 	Stop     core.Distance `json:"stop"`
 	Target   core.Distance `json:"target"`
 	PerTrade core.Ratio    `json:"perTrade"`
+	// Management is optional. Absent, a position closes entirely at its target
+	// and its stop never moves, which is what every document written before
+	// management existed meant. Absent it also serialises to nothing, so those
+	// documents keep their Hash.
+	Management *Management `json:"management,omitempty"`
 }
+
+// Management describes what happens to a position when its target is reached
+// and how the remaining stop follows price afterwards.
+type Management struct {
+	// Close is the fraction of the position taken at the target, 0 < close <= 1.
+	// One, and the zero value, both close the whole position.
+	Close core.Ratio
+	// BreakEven moves the remaining stop to the entry fill once the target has
+	// taken its partial close.
+	BreakEven bool
+	// Trail follows the stop behind the extreme of each bar by this distance.
+	// A zero distance leaves the stop where it was placed.
+	Trail core.Distance
+}
+
+// Partial reports whether the target leaves part of the position open.
+func (m Management) Partial() bool { return m.Close > 0 && m.Close < core.One }
+
+// MarshalJSON keeps the close fraction readable at the authoring boundary for
+// the same reason Distance does: the fixed-point Ratio is an internal detail,
+// and a document says {"close":0.5}, not a scaled integer.
+func (m Management) MarshalJSON() ([]byte, error) {
+	out := struct {
+		Close     float64        `json:"close,omitempty"`
+		BreakEven bool           `json:"breakEven,omitempty"`
+		Trail     *core.Distance `json:"trail,omitempty"`
+	}{Close: m.Close.Float64(), BreakEven: m.BreakEven}
+	if m.Trail.Value != 0 {
+		trail := m.Trail
+		out.Trail = &trail
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalJSON accepts the decimal close fraction and an optional trail
+// distance, which carries its unit like every other distance in a document.
+func (m *Management) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Close     json.Number    `json:"close"`
+		BreakEven bool           `json:"breakEven"`
+		Trail     *core.Distance `json:"trail"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(&raw); err != nil {
+		return fmt.Errorf("management: decode: %w", err)
+	}
+	*m = Management{BreakEven: raw.BreakEven}
+	if raw.Close != "" {
+		fraction, err := raw.Close.Float64()
+		if err != nil {
+			return fmt.Errorf("management: close: %w", err)
+		}
+		m.Close = core.RatioFromFloat(fraction)
+	}
+	if raw.Trail != nil {
+		m.Trail = *raw.Trail
+	}
+	return nil
+}
+
 type Node struct {
 	ID        string          `json:"id"`
 	Pack      string          `json:"pack"`
@@ -66,6 +132,41 @@ type Slots struct {
 type EntryTiming string
 
 const EntryTimingNextOpen EntryTiming = "next_open"
+
+// OrderType selects what turns an entry signal into a position.
+type OrderType string
+
+const (
+	// OrderMarket takes the next bar's open. It is the zero value, and what
+	// every document written before order types existed meant.
+	OrderMarket OrderType = "market"
+	// OrderLimit rests at a level better than the market and fills if price
+	// trades back to it.
+	OrderLimit OrderType = "limit"
+	// OrderStop rests at a level beyond the market and fills if price breaks
+	// out to it.
+	OrderStop OrderType = "stop"
+)
+
+// Order is how an entry signal reaches the market. A limit or stop order needs
+// a trigger level, given either as a level primitive read at the signal bar or
+// as a signed offset from that bar's close.
+//
+// The order is good for the bar after the signal only. It does not rest across
+// bars: an order that bar never reaches is not filled and the signal passes,
+// which the run reports as an unfilled entry rather than dropping in silence.
+type Order struct {
+	Type OrderType `json:"type,omitempty"`
+	// Node names a level primitive whose reading at the signal bar is the
+	// trigger price.
+	Node string `json:"node,omitempty"`
+	// Offset places the trigger that far from the signal bar's close, on the
+	// side the order type implies: a long limit below it, a long stop above.
+	Offset *core.Distance `json:"offset,omitempty"`
+}
+
+// Resting reports whether the order needs a trigger level.
+func (o Order) Resting() bool { return o.Type == OrderLimit || o.Type == OrderStop }
 
 type Template struct {
 	ID      string `json:"id"`
@@ -223,8 +324,13 @@ type EntryBranch struct {
 
 type Entries struct {
 	Timing EntryTiming `json:"timing,omitempty"`
-	Long   EntryBranch `json:"long"`
-	Short  EntryBranch `json:"short"`
+	// Order is optional. Absent, entries reach the market at the next bar's
+	// open, and the document serialises exactly as it did before order types
+	// existed, so its Hash does not move. The engine runs one side per study,
+	// so the order belongs to the entry rather than to each branch.
+	Order *Order      `json:"order,omitempty"`
+	Long  EntryBranch `json:"long"`
+	Short EntryBranch `json:"short"`
 }
 type Strategy struct {
 	Schema     string             `json:"schema"`
@@ -291,6 +397,7 @@ func (s *Strategy) Validate(reg *primitive.Registry) []ValidationError {
 	if s.Risk.Target.Value <= 0 {
 		add("risk.target", "must be positive")
 	}
+	validateManagement(add, s.Risk.Management)
 	ids := map[string]Node{}
 	for i, n := range s.Nodes {
 		p := fmt.Sprintf("nodes[%d]", i)
@@ -454,10 +561,72 @@ func (s *Strategy) Hash() string {
 	return hex.EncodeToString(sum[:])
 }
 
+// validateManagement rejects management a document implies but the simulator
+// would not perform. Silently ignoring a tickbox is how a backtester starts
+// lying about the rule it ran.
+func validateManagement(add func(string, string), m *Management) {
+	if m == nil {
+		return
+	}
+	if m.Close < 0 || m.Close > core.One {
+		add("risk.management.close", "must be a fraction between 0 and 1")
+	}
+	if m.BreakEven && !m.Partial() {
+		add("risk.management.breakEven", "requires a partial close: closing the whole position at the target leaves nothing to move to break-even")
+	}
+	if m.Trail.Value < 0 {
+		add("risk.management.trail", "must not be negative")
+	}
+}
+
+// validateOrder rejects an order the simulator could not place. A resting order
+// with no level, or a market order carrying one, would otherwise be authored as
+// something the run quietly does not do.
+func validateOrder(add func(string, string), o *Order, ids map[string]Node, reg *primitive.Registry) {
+	if o == nil {
+		return
+	}
+	switch o.Type {
+	case "", OrderMarket:
+		if o.Node != "" || o.Offset != nil {
+			add("entries.order.type", "a market order fills at the next bar open and takes no trigger level")
+		}
+		return
+	case OrderLimit, OrderStop:
+	default:
+		add("entries.order.type", "must be market, limit, or stop")
+		return
+	}
+	switch {
+	case o.Node == "" && o.Offset == nil:
+		add("entries.order", "a limit or stop order needs a trigger level: name a level primitive or give an offset")
+	case o.Node != "" && o.Offset != nil:
+		add("entries.order", "give a trigger level or an offset, not both")
+	}
+	if o.Offset != nil && o.Offset.Value <= 0 {
+		add("entries.order.offset", "must be positive; the order type already decides which side of the close it sits on")
+	}
+	if o.Node == "" {
+		return
+	}
+	n, ok := ids[o.Node]
+	if !ok {
+		add("entries.order.node", "unknown node")
+		return
+	}
+	if reg != nil {
+		p, _ := reg.Get(n.Pack, n.Type)
+		if p != nil && p.Spec().Out != primitive.KindLevel {
+			add("entries.order.node", "must reference a level primitive")
+		}
+	}
+}
+
 func validateV2Entries(add func(string, string), entries Entries, ids map[string]Node, reg *primitive.Registry) {
 	if entries.Timing != "" && entries.Timing != EntryTimingNextOpen {
 		add("entries.timing", "only next_open is currently supported")
 	}
+	validateOrder(add, entries.Order, ids, reg)
 	branches := []struct {
 		name   string
 		branch EntryBranch

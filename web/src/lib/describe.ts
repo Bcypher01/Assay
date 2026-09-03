@@ -5,7 +5,13 @@ import {
   isLadder,
   nodeWindowOf,
 } from '@/lib/strategy'
-import type { Distance, StrategyDoc, StrategyNode } from '@/lib/strategy'
+import type {
+  Distance,
+  EntryOrder,
+  Management,
+  StrategyDoc,
+  StrategyNode,
+} from '@/lib/strategy'
 import { displayDuration } from '@/lib/duration'
 
 /**
@@ -26,6 +32,39 @@ export interface LocalRule {
   enabled: boolean
 }
 
+/**
+ * Read the entry order back. A resting order is the one place a study can
+ * signal and not trade, so the sentence says so rather than implying every
+ * signal becomes a position.
+ */
+function orderText(o: EntryOrder | undefined): string {
+  if (!o || !o.type || o.type === 'market') return 'Fill at the next bar open'
+  const where = o.node
+    ? `the level from “${o.node}”`
+    : o.offset
+      ? `${distanceText(o.offset)} ${o.type === 'limit' ? 'better than' : 'beyond'} the signal bar's close`
+      : 'its trigger level'
+  return `Rest a ${o.type} order at ${where} for the next bar only, and skip the signal if it never fills`
+}
+
+/**
+ * Read the trade management back in the same voice as the rest of the summary.
+ * A user must be able to see the management they authored without opening the
+ * document, or the tickbox and the simulated rule can drift apart unnoticed.
+ */
+function managementText(m: Management | undefined): string {
+  if (!m) return ''
+  const parts: string[] = []
+  if (m.close && m.close > 0 && m.close < 1) {
+    parts.push(
+      `close ${Math.round(m.close * 100)}% of the position at the target and let the rest run`,
+    )
+    if (m.breakEven) parts.push('move the stop to break-even once that happens')
+  }
+  if (m.trail) parts.push(`trail the stop ${distanceText(m.trail)} behind`)
+  return parts.length ? ` Then ${joinClauses(parts)}.` : ''
+}
+
 export interface LocalDescription {
   summary: string
   rules: LocalRule[]
@@ -36,7 +75,7 @@ function distanceText(d: Distance): string {
     case 'percent':
       return `${d.value}%`
     case 'atr':
-      return `${d.value}× ATR`
+      return `${d.value}× ATR(14)`
     case 'price':
       return `${d.value} in price`
     default:
@@ -168,7 +207,8 @@ export function describeLocally(doc: StrategyDoc): LocalDescription {
     active.length === 0
       ? 'No entry condition has been set yet, so nothing would ever trigger. '
       : `Enter at the next bar open when either enabled rule fires. `
-  summary += `Fill at the next bar open, place the stop ${distanceText(doc.risk.stop)} away and the target ${distanceText(doc.risk.target)} away.`
+  summary += `${orderText(doc.entries.order)}, place the stop ${distanceText(doc.risk.stop)} away and the target ${distanceText(doc.risk.target)} away.`
+  summary += managementText(doc.risk.management)
 
   const rules: LocalRule[] = branches.map(({ side, entry: e, conditions }) => ({
     branch: side,

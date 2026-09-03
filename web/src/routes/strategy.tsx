@@ -24,12 +24,20 @@ import {
   timeframesAtOrAbove,
   toEngineStrategy,
   withEntrySide,
+  withManagement,
   withNodeParams,
   withNodeTimeframe,
   withNodeWindow,
+  withOrder,
   withStarterEntry,
 } from '@/lib/strategy'
-import type { LadderSlot, StrategyDoc, StrategyNode } from '@/lib/strategy'
+import type {
+  Distance,
+  EntryOrder,
+  LadderSlot,
+  StrategyDoc,
+  StrategyNode,
+} from '@/lib/strategy'
 import { barsToDuration, displayDuration, durationToBars } from '@/lib/duration'
 import {
   isTimeframeSupportedForInstrument,
@@ -409,11 +417,67 @@ function DefineRules() {
                   }
                 />
               </Row>
-              <Row label="Entry timing">
-                <span className="text-sm">Next bar open</span>
-                <span className="font-mono text-[11px] text-muted-foreground">
-                  the only fill policy the simulator executes
-                </span>
+              <Row label="Entry order" error={errorFor('entries.order')}>
+                <OrderInput
+                  order={document.entries.order}
+                  onChange={(patch) => update(withOrder(document, patch))}
+                />
+              </Row>
+            </div>
+          </section>
+
+          <section className="space-y-1 border-t border-border pt-4">
+            <h2 className="text-base font-semibold">Trade management</h2>
+            <p className="text-sm text-muted-foreground">
+              Optional. Leave it alone and the whole position closes at the
+              target with the stop where you put it — which is what every study
+              did before these controls existed.
+            </p>
+            <div className="mt-2">
+              <Row
+                label="Take part at the target"
+                error={errorFor('risk.management.close')}
+              >
+                <PartialInput
+                  management={document.risk.management}
+                  onChange={(patch) => update(withManagement(document, patch))}
+                />
+              </Row>
+              <Row
+                label="Then move stop to break-even"
+                error={errorFor('risk.management.breakEven')}
+              >
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4"
+                    disabled={!document.risk.management?.close}
+                    checked={document.risk.management?.breakEven === true}
+                    onChange={(e) =>
+                      update(
+                        withManagement(document, {
+                          breakEven: e.target.checked,
+                        }),
+                      )
+                    }
+                  />
+                  <span className="text-muted-foreground">
+                    {document.risk.management?.close
+                      ? 'protect the remainder at your entry price'
+                      : 'needs a partial close — a full exit leaves nothing to protect'}
+                  </span>
+                </label>
+              </Row>
+              <Row
+                label="Trail the stop"
+                error={errorFor('risk.management.trail')}
+              >
+                <TrailInput
+                  trail={document.risk.management?.trail}
+                  onChange={(trail) =>
+                    update(withManagement(document, { trail }))
+                  }
+                />
               </Row>
             </div>
           </section>
@@ -655,6 +719,166 @@ function ConditionRow({
   )
 }
 
+/**
+ * How the signal reaches the market. A market order takes the next bar's open —
+ * the only fill the engine had before this control existed. A limit or stop
+ * rests at a level for that one bar and is then withdrawn; the run reports the
+ * signals whose order never filled, so a quieter study reads as the rule's own
+ * behaviour rather than as missing setups.
+ *
+ * The document can also aim the trigger at a level primitive. That form is not
+ * offered here because the guided builder does not know which of its nodes
+ * produce a price.
+ */
+function OrderInput({
+  order,
+  onChange,
+}: {
+  order: StrategyDoc['entries']['order']
+  onChange: (patch: EntryOrder | null) => void
+}) {
+  const type = order?.type ?? 'market'
+  const offset: Distance = order?.offset ?? { unit: 'pips', value: 10 }
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <select
+        className="h-9 border border-input bg-card pl-3 pr-9 text-sm"
+        value={type}
+        onChange={(e) =>
+          onChange(
+            e.target.value === 'market'
+              ? null
+              : { type: e.target.value as 'limit' | 'stop' },
+          )
+        }
+      >
+        <option value="market">Market at the next bar open</option>
+        <option value="limit">Limit — wait for price to come back</option>
+        <option value="stop">Stop — wait for the breakout</option>
+      </select>
+      {type === 'market' ? (
+        <span className="font-mono text-[11px] text-muted-foreground">
+          fills on the next bar, always
+        </span>
+      ) : order?.node ? (
+        <span className="font-mono text-[11px] text-muted-foreground">
+          at the level from “{order.node}”
+        </span>
+      ) : (
+        <>
+          <Input
+            type="number"
+            step="0.1"
+            min="0"
+            className="h-9 w-24 font-mono text-sm"
+            value={offset.value}
+            onChange={(e) =>
+              onChange({
+                type,
+                offset: { ...offset, value: Number(e.target.value) },
+              })
+            }
+          />
+          <select
+            className="h-9 border border-input bg-card pl-3 pr-9 text-sm"
+            value={offset.unit}
+            onChange={(e) =>
+              onChange({
+                type,
+                offset: { ...offset, unit: e.target.value as Distance['unit'] },
+              })
+            }
+          >
+            <option value="pips">pips</option>
+            <option value="ticks">ticks</option>
+            <option value="percent">percent</option>
+            <option value="atr">× ATR(14)</option>
+            <option value="price">price</option>
+          </select>
+          <span className="text-sm text-muted-foreground">
+            {type === 'limit' ? 'better than' : 'beyond'} the signal bar&rsquo;s
+            close
+          </span>
+        </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The partial close is authored as a percentage because that is how traders
+ * say it, and stored as the fraction the engine takes. Zero — an empty field —
+ * means no partial: the whole position leaves at the target.
+ */
+function PartialInput({
+  management,
+  onChange,
+}: {
+  management: StrategyDoc['risk']['management']
+  onChange: (patch: { close: number }) => void
+}) {
+  const percent = management?.close ? Math.round(management.close * 100) : 0
+  return (
+    <div className="flex items-center gap-2">
+      <Input
+        type="number"
+        step="5"
+        min="0"
+        max="99"
+        className="h-9 w-28 font-mono text-sm"
+        value={percent || ''}
+        placeholder="0"
+        onChange={(e) => onChange({ close: Number(e.target.value) / 100 })}
+      />
+      <span className="text-sm text-muted-foreground">
+        % of the position, the rest keeps running
+      </span>
+    </div>
+  )
+}
+
+/** A trail carries a unit like every other distance in the document. */
+function TrailInput({
+  trail,
+  onChange,
+}: {
+  trail: Distance | undefined
+  onChange: (trail: Distance) => void
+}) {
+  const current: Distance = trail ?? { unit: 'pips', value: 0 }
+  return (
+    <div className="flex items-center gap-2">
+      <Input
+        type="number"
+        step="0.1"
+        min="0"
+        className="h-9 w-28 font-mono text-sm"
+        value={current.value || ''}
+        placeholder="0"
+        onChange={(e) =>
+          onChange({ ...current, value: Number(e.target.value) })
+        }
+      />
+      <select
+        className="h-9 border border-input bg-card pl-3 pr-9 text-sm"
+        value={current.unit}
+        onChange={(e) =>
+          onChange({ ...current, unit: e.target.value as Distance['unit'] })
+        }
+      >
+        <option value="pips">pips</option>
+        <option value="ticks">ticks</option>
+        <option value="percent">percent</option>
+        <option value="atr">× ATR(14)</option>
+        <option value="price">price</option>
+      </select>
+      <span className="text-sm text-muted-foreground">
+        behind each bar&rsquo;s extreme
+      </span>
+    </div>
+  )
+}
+
 function DistanceInput({
   distance,
   onChange,
@@ -687,7 +911,7 @@ function DistanceInput({
         <option value="pips">pips</option>
         <option value="ticks">ticks</option>
         <option value="percent">percent</option>
-        <option value="atr">× ATR</option>
+        <option value="atr">× ATR(14)</option>
         <option value="price">price</option>
       </select>
     </div>

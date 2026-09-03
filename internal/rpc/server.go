@@ -572,7 +572,7 @@ func (s *Server) GetDetails(ctx context.Context, req *connect.Request[assayv1.Ge
 	if err != nil {
 		return nil, asConnectError(err)
 	}
-	d := &assayv1.RunDetails{RunId: string(run.ID), StrategyHash: run.StrategyHash, Snapshot: run.Snapshot, Name: run.Name, Period: run.Scope.Period, Instruments: append([]string(nil), run.Scope.Instruments...), OutOfSample: resultMetrics(run.Result.OutOfSample), InSample: resultMetrics(run.Result.InSample), Trials: uint32(trials), TradeListPresent: run.TradeListPresent, Assumptions: assumptionsMessage(run.Study.Assumptions), Unresolved: uint32(run.Result.Unresolved), Yearly: periodMetrics(run.Trades, "2006"), Monthly: periodMetrics(run.Trades, "2006-01")}
+	d := &assayv1.RunDetails{RunId: string(run.ID), StrategyHash: run.StrategyHash, Snapshot: run.Snapshot, Name: run.Name, Period: run.Scope.Period, Instruments: append([]string(nil), run.Scope.Instruments...), OutOfSample: resultMetrics(run.Result.OutOfSample), InSample: resultMetrics(run.Result.InSample), Trials: uint32(trials), TradeListPresent: run.TradeListPresent, Assumptions: assumptionsMessage(run.Study.Assumptions), Unresolved: uint32(run.Result.Unresolved), Unfilled: uint32(run.Result.Unfilled), Yearly: periodMetrics(run.Trades, "2006"), Monthly: periodMetrics(run.Trades, "2006-01")}
 	for _, miss := range run.Result.NearMisses {
 		d.NearMisses = append(d.NearMisses, &assayv1.NearMissSummary{Condition: miss.Condition, Count: uint32(miss.Count)})
 	}

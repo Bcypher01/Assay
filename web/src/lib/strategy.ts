@@ -30,6 +30,35 @@ export interface Expression {
   node?: string
   [key: string]: unknown
 }
+/**
+ * How a position is managed once its target is reached. Absent management is
+ * the engine's original behaviour: the whole position closes at the target and
+ * the stop never moves. It is omitted from the document when unset so existing
+ * studies keep their hash.
+ */
+export interface Management {
+  /** Fraction taken at the target, 0 < close <= 1. One closes everything. */
+  close?: number
+  /** Move the remaining stop to the entry fill after a partial close. */
+  breakEven?: boolean
+  /** Follow the stop behind each bar's extreme by this distance. */
+  trail?: Distance
+}
+export type OrderType = 'market' | 'limit' | 'stop'
+/**
+ * How an entry signal reaches the market. Absent, it is a market order at the
+ * next bar open, which is what every study did before order types existed.
+ *
+ * The order is good for the bar after the signal only — it does not rest until
+ * price comes back — and the run reports the entries that never filled.
+ */
+export interface EntryOrder {
+  type?: OrderType
+  /** A level primitive whose reading at the signal bar is the trigger price. */
+  node?: string
+  /** Or the distance from the signal bar's close to rest at. */
+  offset?: Distance
+}
 export interface EntryBranch {
   enabled: boolean
   name: string
@@ -41,9 +70,14 @@ export interface StrategyDoc {
   name: string
   universe: { symbols: string[] }
   timeframes: { bias: string; poi: string; entry: string }
-  risk: { stop: Distance; target: Distance }
+  risk: { stop: Distance; target: Distance; management?: Management }
   template: { id: string; version: number }
-  entries: { timing: 'next_open'; long: EntryBranch; short: EntryBranch }
+  entries: {
+    timing: 'next_open'
+    order?: EntryOrder
+    long: EntryBranch
+    short: EntryBranch
+  }
   nodes: StrategyNode[]
 }
 
@@ -67,6 +101,41 @@ function distance(value: unknown, fallback: Distance): Distance {
         ? raw.value
         : fallback.value,
   }
+}
+/**
+ * Parse a management block, dropping one that says nothing. A block of all
+ * defaults would change the document hash without changing the simulation.
+ */
+function management(value: unknown): Management | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const raw = value as Record<string, unknown>
+  const out: Management = {}
+  if (typeof raw.close === 'number' && raw.close > 0 && raw.close < 1)
+    out.close = raw.close
+  if (raw.breakEven === true) out.breakEven = true
+  const trail = raw.trail
+  if (trail && typeof trail === 'object' && !Array.isArray(trail)) {
+    const parsed = distance(trail, { unit: 'pips', value: 0 })
+    if (parsed.value > 0) out.trail = parsed
+  }
+  return Object.keys(out).length ? out : null
+}
+/** Parse an entry order, dropping one that would only mean "market". */
+function order(value: unknown): EntryOrder | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const raw = value as Record<string, unknown>
+  if (raw.type !== 'limit' && raw.type !== 'stop') return null
+  const out: EntryOrder = { type: raw.type }
+  if (typeof raw.node === 'string' && raw.node) {
+    out.node = raw.node
+    return out
+  }
+  const offset = raw.offset
+  if (offset && typeof offset === 'object' && !Array.isArray(offset)) {
+    const parsed = distance(offset, { unit: 'pips', value: 0 })
+    if (parsed.value > 0) out.offset = parsed
+  }
+  return out.offset ? out : null
 }
 function node(value: unknown): StrategyNode | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
@@ -165,6 +234,7 @@ export function parseStrategy(text: string): StrategyDoc | null {
     value.entries && typeof value.entries === 'object'
       ? (value.entries as Record<string, unknown>)
       : null
+  const managed = management(risk.management)
   const when = legacyWhen(value)
   const direction = value.direction
   const legacyLong = direction !== 'short'
@@ -185,6 +255,7 @@ export function parseStrategy(text: string): StrategyDoc | null {
     risk: {
       stop: distance(risk.stop, base.risk.stop),
       target: distance(risk.target, base.risk.target),
+      ...(managed ? { management: managed } : {}),
     },
     template: {
       id:
@@ -199,6 +270,7 @@ export function parseStrategy(text: string): StrategyDoc | null {
     entries: entries
       ? {
           timing: 'next_open',
+          ...(order(entries.order) ? { order: order(entries.order)! } : {}),
           long: branch(entries.long),
           short: branch(entries.short),
         }
@@ -256,6 +328,49 @@ export function withMarket(
     timeframes: { bias: timeframe, poi: timeframe, entry: timeframe },
     nodes: doc.nodes.map((n) => ({ ...n, timeframe })),
   }
+}
+/**
+ * Set or clear trade management. An empty block is removed rather than stored:
+ * management that changes nothing must not change the document, because the
+ * document's hash is the study's identity.
+ */
+export function withManagement(
+  doc: StrategyDoc,
+  patch: Management,
+): StrategyDoc {
+  const next: Management = { ...(doc.risk.management ?? {}), ...patch }
+  if (!next.close || next.close <= 0 || next.close >= 1) delete next.close
+  if (!next.breakEven) delete next.breakEven
+  if (!next.trail || next.trail.value <= 0) delete next.trail
+  // Break-even has nothing to protect without a partial close, and the engine
+  // rejects the combination rather than silently ignoring the tickbox.
+  if (!next.close) delete next.breakEven
+  const { management: _drop, ...risk } = doc.risk
+  return {
+    ...doc,
+    risk: Object.keys(next).length ? { ...risk, management: next } : risk,
+  }
+}
+/**
+ * Set or clear the entry order. A market order is stored as no order at all, so
+ * a study that never touched this control keeps the document — and therefore
+ * the hash — it already had.
+ */
+export function withOrder(
+  doc: StrategyDoc,
+  patch: EntryOrder | null,
+): StrategyDoc {
+  const { order: current, ...entries } = doc.entries
+  if (!patch || !patch.type || patch.type === 'market') {
+    return { ...doc, entries }
+  }
+  const next: EntryOrder = { ...current, ...patch }
+  // A trigger is named or offset, never both, and the engine rejects an order
+  // that carries neither.
+  if (next.node) delete next.offset
+  else if (!next.offset || next.offset.value <= 0)
+    next.offset = { unit: 'pips', value: 10 }
+  return { ...doc, entries: { ...entries, order: next } }
 }
 export function expressionNodeIDs(value: Expression): string[] {
   const ids = new Set<string>()

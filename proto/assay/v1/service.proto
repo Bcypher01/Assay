@@ -291,6 +291,10 @@ message RunSummary {
   double expectancy = 10;
   double profit_factor = 11;
   string error_code = 12;
+  // Entry signals whose resting order the next bar never reached. A limit or
+  // stop study trades less often than it signals, and hiding that would make
+  // the run look like it found fewer setups than it did.
+  uint32 unfilled = 13;
 }
 message RunUpdate {
   oneof payload {
@@ -365,6 +369,7 @@ message RunDetails {
   MonteCarloSummary monte_carlo = 18;
   SensitivityGrid sensitivity = 19;
   repeated NextAction next_actions = 20;
+  uint32 unfilled = 21;
 }
 message PeriodMetrics {
   string period = 1;

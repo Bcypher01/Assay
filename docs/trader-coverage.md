@@ -192,7 +192,7 @@ metadata reaches the client.
 Effort: medium, as estimated. Sim risk: low (the fill logic existed and is
 gap-aware); the new work was the offset resolution and the unfilled reporting.
 
-### 3. Reference levels and VWAP
+### 3. Reference levels and VWAP — **done**
 
 Unlocks: intraday, futures and level-based traders — previous-day/week/month
 high-low (PDH/PDL/PWH/PWL), the opening range, and VWAP. `docs/multi-timeframe.md`
@@ -200,21 +200,61 @@ Section 5.1 notes most of these are nearly free now that timeframe projection ha
 landed: a coarse detector emitting last completed period extremes, read from a
 fine entry chart, is one line of IR.
 
-Current state: none of these exist. `session_high/low` and `bar_of_session`
-(the `timeofday` pack) are the closest, but there is no previous-period extreme,
-no opening range, and no VWAP anywhere.
+Shipped as five detectors in `internal/packs/timeofday` — the pack the skill
+already designates for session and clock-anchored levels, so no new pack:
 
-Design: new primitives, either in `internal/packs/indicator` or a new
-`reference` pack, each with a `Spec` and registered in the primitive registry:
-`previous_day_high` / `_low` (and week/month), `opening_range_high` / `_low`
-(range of the first N minutes after a session open), and anchored VWAP
-(`session_vwap`, `week_vwap`). VWAP needs a real cumulative volume-weighted
-calculation and must carry the FX caveat from the doc — broker-native FX volume
-is tick count, not traded size, so a VWAP on `DUKAS:*` must be labelled
-tick-weighted or it silently misleads.
+- **`period_high` / `period_low`** (`PeriodExtremeParams{lookback}`). Rather
+  than six calendar-specific types, one pair reads the extreme of a completed
+  bar of its **own** timeframe. Projection supplies the calendar: a D1 node read
+  from an M15 chart is PDH/PDL, because a fine bar only ever sees closed coarse
+  bars; on W1 the same node is PWH/PWL. There is no monthly timeframe in
+  `core.TF`, so a monthly reference is not expressible yet — stated rather than
+  faked.
+- **`opening_range_high` / `_low`** (`OpeningRangeParams{startMinuteUtc,
+  rangeMinutes}`). Invalid while the range forms — publishing a range from its
+  own bars would be look-ahead — and invalid again while the next one forms, so
+  no bar is ever told "this is today's range" while today's is still building. A
+  window that would cross midnight is refused rather than silently wrapped.
+- **`session_vwap`** (`VwapParams{startMinuteUtc, endMinuteUtc}`). Typical price
+  is accumulated as `high+low+close` and divided by three only at the end, so
+  the per-bar average is never rounded before it is weighted. It resets each
+  session, so yesterday's average cannot leak into this morning, and a session
+  whose weights would exceed `int64` publishes **nothing** for the rest of that
+  session — a wrapped sum looks exactly like a price.
 
-Effort: small per primitive (projection does the multi-timeframe work); VWAP is
-the one with real calculation and a labelling caveat.
+The FX caveat is carried: `describe.ts` appends a sentence saying the VWAP is
+tick-weighted whenever the study uses `session_vwap` on a `DUKAS:` symbol,
+because broker-native FX volume is a tick count rather than traded size.
+
+**Making them reachable.** New level primitives are useless if no user can
+author one, and the guided builder composes boolean nodes only. Two catalogue
+templates now use them through the existing `PriceLevelPredicate` — a break of
+the previous day's high (a D1 level under an M15 entry, the canonical projection
+case) and an opening-range breakout — in both `internal/ir/templates.go` and the
+bundled web mirror, with `describe.ts` taught to read a price predicate as a
+relation ("the close crosses above the previous day's high") rather than
+rendering the bare level as if it were a condition.
+
+**Two integration gaps the unit tests could not have found**, both caught by
+running the template through the real engine:
+
+- `engine.parameterMessage` is a hand-maintained switch from proto schema name
+  to message. New parameter messages were missing from it, so a document using
+  one failed at run time with an error naming a proto schema rather than
+  anything the user did. There is now a test asserting every primitive the
+  registry serves has decodable parameters, which names the missing case.
+- `TestTemplateCatalogueAndDescriptionRoundTrip` pinned the catalogue size as a
+  literal `9`. It now derives the count from `ir.PopularTemplates()`, since the
+  literal only recorded how many templates existed the day it was written.
+
+**Still open:** the guided builder cannot author a price-versus-level rule by
+hand — only templates emit one — because the client has no primitive-kind
+metadata to filter a level picker with. That is the same missing metadata that
+keeps the level form of the Workstream 2 order trigger out of the picker, so one
+piece of work unblocks both.
+
+Effort: as estimated, small per primitive. VWAP was the one with real
+arithmetic, and the overflow and reset behaviour needed deciding explicitly.
 
 ### 4. Indicator long tail
 
@@ -259,7 +299,8 @@ than backlog items:
 
 ## Recommended sequence
 
-1, 1a and 2 are done. Next is 3, then 4. Workstreams 1 and 2 were largely
+1, 1a, 2 and 3 are done. Next is 4, and the primitive-kind metadata the client
+needs before a level picker can exist. Workstreams 1 and 2 were largely
 exposure of already-simulated engine behaviour, which is why they came first —
 though both turned out to hide a reporting bug that had to be fixed with them. Workstream 3 is
 cheap now that projection has landed and opens a large new segment. Workstream 4

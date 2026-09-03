@@ -32,6 +32,10 @@ const (
 	EthereumBreakoutTemplateVersion        = 1
 	BitcoinSweepShiftTemplateID            = "bitcoin-sweep-structure-shift"
 	BitcoinSweepShiftTemplateVersion       = 2
+	PreviousDayHighTemplateID              = "previous-day-high-break"
+	PreviousDayHighTemplateVersion         = 1
+	OpeningRangeBreakTemplateID            = "opening-range-break"
+	OpeningRangeBreakTemplateVersion       = 1
 )
 
 // TemplateDefinition is stable catalogue metadata for a strategy that can be
@@ -60,6 +64,8 @@ func PopularTemplates() []TemplateDefinition {
 		{BitcoinPullbackTemplateID, BitcoinPullbackTemplateVersion, "Bitcoin pullback to the 20-period average", "Crypto trend following", "Waits for BTC to pull back to its 20-period average before entering in the trend direction.", "Medium", NewBitcoinPullback},
 		{EthereumBreakoutTemplateID, EthereumBreakoutTemplateVersion, "Ethereum range compression breakout", "Crypto price action", "Enters when ETH leaves a tight range with a decisive close.", "Medium", NewEthereumRangeBreakout},
 		{BitcoinSweepShiftTemplateID, BitcoinSweepShiftTemplateVersion, "Bitcoin liquidity sweep, then structure shift", "Crypto SMC workflow", "Waits for BTC to sweep a prior extreme and confirm a directional structure shift.", "Low", NewBitcoinSweepShift},
+		{PreviousDayHighTemplateID, PreviousDayHighTemplateVersion, "Break of the previous day\u2019s high", "Reference levels", "Reads a completed daily high from an M15 chart and enters on the first close through it.", "Medium", NewPreviousDayHighBreak},
+		{OpeningRangeBreakTemplateID, OpeningRangeBreakTemplateVersion, "Opening-range breakout", "Reference levels", "Takes the range of the first 30 minutes after a fixed UTC open and enters on the first close beyond it.", "Medium", NewOpeningRangeBreak},
 	}
 }
 
@@ -353,6 +359,79 @@ func NewBitcoinSweepShift() *Strategy {
 			{ID: "bearish-structure", Pack: "smc", Type: "market_structure_bearish", Params: structureParams(), Timeframe: core.TFM15},
 		},
 	}
+}
+
+// NewPreviousDayHighBreak returns the canonical multi-timeframe reference
+// template: a daily level read from an M15 entry chart. period_high on a D1
+// node is the previous day's high when seen from a finer bar, because only
+// closed daily bars are ever visible there — the same rule that makes the
+// ladder honest is what makes this level correct.
+func NewPreviousDayHighBreak() *Strategy {
+	return &Strategy{
+		Schema:   SchemaV2,
+		Name:     "Break of the previous day\u2019s high",
+		Universe: Universe{Symbols: []string{exampleSymbol}},
+		Timeframes: map[string]core.TF{
+			"bias": core.TFD1, "poi": core.TFD1, "entry": core.TFM15,
+		},
+		Risk: Risk{
+			Stop:     core.Distance{Unit: core.UnitPips, Value: core.RatioFromInt(15)},
+			Target:   core.Distance{Unit: core.UnitPips, Value: core.RatioFromInt(30)},
+			PerTrade: core.RatioFromFloat(0.005),
+		},
+		Template: Template{ID: PreviousDayHighTemplateID, Version: PreviousDayHighTemplateVersion},
+		Entries: Entries{
+			Timing: EntryTimingNextOpen,
+			Long: EntryBranch{Enabled: true, Name: "Close crosses above the previous day\u2019s high", When: Expression{
+				Price: &PriceLevelPredicate{Node: "previous-day-high", Source: PriceClose, Relation: PriceCrossesAbove},
+			}},
+		},
+		Nodes: []Node{
+			{ID: "previous-day-high", Pack: "timeofday", Type: "period_high", Params: json.RawMessage(`{"lookback":0}`), Timeframe: core.TFD1},
+		},
+	}
+}
+
+// NewOpeningRangeBreak returns the opening-range formulation session_high
+// cannot express, because a session extreme covers the whole session.
+//
+// The window is a fixed UTC range and therefore does not follow daylight
+// saving: 13:30 UTC is the New York open for part of the year and an hour
+// after it for the rest. That is stated rather than hidden, because a window
+// that silently drifts with the calendar is a worse default than one the
+// author can see and change.
+func NewOpeningRangeBreak() *Strategy {
+	return &Strategy{
+		Schema:   SchemaV2,
+		Name:     "Opening-range breakout",
+		Universe: Universe{Symbols: []string{exampleSymbol}},
+		Timeframes: map[string]core.TF{
+			"bias": core.TFM15, "poi": core.TFM15, "entry": core.TFM15,
+		},
+		Risk: Risk{
+			Stop:     core.Distance{Unit: core.UnitPips, Value: core.RatioFromInt(12)},
+			Target:   core.Distance{Unit: core.UnitPips, Value: core.RatioFromInt(24)},
+			PerTrade: core.RatioFromFloat(0.005),
+		},
+		Template: Template{ID: OpeningRangeBreakTemplateID, Version: OpeningRangeBreakTemplateVersion},
+		Entries: Entries{
+			Timing: EntryTimingNextOpen,
+			Long: EntryBranch{Enabled: true, Name: "Close crosses above the opening range", When: Expression{
+				Price: &PriceLevelPredicate{Node: "opening-range-high", Source: PriceClose, Relation: PriceCrossesAbove},
+			}},
+			Short: EntryBranch{Enabled: true, Name: "Close crosses below the opening range", When: Expression{
+				Price: &PriceLevelPredicate{Node: "opening-range-low", Source: PriceClose, Relation: PriceCrossesBelow},
+			}},
+		},
+		Nodes: []Node{
+			{ID: "opening-range-high", Pack: "timeofday", Type: "opening_range_high", Params: openingRangeParams(), Timeframe: core.TFM15},
+			{ID: "opening-range-low", Pack: "timeofday", Type: "opening_range_low", Params: openingRangeParams(), Timeframe: core.TFM15},
+		},
+	}
+}
+
+func openingRangeParams() json.RawMessage {
+	return json.RawMessage(`{"startMinuteUtc":810,"rangeMinutes":30}`)
 }
 
 func sessionParams() json.RawMessage {

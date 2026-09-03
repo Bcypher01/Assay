@@ -32,6 +32,20 @@ message SessionParams { uint32 start_minute_utc = 1; uint32 end_minute_utc = 2; 
 message DayOfWeekParams { repeated uint32 days = 1; }
 message TimeOfDayRangeParams { uint32 start_minute_utc = 1; uint32 end_minute_utc = 2; }
 message BarOfSessionParams { uint32 start_minute_utc = 1; uint32 end_minute_utc = 2; }
+// PeriodExtremeParams selects a completed bar of the node's own timeframe.
+// lookback 0 is the most recently completed bar, 1 the one before it. Read from
+// a finer entry chart, a D1 node with lookback 0 is the previous day's high or
+// low, and a W1 node the previous week's.
+message PeriodExtremeParams { uint32 lookback = 1; }
+// OpeningRangeParams is the range of the first minutes after a session opens.
+// The level is invalid until that window has closed, so a breakout can only
+// reference a range that is already fixed.
+message OpeningRangeParams { uint32 start_minute_utc = 1; uint32 range_minutes = 2; }
+// VwapParams anchors a volume-weighted average price to a session open.
+// Volume is whatever the feed supplies: broker-native FX volume is a tick
+// count, not traded size, so a VWAP on such a symbol is tick-weighted and every
+// surface that shows it has to say so.
+message VwapParams { uint32 start_minute_utc = 1; uint32 end_minute_utc = 2; }
 
 // Smart-money concepts deliberately expose the choices that differ among
 // trading schools. All sizes are integer ticks or thousandths, never floats.

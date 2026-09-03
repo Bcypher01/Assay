@@ -58,6 +58,17 @@ interface Blueprint {
   withinBars?: number
   /** Per-rung timeframes for a genuine ladder; defaults to `timeframe`. */
   ladder?: { bias: string; poi: string; entry: string }
+  /**
+   * A level node the entry compares price against, rather than a boolean the
+   * entry simply requires. The node is stamped with `level.timeframe` when it
+   * is given, so a daily reference can sit under a finer entry chart.
+   */
+  level?: {
+    node: StrategyNode
+    timeframe?: string
+    source: 'open' | 'high' | 'low' | 'close'
+    relation: 'above' | 'below' | 'crosses_above' | 'crosses_below'
+  }
   /** Hold the point of interest live for this duration (e.g. "12h"). */
   poiWindow?: string
   /** Template version; bump when the rule structure changes. Defaults to 1. */
@@ -74,6 +85,9 @@ function build(b: Blueprint): TemplateCard {
   const poi = stamp(b.poi, poiTf)
   const trigger = stamp(b.trigger, entryTf)
   const ids = (nodes: StrategyNode[]) => nodes.map((n) => n.id)
+  const level = b.level
+    ? { ...b.level.node, timeframe: b.level.timeframe ?? entryTf }
+    : null
 
   // A point of interest can stay live for a window: a coarse level remains
   // valid across the finer bars beneath it. It is stored as the duration the
@@ -88,7 +102,7 @@ function build(b: Blueprint): TemplateCard {
     timeframes: { bias: biasTf, poi: poiTf, entry: entryTf },
     risk: { stop: b.stop, target: b.target },
     template: { id: b.id, version: b.version ?? 1 },
-    nodes: [...bias, ...poi, ...trigger],
+    nodes: [...bias, ...poi, ...trigger, ...(level ? [level] : [])],
     entries: {
       timing: 'next_open',
       long: {
@@ -99,6 +113,17 @@ function build(b: Blueprint): TemplateCard {
             ...ids(bias).map((id) => ref(id)),
             ...ids(poi).map((id) => ref(id, b.poiWindow)),
             ...ids(trigger).map((id) => ref(id)),
+            ...(level && b.level
+              ? [
+                  {
+                    price: {
+                      node: level.id,
+                      source: b.level.source,
+                      relation: b.level.relation,
+                    },
+                  },
+                ]
+              : []),
           ],
         },
       },
@@ -457,6 +482,50 @@ export const BUNDLED_TEMPLATES: TemplateCard[] = [
         'm15',
       ),
     ],
+  }),
+  build({
+    id: 'previous-day-high-break',
+    name: 'Break of the previous day\u2019s high',
+    family: 'Reference levels',
+    description:
+      'The most widely watched level in intraday trading. A daily high is read from an M15 chart, and the entry is the first close through it. Nothing is detected on a bar that has not finished.',
+    expectedFrequency: 'medium',
+    symbol: 'DUKAS:EURUSD',
+    timeframe: 'm15',
+    stop: { unit: 'pips', value: 15 },
+    target: { unit: 'pips', value: 30 },
+    ladder: { bias: 'd1', poi: 'd1', entry: 'm15' },
+    trigger: [],
+    level: {
+      node: node('pdh', 'timeofday', 'period_high', { lookback: 0 }, 'd1'),
+      timeframe: 'd1',
+      source: 'close',
+      relation: 'crosses_above',
+    },
+  }),
+  build({
+    id: 'opening-range-break',
+    name: 'Opening-range breakout',
+    family: 'Reference levels',
+    description:
+      'Takes the range of the first 30 minutes after the New York open and enters on the first close above it. The range is not published until it has finished forming, so the rule cannot see its own outcome.',
+    expectedFrequency: 'medium',
+    symbol: 'DUKAS:EURUSD',
+    timeframe: 'm15',
+    stop: { unit: 'pips', value: 12 },
+    target: { unit: 'pips', value: 24 },
+    trigger: [],
+    level: {
+      node: node(
+        'opening-range',
+        'timeofday',
+        'opening_range_high',
+        { startMinuteUtc: 810, rangeMinutes: 30 },
+        'm15',
+      ),
+      source: 'close',
+      relation: 'crosses_above',
+    },
   }),
 ]
 

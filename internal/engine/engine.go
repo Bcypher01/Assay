@@ -356,6 +356,12 @@ func parameterMessage(name string) (proto.Message, error) {
 		return &assayv1.TimeOfDayRangeParams{}, nil
 	case "assay.v1.BarOfSessionParams":
 		return &assayv1.BarOfSessionParams{}, nil
+	case "assay.v1.PeriodExtremeParams":
+		return &assayv1.PeriodExtremeParams{}, nil
+	case "assay.v1.OpeningRangeParams":
+		return &assayv1.OpeningRangeParams{}, nil
+	case "assay.v1.VwapParams":
+		return &assayv1.VwapParams{}, nil
 	case "assay.v1.MarketStructureParams":
 		return &assayv1.MarketStructureParams{}, nil
 	case "assay.v1.DisplacementParams":

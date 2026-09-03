@@ -386,6 +386,39 @@ export function expressionNodeIDs(value: Expression): string[] {
   visit(value)
   return [...ids]
 }
+/** A price-versus-level comparison inside an expression tree. */
+export interface PricePredicate {
+  node: string
+  source: 'open' | 'high' | 'low' | 'close'
+  relation: 'above' | 'below' | 'crosses_above' | 'crosses_below'
+}
+
+/**
+ * Every price predicate in an expression, in document order. They are collected
+ * separately from plain node references because a compared level is a relation,
+ * not a condition in its own right.
+ */
+export function pricePredicates(value: Expression): PricePredicate[] {
+  const out: PricePredicate[] = []
+  const visit = (item: unknown) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return
+    const x = item as Record<string, unknown>
+    const price = x.price as Record<string, unknown> | undefined
+    if (price && typeof price.node === 'string') {
+      out.push({
+        node: price.node,
+        source: (price.source as PricePredicate['source']) ?? 'close',
+        relation: (price.relation as PricePredicate['relation']) ?? 'above',
+      })
+    }
+    for (const child of Object.values(x)) {
+      if (Array.isArray(child)) child.forEach(visit)
+      else visit(child)
+    }
+  }
+  visit(value)
+  return out
+}
 export function hasEntry(doc: StrategyDoc): boolean {
   return [doc.entries.long, doc.entries.short].some(
     (entry) => entry.enabled && expressionNodeIDs(entry.when).length > 0,

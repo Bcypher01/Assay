@@ -1313,6 +1313,199 @@ export class BarOfSessionParams extends Message<BarOfSessionParams> {
 }
 
 /**
+ * PeriodExtremeParams selects a completed bar of the node's own timeframe.
+ * lookback 0 is the most recently completed bar, 1 the one before it. Read from
+ * a finer entry chart, a D1 node with lookback 0 is the previous day's high or
+ * low, and a W1 node the previous week's.
+ *
+ * @generated from message assay.v1.PeriodExtremeParams
+ */
+export class PeriodExtremeParams extends Message<PeriodExtremeParams> {
+  /**
+   * @generated from field: uint32 lookback = 1;
+   */
+  lookback = 0
+
+  constructor(data?: PartialMessage<PeriodExtremeParams>) {
+    super()
+    proto3.util.initPartial(data, this)
+  }
+
+  static readonly runtime: typeof proto3 = proto3
+  static readonly typeName = 'assay.v1.PeriodExtremeParams'
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: 'lookback', kind: 'scalar', T: 13 /* ScalarType.UINT32 */ },
+  ])
+
+  static fromBinary(
+    bytes: Uint8Array,
+    options?: Partial<BinaryReadOptions>,
+  ): PeriodExtremeParams {
+    return new PeriodExtremeParams().fromBinary(bytes, options)
+  }
+
+  static fromJson(
+    jsonValue: JsonValue,
+    options?: Partial<JsonReadOptions>,
+  ): PeriodExtremeParams {
+    return new PeriodExtremeParams().fromJson(jsonValue, options)
+  }
+
+  static fromJsonString(
+    jsonString: string,
+    options?: Partial<JsonReadOptions>,
+  ): PeriodExtremeParams {
+    return new PeriodExtremeParams().fromJsonString(jsonString, options)
+  }
+
+  static equals(
+    a: PeriodExtremeParams | PlainMessage<PeriodExtremeParams> | undefined,
+    b: PeriodExtremeParams | PlainMessage<PeriodExtremeParams> | undefined,
+  ): boolean {
+    return proto3.util.equals(PeriodExtremeParams, a, b)
+  }
+}
+
+/**
+ * OpeningRangeParams is the range of the first minutes after a session opens.
+ * The level is invalid until that window has closed, so a breakout can only
+ * reference a range that is already fixed.
+ *
+ * @generated from message assay.v1.OpeningRangeParams
+ */
+export class OpeningRangeParams extends Message<OpeningRangeParams> {
+  /**
+   * @generated from field: uint32 start_minute_utc = 1;
+   */
+  startMinuteUtc = 0
+
+  /**
+   * @generated from field: uint32 range_minutes = 2;
+   */
+  rangeMinutes = 0
+
+  constructor(data?: PartialMessage<OpeningRangeParams>) {
+    super()
+    proto3.util.initPartial(data, this)
+  }
+
+  static readonly runtime: typeof proto3 = proto3
+  static readonly typeName = 'assay.v1.OpeningRangeParams'
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    {
+      no: 1,
+      name: 'start_minute_utc',
+      kind: 'scalar',
+      T: 13 /* ScalarType.UINT32 */,
+    },
+    {
+      no: 2,
+      name: 'range_minutes',
+      kind: 'scalar',
+      T: 13 /* ScalarType.UINT32 */,
+    },
+  ])
+
+  static fromBinary(
+    bytes: Uint8Array,
+    options?: Partial<BinaryReadOptions>,
+  ): OpeningRangeParams {
+    return new OpeningRangeParams().fromBinary(bytes, options)
+  }
+
+  static fromJson(
+    jsonValue: JsonValue,
+    options?: Partial<JsonReadOptions>,
+  ): OpeningRangeParams {
+    return new OpeningRangeParams().fromJson(jsonValue, options)
+  }
+
+  static fromJsonString(
+    jsonString: string,
+    options?: Partial<JsonReadOptions>,
+  ): OpeningRangeParams {
+    return new OpeningRangeParams().fromJsonString(jsonString, options)
+  }
+
+  static equals(
+    a: OpeningRangeParams | PlainMessage<OpeningRangeParams> | undefined,
+    b: OpeningRangeParams | PlainMessage<OpeningRangeParams> | undefined,
+  ): boolean {
+    return proto3.util.equals(OpeningRangeParams, a, b)
+  }
+}
+
+/**
+ * VwapParams anchors a volume-weighted average price to a session open.
+ * Volume is whatever the feed supplies: broker-native FX volume is a tick
+ * count, not traded size, so a VWAP on such a symbol is tick-weighted and every
+ * surface that shows it has to say so.
+ *
+ * @generated from message assay.v1.VwapParams
+ */
+export class VwapParams extends Message<VwapParams> {
+  /**
+   * @generated from field: uint32 start_minute_utc = 1;
+   */
+  startMinuteUtc = 0
+
+  /**
+   * @generated from field: uint32 end_minute_utc = 2;
+   */
+  endMinuteUtc = 0
+
+  constructor(data?: PartialMessage<VwapParams>) {
+    super()
+    proto3.util.initPartial(data, this)
+  }
+
+  static readonly runtime: typeof proto3 = proto3
+  static readonly typeName = 'assay.v1.VwapParams'
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    {
+      no: 1,
+      name: 'start_minute_utc',
+      kind: 'scalar',
+      T: 13 /* ScalarType.UINT32 */,
+    },
+    {
+      no: 2,
+      name: 'end_minute_utc',
+      kind: 'scalar',
+      T: 13 /* ScalarType.UINT32 */,
+    },
+  ])
+
+  static fromBinary(
+    bytes: Uint8Array,
+    options?: Partial<BinaryReadOptions>,
+  ): VwapParams {
+    return new VwapParams().fromBinary(bytes, options)
+  }
+
+  static fromJson(
+    jsonValue: JsonValue,
+    options?: Partial<JsonReadOptions>,
+  ): VwapParams {
+    return new VwapParams().fromJson(jsonValue, options)
+  }
+
+  static fromJsonString(
+    jsonString: string,
+    options?: Partial<JsonReadOptions>,
+  ): VwapParams {
+    return new VwapParams().fromJsonString(jsonString, options)
+  }
+
+  static equals(
+    a: VwapParams | PlainMessage<VwapParams> | undefined,
+    b: VwapParams | PlainMessage<VwapParams> | undefined,
+  ): boolean {
+    return proto3.util.equals(VwapParams, a, b)
+  }
+}
+
+/**
  * Smart-money concepts deliberately expose the choices that differ among
  * trading schools. All sizes are integer ticks or thousandths, never floats.
  *

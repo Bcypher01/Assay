@@ -144,7 +144,7 @@ body {
   }
 }
 
-/* Run Log visual system — adapted from design/run-log-prototype.html. */
+/* Run Log visual system. */
 :root {
   --background: 198 14% 89%;
   --foreground: 199 33% 9%;
@@ -217,10 +217,9 @@ body {
 }
 
 /* =====================================================================
-   TOUCHSTONE — polish on top of the Run Log system, adapted from
-   design/direction-touchstone.html. The colours stay the Run Log HSL
-   tokens above; this adds the concentric radii ramp, a three-tier shadow
-   ramp, and one eased motion language.
+   TOUCHSTONE — polish on top of the Run Log system. The colours stay the
+   Run Log HSL tokens above; this adds the concentric radii ramp, a
+   three-tier shadow ramp, and one eased motion language.
    ===================================================================== */
 :root {
   --r-card: 20px;

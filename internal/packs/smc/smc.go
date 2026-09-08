@@ -210,7 +210,7 @@ type liveZone struct {
 }
 
 func (x *fairValueGap) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.Value, error) {
-	out := make([]primitive.Zone, s.Len())
+	out := primitive.AllocZones(s.Len())
 	valid := core.NewBitset(s.Len())
 	live := make([]liveZone, 0)
 	for i := range s.Time {
@@ -313,7 +313,7 @@ type orderBlock struct {
 }
 
 func (x *orderBlock) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.Value, error) {
-	out, v := make([]primitive.Zone, s.Len()), core.NewBitset(s.Len())
+	out, v := primitive.AllocZones(s.Len()), core.NewBitset(s.Len())
 	for i := range s.Time {
 		rangeSize := s.High[i] - s.Low[i]
 		body := (s.Close[i] - s.Open[i]).Abs()
@@ -608,7 +608,7 @@ type premiumDiscount struct {
 }
 
 func (x *premiumDiscount) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.Value, error) {
-	out := make([]primitive.Zone, s.Len())
+	out := primitive.AllocZones(s.Len())
 	v := core.NewBitset(s.Len())
 	for i := x.n - 1; i < s.Len(); i++ {
 		hi, lo := s.High[i], s.Low[i]

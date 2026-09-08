@@ -23,6 +23,7 @@ export type SetupKind =
   | 'order_block_retest'
   | 'breaker_retest'
   | 'fair_value_gap_retest'
+  | 'poi_shift_entry'
 export type SetupSide = 'long' | 'short'
 
 export interface PrecedentBar {
@@ -404,6 +405,13 @@ export const SETUP_KINDS: Array<{
     blurb: 'An opposing zone flips, then gets retested.',
     rule: 'the first return to an opposing zone after it flips side',
   },
+  {
+    id: 'poi_shift_entry',
+    label: 'HTF zone + shift',
+    blurb:
+      'A point of interest on the higher timeframe, entered on the scaled-down chart.',
+    rule: 'a displacement candle closing in your direction while price is inside the higher-timeframe point-of-interest zone',
+  },
 ]
 
 /** Bounds mirrored from `Drawing.Validate` so the UI fails before the server. */
@@ -446,6 +454,12 @@ export function validateDrawing(d: Drawing): Record<string, string> {
       errors.entryTimeframe =
         'Entry timeframe must be the same as or finer than the pattern timeframe.'
   }
+  if (
+    d.kind === 'poi_shift_entry' &&
+    (!d.entryTimeframe || d.entryTimeframe === d.timeframe)
+  )
+    errors.entryTimeframe =
+      'A top-down setup needs a finer entry timeframe: scale down to M15 or M30.'
   if (d.kind === 'fair_value_gap_retest' && d.minSizeTicks < 1)
     errors.minSizeTicks = 'Must be at least 1 tick.'
   if (

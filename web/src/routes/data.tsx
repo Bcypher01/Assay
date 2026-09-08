@@ -262,7 +262,7 @@ function DataScreen() {
   const cancel = () => abortRef.current?.abort()
 
   return (
-    <div className="space-y-8">
+    <div className="page-form">
       <PageHeader
         step={4}
         title="Prepare the history"

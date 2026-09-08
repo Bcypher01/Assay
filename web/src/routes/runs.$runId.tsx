@@ -204,11 +204,9 @@ function ResultPage() {
     }
   }
   return (
-    <div className="space-y-6">
+    <div className="page-form">
       <header>
-        <p className="text-sm text-muted-foreground">
-          Tested on {period(details.period)}
-        </p>
+        <p className="kicker">Tested on {period(details.period)}</p>
         <h1 className="text-3xl font-semibold">
           {details.name || 'Strategy result'}
         </h1>
@@ -253,47 +251,31 @@ function ResultPage() {
         </Alert>
       ) : null}
 
-      {/* The verdict and the headline numbers are the answer to the
-          question the user actually asked. Everything below them is the
-          working, and is kept out of the way until it is wanted. */}
-      <Card className="border-primary/30">
-        <CardHeader>
-          <Badge className="w-fit" variant={verdict.tone}>
-            {verdict.label}
-          </Badge>
-          <CardTitle>{verdict.title}</CardTitle>
-          <CardDescription>{verdict.body}</CardDescription>
-        </CardHeader>
+      {/* The verdict forms the headline answer — a single spoken judgement,
+          then the failing checks as a short list. Nothing here is buried. */}
+      <section className="verdict-hero" data-tone={verdict.tone}>
+        <div className="verdict-head">
+          <p className="verdict-word">{verdict.label}</p>
+        </div>
+        <p className="verdict-dek">{verdict.body}</p>
         {verdict.reasons.length > 0 ? (
-          <CardContent>
-            <ul className="grid gap-px overflow-hidden border border-border bg-border sm:grid-cols-2">
-              {verdict.reasons.map((reason) => (
-                <li
-                  key={reason.check}
-                  className="flex items-start gap-3 bg-card p-3"
-                >
-                  <AlertTriangle
-                    className="mt-0.5 size-4 shrink-0 text-warning"
-                    aria-hidden="true"
-                  />
-                  <span className="min-w-0">
-                    <span className="block font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                      {reason.check}
-                    </span>
-                    <span className="text-sm">{reason.detail}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
+          <ul className="verdict-checks">
+            {verdict.reasons.map((reason) => (
+              <li key={reason.check}>
+                <span className="verdict-check-name">{reason.check}</span>
+                <span className="verdict-check-detail">{reason.detail}</span>
+              </li>
+            ))}
+          </ul>
         ) : null}
-      </Card>
+      </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="ledger">
         <Metric
           label="Ending balance"
           hint="what the account was worth at the end"
           value={moneyBounded(out?.finalEquity)}
+          tone={equityTone(out?.finalEquity?.pessimistic, details)}
         />
         <Metric
           label="Win rate"
@@ -314,6 +296,7 @@ function ResultPage() {
           label="Worst fall"
           hint="largest drop from a high point before recovering"
           value={moneyBounded(out?.maxDrawdown)}
+          tone={toneFor(out?.maxDrawdown?.pessimistic)}
         />
         <Metric
           label="Profit factor"
@@ -324,6 +307,7 @@ function ResultPage() {
           label="Average per trade"
           hint="what a single trade was worth on average"
           value={moneyBounded(out?.expectancy)}
+          tone={toneFor(out?.expectancy?.pessimistic)}
         />
       </section>
 
@@ -912,6 +896,30 @@ function RunComparison({
 type Reason = { check: string; detail: string }
 
 function evidenceVerdict(details: Details) {
+  const trades = details.outOfSample?.trades ?? 0
+  const outcome = details.outOfSample?.expectancy?.pessimistic ?? 0
+
+  // A strategy that never traded cannot fail any check — it produced no sample
+  // to weigh. Every robustness panel (unseen, triple-cost, nearby-settings)
+  // would read "worse than 1" purely because zero is not positive, which would
+  // accuse a strategy of losing money it never had a chance to. Report it as
+  // "no trades" with a single, honest reason instead of five invented ones.
+  if (trades === 0) {
+    return {
+      label: 'No trades',
+      title: 'The rules opened no positions on the tested history',
+      body: 'Zero fills means there is nothing to judge a rule on — no profit, no loss, and no evidence either way. The strategy either produced no entry signals on this sample or never filled one. The “Every detail” tab shows the conditions that almost fired.',
+      tone: 'warning' as const,
+      reasons: [
+        {
+          check: 'Sample size',
+          detail:
+            '0 trades — a rule must actually trade before a backtest can say anything about it',
+        },
+      ],
+    }
+  }
+
   const unseenFails = details.walkForward.some(
     (window) => (window.outOfSample?.expectancy?.pessimistic ?? 0) <= 0,
   )
@@ -924,8 +932,7 @@ function evidenceVerdict(details: Details) {
     details.sensitivity.cells.some(
       (cell) => (cell.metrics?.expectancy?.pessimistic ?? 0) <= 0,
     )
-  const trades = details.outOfSample?.trades ?? 0
-  const outcomeFails = (details.outOfSample?.expectancy?.pessimistic ?? 0) <= 0
+  const outcomeFails = outcome <= 0
   const basePositive = !outcomeFails && trades >= 100
   if (basePositive && !unseenFails && !costFails && !sensitivityFails)
     return {
@@ -1117,24 +1124,35 @@ function Metric({
   label,
   value,
   hint,
+  tone,
 }: {
   label: string
   value: string
   hint?: string
+  tone?: 'up' | 'down' | 'seal' | 'caution'
 }) {
   return (
-    <Card>
-      <CardContent className="p-4">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="mt-1 text-xl font-semibold">{value}</p>
-        {hint ? (
-          <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-            {hint}
-          </p>
-        ) : null}
-      </CardContent>
-    </Card>
+    <div className="ledger-cell" data-tone={tone}>
+      <small>{label}</small>
+      <b>{value}</b>
+      {hint ? <em>{hint}</em> : null}
+    </div>
   )
+}
+const toneFor = (value: number | undefined) => {
+  if (value === undefined || value === 0) return undefined
+  if (value < 0) return 'down' as const
+  return 'up' as const
+}
+// Ending balance is only green or red by the change from the starting account,
+// not by the absolute number — $100 ending is neutral when it began at $100.
+const equityTone = (
+  final: number | undefined,
+  details: Details,
+): 'up' | 'down' | undefined => {
+  if (final === undefined) return undefined
+  const start = Number(details.assumptions?.initialEquity ?? 0n)
+  return toneFor(final - start)
 }
 function Pair({ label, value }: { label: string; value: string }) {
   return (
@@ -1180,7 +1198,7 @@ function PeriodTable({
 
 function ResultSkeleton() {
   return (
-    <div className="space-y-6">
+    <div className="page-form">
       <div className="space-y-3 border border-primary/30 bg-card p-6">
         <Skeleton className="h-5 w-24" />
         <Skeleton className="h-7 w-1/2" />

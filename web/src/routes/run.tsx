@@ -369,7 +369,7 @@ function RunScreen() {
     total > 0 ? (Number(progress?.bytesDone ?? 0n) / total) * 100 : undefined
 
   return (
-    <div className="space-y-8">
+    <div className="page-form">
       <PageHeader
         step={5}
         title="Run"

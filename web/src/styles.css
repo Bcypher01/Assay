@@ -216,6 +216,109 @@ body {
   }
 }
 
+/* =====================================================================
+   TOUCHSTONE — polish on top of the Run Log system, adapted from
+   design/direction-touchstone.html. The colours stay the Run Log HSL
+   tokens above; this adds the concentric radii ramp, a three-tier shadow
+   ramp, and one eased motion language.
+   ===================================================================== */
+:root {
+  --r-card: 20px;
+  --r-panel: 14px;
+  --r-field: 11px;
+  --r-chip: 8px;
+  --r-seal: 7px;
+
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --fast: 150ms;
+  --enter: 520ms;
+
+  --seal-deep: color-mix(in oklab, hsl(var(--primary)) 78%, black);
+  --seal-wash: hsl(var(--primary) / 0.12);
+  --ink-3: hsl(198 12% 55%);
+  --hairline: hsl(var(--foreground) / 0.08);
+
+  --shadow-1:
+    0 1px 2px hsl(var(--foreground) / 0.07),
+    0 2px 6px -1px hsl(var(--foreground) / 0.06);
+  --shadow-2:
+    0 1px 2px hsl(var(--foreground) / 0.06),
+    0 14px 34px -18px hsl(var(--foreground) / 0.24);
+  --shadow-3:
+    0 2px 4px hsl(var(--foreground) / 0.05),
+    0 28px 56px -24px hsl(var(--foreground) / 0.32);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --seal-deep: color-mix(in oklab, hsl(var(--primary)) 72%, black);
+    --seal-wash: hsl(var(--primary) / 0.15);
+    --ink-3: hsl(194 10% 52%);
+    --hairline: hsl(1 0% 100% / 0.08);
+    --shadow-1:
+      0 1px 2px hsl(0 0% 0% / 0.28), 0 3px 10px -2px hsl(0 0% 0% / 0.35);
+    --shadow-2:
+      0 1px 2px hsl(0 0% 0% / 0.3), 0 16px 40px -18px hsl(0 0% 0% / 0.55);
+    --shadow-3:
+      0 2px 4px hsl(0 0% 0% / 0.3), 0 32px 64px -26px hsl(0 0% 0% / 0.65);
+  }
+}
+
+/* Route entrances and inner stagger — one motion language, one ease. */
+@keyframes stage-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(9px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.assay-stage > * {
+  animation: stage-enter 560ms var(--ease) both;
+}
+.rise > * {
+  animation: rise-in var(--enter) var(--ease) both;
+}
+.rise > *:nth-child(1) {
+  animation-delay: 60ms;
+}
+.rise > *:nth-child(2) {
+  animation-delay: 160ms;
+}
+.rise > *:nth-child(3) {
+  animation-delay: 260ms;
+}
+.rise > *:nth-child(4) {
+  animation-delay: 360ms;
+}
+.rise > *:nth-child(5) {
+  animation-delay: 460ms;
+}
+.rise > *:nth-child(6) {
+  animation-delay: 560ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 body {
   font-family: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
   background: hsl(var(--background));
@@ -244,7 +347,7 @@ pre,
 
 .assay-shell {
   display: grid;
-  grid-template-columns: 276px minmax(0, 1fr);
+  grid-template-columns: 288px minmax(0, 1fr);
   min-height: 100dvh;
 }
 .assay-main {
@@ -254,7 +357,8 @@ pre,
 .assay-stage {
   width: min(100%, 1120px);
   min-width: 0;
-  padding: 44px 40px 88px;
+  margin-inline: auto;
+  padding: 44px 44px 120px;
 }
 .runlog-spine {
   position: sticky;
@@ -268,6 +372,7 @@ pre,
   background: hsl(var(--secondary));
   border-right: 1px solid hsl(var(--border));
   padding: 22px 0 36px;
+  box-shadow: 12px 0 40px -32px hsl(var(--foreground) / 0.35);
 }
 .runlog-wordmark {
   display: flex;
@@ -285,7 +390,7 @@ pre,
 .runlog-wordmark-rest {
   /* Optically joined to the mark: the square already carries the A, so the
      remainder sits close enough to be read as its continuation. */
-  margin-left: 1px;
+  margin-left: 0;
 }
 .runlog-wordmark small {
   margin-left: 6px;
@@ -304,10 +409,15 @@ pre,
   place-items: center;
   width: 27px;
   height: 27px;
+  border-radius: var(--r-seal);
   font-size: 15px;
   line-height: 1;
   color: hsl(var(--primary-foreground));
-  background: hsl(var(--primary));
+  background: linear-gradient(145deg, hsl(var(--primary)), var(--seal-deep));
+  box-shadow:
+    inset 0 1px 0 hsl(0 0% 100% / 0.25),
+    inset 0 -1px 0 hsl(0 0% 0% / 0.2),
+    var(--shadow-1);
 }
 .runlog-nav {
   flex: 1;
@@ -365,6 +475,7 @@ pre,
   transform: translateY(-50%);
   place-items: center;
   border: 1px solid hsl(var(--border));
+  border-radius: 4px;
   background: hsl(var(--secondary));
   color: transparent;
 }
@@ -430,10 +541,12 @@ pre,
   gap: 9px;
   padding: 9px 11px;
   border: 1px solid hsl(var(--border));
+  border-radius: var(--r-field);
   background: hsl(var(--card));
   color: hsl(var(--muted-foreground));
   font-size: 13px;
   font-weight: 600;
+  box-shadow: var(--shadow-1);
   transition:
     background-color 0.15s,
     color 0.15s;
@@ -452,12 +565,23 @@ pre,
   height: 15px;
 }
 .runlog-session {
+  position: relative;
   display: grid;
   gap: 14px;
   margin: 24px 20px 0;
   border: 1px solid hsl(var(--border));
+  border-radius: var(--r-panel);
   background: hsl(var(--card) / 0.78);
   padding: 16px;
+  box-shadow: var(--shadow-1);
+}
+.runlog-session::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 1px solid var(--hairline);
+  border-radius: calc(var(--r-panel) - 4px);
+  pointer-events: none;
 }
 .runlog-session-heading {
   display: flex;
@@ -586,6 +710,7 @@ pre,
     min-height: 0;
     max-height: none;
     padding: 0 0 12px;
+    box-shadow: none;
   }
   .runlog-wordmark {
     min-height: 58px;
@@ -924,6 +1049,81 @@ select::-ms-expand {
 
 .setup-results-jump:disabled {
   opacity: 0.78;
+}
+
+.setup-scale-toggle {
+  position: absolute;
+  z-index: 3;
+  top: 14px;
+  right: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 11px;
+  padding: 7px 11px;
+  background: hsl(var(--card) / 0.94);
+  box-shadow: 0 7px 20px hsl(var(--background) / 0.55);
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  font-weight: 600;
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+}
+
+.setup-scale-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+
+.setup-scale-toggle[data-scaled='true'] {
+  border-color: hsl(var(--primary) / 0.65);
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
+.setup-scale-menu {
+  display: grid;
+  gap: 2px;
+  width: 190px;
+  padding: 6px !important;
+  border-radius: 11px;
+}
+
+.setup-scale-menu-title {
+  padding: 4px 9px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+.setup-scale-rung {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 30px;
+  gap: 8px;
+  border: none;
+  border-radius: 7px;
+  padding: 6px 9px;
+  background: transparent;
+  color: hsl(var(--foreground));
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.setup-scale-rung:hover {
+  background: hsl(var(--muted) / 0.6);
+}
+
+.setup-scale-rung[data-active='true'] {
+  background: hsl(var(--muted) / 0.6);
+  color: hsl(var(--primary));
 }
 
 .setup-legend {
@@ -1658,4 +1858,754 @@ select::-ms-expand {
 
 .setup-notice li + li {
   margin-top: 3px;
+}
+
+/* =====================================================================
+   OVERVIEW (/) — the starting-point surface, as designed in Touchstone.
+   ===================================================================== */
+
+.kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Spline Sans Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+.kicker::before {
+  content: '';
+  width: 18px;
+  height: 1px;
+  background: hsl(var(--primary));
+}
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(28px, 4.2vw, 46px);
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--r-card);
+  background: hsl(var(--card));
+  box-shadow: var(--shadow-2);
+}
+.hero-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 999px;
+  background: hsl(var(--accent));
+  font-family: 'Spline Sans Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+.hero h1 {
+  margin-top: 20px;
+  max-width: 22ch;
+  font-size: clamp(31px, 4.8vw, 50px);
+  font-weight: 700;
+  line-height: 1.02;
+}
+.hero h1 em {
+  font-style: normal;
+  color: hsl(var(--primary));
+}
+.hero p {
+  margin-top: 16px;
+  max-width: 56ch;
+  color: hsl(var(--muted-foreground));
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.section-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin: 52px 0 20px;
+}
+.section-head h2 {
+  font-size: 24px;
+  font-weight: 700;
+}
+.section-head p {
+  margin-top: 6px;
+  color: hsl(var(--muted-foreground));
+  font-size: 14px;
+  max-width: 58ch;
+}
+
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 18px;
+}
+.template {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--r-card);
+  background: hsl(var(--card));
+  box-shadow: var(--shadow-1);
+  transition:
+    border-color var(--fast) var(--ease),
+    transform 220ms var(--ease),
+    box-shadow 220ms var(--ease);
+}
+.template::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border: 1px solid var(--hairline);
+  border-radius: calc(var(--r-card) - 5px);
+  pointer-events: none;
+}
+.template:hover {
+  border-color: hsl(var(--ring) / 0.55);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-2);
+}
+.template-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.tpl-freq {
+  font-family: 'Spline Sans Mono', monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.template h3 {
+  font-size: 19px;
+}
+.tpl-desc {
+  color: hsl(var(--muted-foreground));
+  font-size: 14px;
+  line-height: 1.55;
+}
+.tpl-sig {
+  margin-top: 2px;
+  border-left: 2px solid hsl(var(--primary));
+  padding-left: 12px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: hsl(var(--muted-foreground));
+}
+.tpl-market {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+  font-family: 'Spline Sans Mono', monospace;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.assay-stage .template button {
+  margin-top: 4px;
+  min-height: 42px;
+  gap: 9px;
+  padding: 0 18px;
+  border-radius: var(--r-field);
+  background: linear-gradient(
+    145deg,
+    hsl(var(--primary)),
+    color-mix(in oklab, hsl(var(--primary)) 78%, black)
+  );
+  color: hsl(var(--primary-foreground));
+  box-shadow: var(--shadow-1);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  transition:
+    filter var(--fast) var(--ease),
+    transform 120ms var(--ease);
+}
+.assay-stage .template button:hover {
+  filter: brightness(1.07);
+}
+.assay-stage .template button:active {
+  transform: scale(0.96);
+}
+.assay-stage .template button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--r-chip);
+  background: hsl(var(--card));
+  font-size: 12.5px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  box-shadow: var(--shadow-1);
+}
+.chip b {
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+.chip svg {
+  width: 14px;
+  height: 14px;
+  color: hsl(var(--primary));
+}
+
+.planned {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+}
+.planned .card {
+  position: relative;
+  padding: 22px;
+  border: 1px dashed hsl(var(--ring) / 0.55);
+  border-radius: var(--r-card);
+  background: transparent;
+  box-shadow: none;
+}
+.planned .card::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border: 1px dashed var(--hairline);
+  border-radius: calc(var(--r-card) - 5px);
+  pointer-events: none;
+}
+.soon {
+  font-family: 'Spline Sans Mono', monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.planned h3 {
+  margin-top: 10px;
+  font-size: 18px;
+}
+.planned p {
+  margin-top: 6px;
+  color: hsl(var(--muted-foreground));
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.footnote {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-top: 30px;
+  max-width: 64ch;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.footnote svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin-top: 1px;
+}
+
+/* =====================================================================
+   PAGE-FORM — study steps (reality, data, run) share a page header, a
+   notice, panels of form rows, and a footed action bar.
+   ===================================================================== */
+
+.page-form > * + * {
+  margin-top: 26px;
+}
+
+/* Surfaces built from shadcn Card and friends: same elevation, no jarring
+   tone overrides. Border colour stays classifier-owned (e.g. a verdict card
+   keeps its success/warning/destructive edge). */
+.page-form [class~='bg-card'] {
+  box-shadow: var(--shadow-1);
+}
+
+.page-form .panel {
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-panel);
+  padding: clamp(18px, 2.6vw, 26px);
+  background: hsl(var(--card));
+  box-shadow: var(--shadow-1);
+}
+.page-form .panel-head h2 {
+  font-size: 19px;
+  font-weight: 700;
+}
+.page-form .panel-head p {
+  margin-top: 6px;
+  max-width: 60ch;
+  font-size: 14px;
+  line-height: 1.55;
+  color: hsl(var(--muted-foreground));
+}
+
+.page-form .rows {
+  margin-top: 14px;
+}
+.page-form .row {
+  display: grid;
+  grid-template-columns: 178px minmax(0, 1fr);
+  gap: 4px 24px;
+  align-items: baseline;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.page-form .row:last-child {
+  border-bottom: 0;
+  padding-bottom: 4px;
+}
+.page-form .row-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.page-form .row-hint {
+  grid-column: 2;
+  font-family: 'Spline Sans Mono', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+.page-form .row-assist {
+  font-family: 'Spline Sans Mono', monospace;
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+}
+.page-form .row-error {
+  grid-column: 2;
+  font-size: 13px;
+  color: hsl(var(--destructive));
+}
+.page-form .runlog-label {
+  font-size: 11px;
+  letter-spacing: 0.13em;
+}
+
+/* The shell zeroes rounded-* inside the stage; these routes opt back in. */
+.page-form [class~='rounded-md'] {
+  border-radius: var(--r-field);
+}
+.page-form [class~='rounded-lg'],
+.page-form [class~='rounded-xl'] {
+  border-radius: var(--r-panel);
+}
+
+.page-form input,
+.page-form select,
+.page-form textarea {
+  border-color: hsl(var(--input));
+  background: hsl(var(--background));
+}
+.page-form select {
+  border-radius: var(--r-field);
+}
+.page-form input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin: 0;
+  border: 1px solid hsl(var(--input));
+  border-radius: var(--r-field);
+  background: hsl(var(--background));
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  transition:
+    background-color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+.page-form input[type='checkbox']:checked {
+  background: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+}
+.page-form input[type='checkbox']:checked::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  color: hsl(var(--primary-foreground));
+}
+.page-form input[type='checkbox']:focus-visible {
+  outline: 2px solid hsl(var(--primary) / 0.5);
+  outline-offset: 2px;
+}
+.page-form input:focus-visible,
+.page-form select:focus-visible,
+.page-form textarea:focus-visible {
+  outline: none;
+  border-color: hsl(var(--ring) / 0.55);
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.16);
+}
+
+.page-form .choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 15px;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--r-chip);
+  background: hsl(var(--background));
+  font-size: 13px;
+  font-weight: 500;
+  color: hsl(var(--foreground) / 0.72);
+  cursor: pointer;
+  transition:
+    background-color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    box-shadow var(--fast) var(--ease);
+}
+.page-form .choice:hover {
+  border-color: hsl(var(--ring) / 0.5);
+  color: hsl(var(--foreground));
+}
+.page-form .choice[aria-pressed='true'] {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  box-shadow: var(--shadow-1);
+}
+
+.page-form .notice {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-panel);
+  background: hsl(var(--muted) / 0.55);
+  padding: 16px 18px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: hsl(var(--foreground) / 0.82);
+}
+.page-form .notice svg {
+  position: static;
+  flex: none;
+  margin-top: 2px;
+  color: hsl(var(--primary));
+}
+.page-form .notice > :not(svg) {
+  padding-left: 0;
+}
+
+.page-form .page-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--hairline);
+}
+.page-form .page-footer-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+}
+.page-form .footer-status {
+  font-family: 'Spline Sans Mono', monospace;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+/* =====================================================================
+   VERDICT — the headline judgement and the ledger of headline numbers.
+   The word replaces the previous generic alert-card; the ledger reuses
+   the hairline-cell grid so each metric reads as one row of a book.
+   ===================================================================== */
+
+.verdict-hero {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(28px, 4.4vw, 46px);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-card);
+  background:
+    radial-gradient(
+      130% 170% at 90% -30%,
+      hsl(var(--primary) / 0.12),
+      transparent 50%
+    ),
+    hsl(var(--card));
+  box-shadow: var(--shadow-2);
+}
+.verdict-hero[data-tone='warning'] {
+  background:
+    radial-gradient(
+      130% 170% at 90% -30%,
+      hsl(var(--warning) / 0.14),
+      transparent 50%
+    ),
+    hsl(var(--card));
+}
+.verdict-word {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: clamp(34px, 5.4vw, 54px);
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.verdict-hero[data-tone='default'] .verdict-word {
+  color: hsl(var(--success));
+}
+.verdict-hero[data-tone='warning'] .verdict-word {
+  color: hsl(var(--warning));
+}
+.verdict-dek {
+  margin-top: 16px;
+  max-width: 62ch;
+  font-size: 15.5px;
+  line-height: 1.6;
+  color: hsl(var(--muted-foreground));
+}
+.verdict-checks {
+  display: grid;
+  gap: 8px;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--hairline);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+.verdict-checks li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--r-panel);
+  background: hsl(var(--background));
+}
+.verdict-check-name {
+  font-family: 'Spline Sans Mono', monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: hsl(var(--warning));
+}
+.verdict-hero[data-tone='default'] .verdict-check-name {
+  color: hsl(var(--success));
+}
+.verdict-check-detail {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: hsl(var(--foreground) / 0.8);
+}
+
+.ledger {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1px;
+  background: hsl(var(--border));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--r-panel);
+  overflow: hidden;
+  box-shadow: var(--shadow-1);
+}
+.ledger-cell {
+  padding: 16px 18px;
+  background: hsl(var(--card));
+}
+.ledger-cell small {
+  display: block;
+  font-family: 'Spline Sans Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.ledger-cell b {
+  display: block;
+  margin-top: 7px;
+  font-family: 'Spline Sans Mono', monospace;
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  color: hsl(var(--foreground));
+}
+.ledger-cell[data-tone='up'] b {
+  color: hsl(var(--success));
+}
+.ledger-cell[data-tone='down'] b {
+  color: hsl(var(--destructive));
+}
+.ledger-cell[data-tone='seal'] b {
+  color: hsl(var(--primary));
+}
+.ledger-cell[data-tone='caution'] b {
+  color: hsl(var(--warning));
+}
+.ledger-cell em {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  font-style: normal;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+
+/* =====================================================================
+   SETUP TEST — the workspace sits outside .page-form, so it opts the
+   touchstone radius ramp and elevation back in itself. Same contracts as
+   the study steps: fields at --r-field, surfaces at --r-panel, headline
+   numbers as a ledger, the primary action as the seal.
+   ===================================================================== */
+
+.setup-workspace [class~='rounded-md'] {
+  border-radius: var(--r-field);
+}
+.setup-workspace [class~='rounded-lg'],
+.setup-workspace [class~='rounded-xl'] {
+  border-radius: var(--r-panel);
+}
+
+.setup-workspace input,
+.setup-workspace select,
+.setup-workspace textarea {
+  border-color: hsl(var(--input));
+  background: hsl(var(--background));
+}
+.setup-workspace select {
+  border-radius: var(--r-field);
+}
+
+/* Headline numbers read as one row of a book, same as the run verdict. */
+.setup-metrics {
+  gap: 1px;
+  margin-top: 16px;
+  background: hsl(var(--border));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--r-panel);
+  overflow: hidden;
+  box-shadow: var(--shadow-1);
+}
+.setup-metric {
+  border: 0;
+  padding: 14px 16px;
+}
+.setup-metric b {
+  margin: 6px 0 2px;
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Selection cards and the readiness cells join the radius ramp; the step
+   number badge reads as a chip. */
+.setup-readiness > div,
+.setup-kind {
+  border-radius: var(--r-panel);
+  box-shadow: var(--shadow-1);
+}
+.setup-readiness > div > span {
+  border-radius: var(--r-chip);
+}
+
+/* The floating chart toolbar sits one rung above the page it floats on;
+   its icon tools read as chips. */
+.setup-drawing-toolbar {
+  border-radius: var(--r-panel);
+  box-shadow: var(--shadow-2);
+}
+.setup-drawing-toolbar button {
+  border-radius: var(--r-chip);
+}
+
+/* Jump-to-results is a tool, not a box. */
+.setup-results-jump {
+  border-radius: var(--r-field);
+}
+
+/* The primary test action is the seal, like the template CTA on home. */
+.setup-actions > button:first-child {
+  background: linear-gradient(
+    145deg,
+    hsl(var(--primary)),
+    color-mix(in oklab, hsl(var(--primary)) 78%, black)
+  );
+  color: hsl(var(--primary-foreground));
+  box-shadow: var(--shadow-1);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  transition:
+    filter var(--fast) var(--ease),
+    transform 120ms var(--ease);
+}
+.setup-actions > button:first-child:hover:not(:disabled) {
+  filter: brightness(1.07);
+}
+.setup-actions > button:first-child:active {
+  transform: scale(0.96);
+}
+
+/* Checkboxes get the rounded touchstone mark the study pages use. */
+.setup-workspace input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 1px solid hsl(var(--input));
+  border-radius: var(--r-field);
+  background: hsl(var(--background));
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  transition:
+    background-color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+.setup-workspace input[type='checkbox']:checked {
+  background: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+}
+.setup-workspace input[type='checkbox']:checked::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  color: hsl(var(--primary-foreground));
+}
+.setup-workspace input[type='checkbox']:focus-visible {
+  outline: 2px solid hsl(var(--primary) / 0.5);
+  outline-offset: 2px;
+}
+.setup-workspace input:focus-visible,
+.setup-workspace select:focus-visible,
+.setup-workspace textarea:focus-visible {
+  outline: none;
+  border-color: hsl(var(--ring) / 0.55);
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.16);
 }

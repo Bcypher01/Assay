@@ -489,7 +489,7 @@ function EventStudyScreen() {
   }
 
   return (
-    <div className="space-y-7">
+    <div className="page-form">
       <PageHeader
         title="Economic event lab"
         description="Measure the reaction, test a repeatable news trade, or see the risk of holding through a release. Every answer uses snapshot-pinned events and price data."
@@ -951,6 +951,7 @@ function RunStatus({ run }: { run: RunPhase }) {
         <AlertDescription>{run.message}</AlertDescription>
       </Alert>
     )
+  if (run.status !== 'error') return null
   return (
     <Alert variant="destructive">
       <XCircle className="size-4" />
@@ -1293,9 +1294,7 @@ function TradesTable({
                   <TableCell
                     className={cn(
                       'font-medium',
-                      trade.netPnl >= 0n
-                        ? 'text-emerald-600'
-                        : 'text-destructive',
+                      trade.netPnl >= 0n ? 'text-success' : 'text-destructive',
                     )}
                   >
                     {signedMoneyCents(trade.netPnl)}
@@ -1435,7 +1434,7 @@ function Metric({
         <div
           className={cn(
             'mt-2 text-2xl font-semibold',
-            tone === 'good' && 'text-emerald-600',
+            tone === 'good' && 'text-success',
             tone === 'bad' && 'text-destructive',
           )}
         >

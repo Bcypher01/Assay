@@ -356,21 +356,58 @@ export function withManagement(
  * a study that never touched this control keeps the document — and therefore
  * the hash — it already had.
  */
+// The single node id a level-based entry trigger uses. One order trigger exists
+// per document, so a fixed id lets the level be replaced or removed cleanly.
+export const ORDER_LEVEL_ID = 'entry-order-level'
+const pruneOrderLevel = (nodes: StrategyNode[]): StrategyNode[] =>
+  nodes.filter((n) => n.id !== ORDER_LEVEL_ID)
+
 export function withOrder(
   doc: StrategyDoc,
   patch: EntryOrder | null,
 ): StrategyDoc {
   const { order: current, ...entries } = doc.entries
   if (!patch || !patch.type || patch.type === 'market') {
-    return { ...doc, entries }
+    return { ...doc, nodes: pruneOrderLevel(doc.nodes), entries }
   }
   const next: EntryOrder = { ...current, ...patch }
   // A trigger is named or offset, never both, and the engine rejects an order
-  // that carries neither.
+  // that carries neither. An explicit offset clears a previously chosen level.
+  if (patch.offset) delete next.node
   if (next.node) delete next.offset
   else if (!next.offset || next.offset.value <= 0)
     next.offset = { unit: 'pips', value: 10 }
-  return { ...doc, entries: { ...entries, order: next } }
+  const nodes =
+    next.node === ORDER_LEVEL_ID ? doc.nodes : pruneOrderLevel(doc.nodes)
+  return { ...doc, nodes, entries: { ...entries, order: next } }
+}
+
+/**
+ * Rest a limit or stop entry at the reading of a level primitive. The level is
+ * added (or replaced) as a fixed-id node and the order points at it, so the
+ * trigger price is the same honest, projected level the rest of the app uses.
+ */
+export function withOrderLevel(
+  doc: StrategyDoc,
+  orderType: 'limit' | 'stop',
+  level: { pack: string; type: string; params: Record<string, number> },
+): StrategyDoc {
+  const node: StrategyNode = {
+    id: ORDER_LEVEL_ID,
+    pack: level.pack,
+    type: level.type,
+    params: level.params,
+    timeframe: doc.timeframes.entry,
+  }
+  const nodes = doc.nodes.some((n) => n.id === ORDER_LEVEL_ID)
+    ? doc.nodes.map((n) => (n.id === ORDER_LEVEL_ID ? node : n))
+    : [...doc.nodes, node]
+  const { order: _current, ...entries } = doc.entries
+  return {
+    ...doc,
+    nodes,
+    entries: { ...entries, order: { type: orderType, node: ORDER_LEVEL_ID } },
+  }
 }
 export function expressionNodeIDs(value: Expression): string[] {
   const ids = new Set<string>()
@@ -446,8 +483,15 @@ export function withEntrySide(doc: StrategyDoc, side: EntrySide): StrategyDoc {
     ...doc,
     entries: {
       timing: doc.entries.timing,
-      [side]: { ...source, enabled: true, name },
-      [other]: { enabled: false, name: '', when: {} },
+      order: doc.entries.order,
+      long:
+        side === 'long'
+          ? { ...source, enabled: true, name }
+          : { enabled: false, name: '', when: {} },
+      short:
+        side === 'short'
+          ? { ...source, enabled: true, name }
+          : { enabled: false, name: '', when: {} },
     },
   }
 }
@@ -506,6 +550,73 @@ export function withStarterEntry(doc: StrategyDoc): StrategyDoc {
     },
   }
 }
+export type PriceSource = 'open' | 'high' | 'low' | 'close'
+export type PriceRelation =
+  'above' | 'below' | 'crosses_above' | 'crosses_below'
+
+export interface LevelRuleSpec {
+  pack: string
+  type: string
+  params: Record<string, number>
+  source: PriceSource
+  relation: PriceRelation
+  name: string
+}
+
+/**
+ * Add a price-versus-level condition by hand: a level node plus a price
+ * predicate comparing an OHLC source against it. A new condition is joined to
+ * any existing one with `all`, and the side is enabled. This is the only path
+ * other than a template that emits a price predicate.
+ */
+export function withPriceRule(
+  doc: StrategyDoc,
+  side: EntrySide,
+  spec: LevelRuleSpec,
+): StrategyDoc {
+  const ids = new Set(doc.nodes.map((n) => n.id))
+  const base = spec.type.replace(/_/g, '-')
+  let id = base
+  let n = 2
+  while (ids.has(id)) id = `${base}-${n++}`
+  const node: StrategyNode = {
+    id,
+    pack: spec.pack,
+    type: spec.type,
+    params: spec.params,
+    timeframe: doc.timeframes.entry,
+  }
+  const predicate: Expression = {
+    price: { node: id, source: spec.source, relation: spec.relation },
+  }
+  const current = doc.entries[side]
+  const hadRule = expressionNodeIDs(current.when).length > 0
+  // The reading is generated from the branch name, so a second condition has to
+  // grow the name too — otherwise what the card says drifts from what runs.
+  const clause = spec.name.charAt(0).toLowerCase() + spec.name.slice(1)
+  const branch: EntryBranch = {
+    enabled: true,
+    name: hadRule && current.name ? `${current.name} and ${clause}` : spec.name,
+    when: combineAnd(current.when, predicate),
+  }
+  const entries =
+    side === 'long'
+      ? { ...doc.entries, long: branch }
+      : { ...doc.entries, short: branch }
+  return {
+    ...doc,
+    nodes: [...doc.nodes, node],
+    entries,
+  }
+}
+
+function combineAnd(when: Expression, add: Expression): Expression {
+  if (!when || Object.keys(when).length === 0) return add
+  const all = (when as { all?: Expression[] }).all
+  if (Array.isArray(all)) return { ...when, all: [...all, add] }
+  return { all: [when, add] }
+}
+
 export const LADDER_SLOTS = ['bias', 'poi', 'entry'] as const
 export type LadderSlot = (typeof LADDER_SLOTS)[number]
 

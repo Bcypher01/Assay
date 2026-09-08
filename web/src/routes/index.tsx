@@ -1,9 +1,15 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import { ArrowRight, Bookmark, Info, MessageSquare } from 'lucide-react'
-import { PageHeader } from '@/components/page-header'
+import {
+  ArrowRight,
+  CandlestickChart,
+  Info,
+  Layers,
+  Milestone,
+  TrendingUp,
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { loadTemplates } from '@/lib/templates'
@@ -87,34 +93,43 @@ function StartingPoint() {
   }
 
   return (
-    <div className="space-y-8">
-      <PageHeader
-        step={1}
-        title="Choose a starting point"
-        description="Every rule set below is one the engine can express in full, so the strategy you read on the card is the strategy that gets tested. A historical test is evidence about one sample, not a forecast."
-      />
+    <div className="rise">
+      <section className="hero">
+        <span className="hero-tag">What a rule did. Nothing more.</span>
+        <h1>
+          Test a rule against <em>real history.</em>
+        </h1>
+        <p>
+          Pick a starting point below. Every rule here is one the engine can
+          express in full — the strategy you read is the strategy that gets
+          tested, right down to spread, slippage and the fills it could not
+          order. Evidence about one sample is not a forecast.
+        </p>
+      </section>
 
       {notice ? (
-        <Alert>
+        <Alert className="mt-6">
           <Info className="size-4" />
           <AlertDescription>{notice}</AlertDescription>
         </Alert>
       ) : null}
 
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold">Use a popular strategy</h2>
-          <p className="text-sm text-muted-foreground">
-            Pick one to open it in the editor. Nothing is locked — the market,
-            timeframe, conditions and exits are all yours to change before
-            anything runs.
-          </p>
+      <section>
+        <div className="section-head">
+          <div>
+            <h2>Popular starting points</h2>
+            <p>
+              Pick one to open it in the editor. Nothing is locked — the market,
+              timeframe, conditions and exits are all yours to change before
+              anything runs.
+            </p>
+          </div>
         </div>
 
         {loading ? (
-          <div className="grid gap-px border border-border bg-border sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="flex flex-col gap-3 bg-card p-5">
+              <div key={i} className="template">
                 <div className="flex items-center justify-between">
                   <Skeleton className="h-5 w-20" />
                   <Skeleton className="h-3 w-24" />
@@ -131,7 +146,7 @@ function StartingPoint() {
             ))}
           </div>
         ) : (
-          <div className="grid gap-px border border-border bg-border sm:grid-cols-2 xl:grid-cols-3">
+          <div className="template-grid">
             {templates.map((template) => (
               <TemplateTile
                 key={template.id}
@@ -143,20 +158,57 @@ function StartingPoint() {
         )}
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2">
-        <PlannedTile
-          icon={<MessageSquare className="size-4" />}
-          title="Describe my own strategy"
-          body="Turn a written idea into exact, testable rules. The rule vocabulary is here now — a numeric comparison like “RSI below 40” is expressible today, as the RSI pullback template shows — so what is left is the translation itself: turning a sentence into the exact document, reliably enough that the rule you read is the rule that runs."
-        />
-        <PlannedTile
-          icon={<Bookmark className="size-4" />}
-          title="Reopen a saved test"
-          body="Return to an earlier run with its assumptions intact. Completed runs are already stored — this is the front door to them."
-        />
+      <section>
+        <div className="section-head">
+          <div>
+            <h2>And when you’re ready</h2>
+            <p>
+              The vocabulary for both is already here; these are the doors still
+              being built.
+            </p>
+          </div>
+        </div>
+
+        <div className="planned">
+          <PlannedTile
+            title="Describe my own strategy"
+            body="Turn a written idea into exact, testable rules. The rule vocabulary is here now — a numeric comparison like “RSI below 40” is expressible today, as the RSI pullback template shows — so what is left is the translation itself: turning a sentence into the exact document, reliably enough that the rule you read is the rule that runs."
+          />
+          <PlannedTile
+            title="Reopen a saved test"
+            body="Return to an earlier run with its assumptions intact. Completed runs are already stored — this is the front door to them."
+          />
+        </div>
       </section>
+
+      <p className="footnote">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M12 20a8 8 0 0 0 8-8 8 8 0 0 0-8-8 8 8 0 0 0-8 8 8 8 0 0 0 8 8Z" />
+          <path d="M12 8v4" />
+          <path d="M12 16h.01" />
+        </svg>
+        <span>
+          A backtest describes what a rule did on one historical sample. It does
+          not describe what it will do — and every surface in Assay is built so
+          that is hard to forget.
+        </span>
+      </p>
     </div>
   )
+}
+
+const FAMILY_ICONS: Record<string, LucideIcon> = {
+  'Trend following': TrendingUp,
+  'Price action': CandlestickChart,
+  'Multi-timeframe': Layers,
+  'SMC workflow': Milestone,
 }
 
 function TemplateTile({
@@ -168,30 +220,29 @@ function TemplateTile({
 }) {
   const symbol = template.document.universe.symbols[0] ?? ''
   const timeframe = template.document.timeframes.entry
+  const FamilyIcon = FAMILY_ICONS[template.family] ?? null
 
   return (
-    <article className="flex flex-col gap-3 bg-card p-5">
-      <div className="flex items-start justify-between gap-2">
-        <Badge variant="secondary">{template.family}</Badge>
-        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          {template.expectedFrequency} frequency
+    <article className="template">
+      <div className="template-top">
+        <span className="chip">
+          {FamilyIcon ? <FamilyIcon aria-hidden="true" /> : null}
+          {template.family}
         </span>
+        <span className="tpl-freq">{template.expectedFrequency} frequency</span>
       </div>
 
-      <h3 className="text-base font-semibold leading-snug">{template.name}</h3>
-      <p className="text-sm leading-relaxed text-muted-foreground">
-        {template.description}
+      <h3>{template.name}</h3>
+      <p className="tpl-desc">{template.description}</p>
+
+      <p className="tpl-sig">{template.described.summary}</p>
+
+      <p className="tpl-market">
+        suggested: {displaySymbol(symbol)} · {displayTimeframe(timeframe)} ·
+        long
       </p>
 
-      <p className="border-l-2 border-border pl-3 text-sm leading-relaxed">
-        {template.described.summary}
-      </p>
-
-      <p className="mt-auto pt-1 font-mono text-[11px] text-muted-foreground">
-        suggested: {displaySymbol(symbol)} · {displayTimeframe(timeframe)}
-      </p>
-
-      <Button className="w-full" onClick={() => onChoose(template)}>
+      <Button onClick={() => onChoose(template)}>
         Customise and test
         <ArrowRight className="size-4" />
       </Button>
@@ -199,27 +250,12 @@ function TemplateTile({
   )
 }
 
-function PlannedTile({
-  icon,
-  title,
-  body,
-}: {
-  icon: React.ReactNode
-  title: string
-  body: string
-}) {
+function PlannedTile({ title, body }: { title: string; body: string }) {
   return (
-    <article className="border border-dashed border-border p-5">
-      <div className="flex items-center gap-2 text-muted-foreground">
-        {icon}
-        <span className="font-mono text-[10px] uppercase tracking-wider">
-          Not built yet
-        </span>
-      </div>
-      <h3 className="mt-2 text-base font-semibold">{title}</h3>
-      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-        {body}
-      </p>
+    <article className="card">
+      <span className="soon">Not built yet</span>
+      <h3>{title}</h3>
+      <p>{body}</p>
     </article>
   )
 }

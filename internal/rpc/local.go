@@ -580,7 +580,7 @@ func runLocal(ctx context.Context, cache *store.LocalStore, registry *instrument
 		return nil, err
 	}
 	returns := analytics.Returns{Pessimistic: make([]float64, len(result.Trades)), Optimistic: make([]float64, len(result.Trades))}
-	summary := &assayv1.RunSummary{Trades: uint32(len(result.Trades)), Unresolved: uint32(result.Unresolved)}
+	summary := &assayv1.RunSummary{Trades: uint32(len(result.Trades)), Unresolved: uint32(result.Unresolved), Unfilled: uint32(result.Unfilled)}
 	var netPnL core.Price
 	for i, trade := range result.Trades {
 		returns.Pessimistic[i] = float64(trade.Pessimistic.Net)
@@ -607,7 +607,7 @@ func runLocal(ctx context.Context, cache *store.LocalStore, registry *instrument
 		// V1 uses bias/poi/trigger while V2 and semantic drawings use explicit
 		// long/short branches. Preserve both diagnostic vocabularies so a setup
 		// test never loses its "why no trade?" evidence when persisted.
-		for _, condition := range []string{"bias", "poi", "trigger", "long", "short", "entry_conflict"} {
+		for _, condition := range []string{"bias", "poi", "trigger", "long", "short", "entry_conflict", "atr_warmup"} {
 			if count := nearMiss.SlotFailures[condition]; count > 0 {
 				nearMisses = append(nearMisses, analytics.NearMiss{Condition: condition, Count: count})
 			}
@@ -617,6 +617,7 @@ func runLocal(ctx context.Context, cache *store.LocalStore, registry *instrument
 			return nil, err
 		}
 		studyResult.NearMisses, studyResult.Unresolved = nearMisses, result.Unresolved
+		studyResult.Unfilled = result.Unfilled
 		id, err := history.Put(ctx, study, studyResult)
 		if err != nil {
 			return nil, err

@@ -39,14 +39,14 @@ function TradingReality() {
     assumptions.commissionFlat > 0n
 
   return (
-    <div className="space-y-6">
+    <div className="page-form">
       <PageHeader
         step={3}
         title="Set trading reality"
         description="What the account looked like and what each round turn cost. These decide whether an edge is real, so they travel with the run and are shown again on the result."
       />
 
-      <Alert>
+      <Alert className="notice">
         <Info className="size-4" />
         <AlertDescription>
           Leaving a cost at zero does not mean free execution. It means “use the
@@ -56,36 +56,42 @@ function TradingReality() {
         </AlertDescription>
       </Alert>
 
-      <section className="border-t border-border">
-        <Row label="Cost preset" hint="applied to the fields below">
-          <div className="flex flex-wrap gap-1">
-            <Choice
-              active={!overridden}
-              onClick={() => update(PRESETS.typical)}
-            >
-              Typical
-            </Choice>
-            <Choice
-              active={
-                assumptions.spreadTicks === PRESETS.conservative.spreadTicks &&
-                assumptions.slippageTicks === PRESETS.conservative.slippageTicks
-              }
-              onClick={() => update(PRESETS.conservative)}
-            >
-              Conservative
-            </Choice>
-          </div>
-        </Row>
+      <section className="panel">
+        <div className="rows">
+          <Row label="Cost preset" hint="applied to the fields below">
+            <div className="flex flex-wrap gap-2">
+              <Choice
+                active={!overridden}
+                onClick={() => update(PRESETS.typical)}
+              >
+                Typical
+              </Choice>
+              <Choice
+                active={
+                  assumptions.spreadTicks ===
+                    PRESETS.conservative.spreadTicks &&
+                  assumptions.slippageTicks ===
+                    PRESETS.conservative.slippageTicks
+                }
+                onClick={() => update(PRESETS.conservative)}
+              >
+                Conservative
+              </Choice>
+            </div>
+          </Row>
+        </div>
       </section>
 
-      <section className="space-y-1 border-t border-border pt-4">
-        <h2 className="text-base font-semibold">Account and position size</h2>
-        <p className="text-sm text-muted-foreground">
-          Risk per trade sizes each position from current balance. Use a
-          non-zero value to compound the account; fixed lots are for
-          deliberately chosen exposure.
-        </p>
-        <div className="mt-2">
+      <section className="panel">
+        <div className="panel-head">
+          <h2>Account and position size</h2>
+          <p>
+            Risk per trade sizes each position from current balance. Use a
+            non-zero value to compound the account; fixed lots are for
+            deliberately chosen exposure.
+          </p>
+        </div>
+        <div className="rows">
           <Row label="Starting balance" hint="USD; stored and sent as cents">
             <Input
               type="number"
@@ -97,7 +103,7 @@ function TradingReality() {
                 if (cents !== null) update({ initialEquity: cents })
               }}
             />
-            <span className="font-mono text-[11px] text-muted-foreground">
+            <span className="row-assist">
               {formatUsdCents(assumptions.initialEquity)}
             </span>
           </Row>
@@ -111,7 +117,7 @@ function TradingReality() {
               value={assumptions.riskPerTrade}
               onChange={(e) => update({ riskPerTrade: Number(e.target.value) })}
             />
-            <span className="font-mono text-[11px] text-muted-foreground">
+            <span className="row-assist">
               {(assumptions.riskPerTrade * 100).toFixed(2)}% of equity
             </span>
           </Row>
@@ -136,13 +142,15 @@ function TradingReality() {
         </div>
       </section>
 
-      <section className="space-y-1 border-t border-border pt-4">
-        <h2 className="text-base font-semibold">Costs and fills</h2>
-        <p className="text-sm text-muted-foreground">
-          Each field overrides the instrument's own cost only when it is above
-          zero.
-        </p>
-        <div className="mt-2">
+      <section className="panel">
+        <div className="panel-head">
+          <h2>Costs and fills</h2>
+          <p>
+            Each field overrides the instrument's own cost only when it is above
+            zero.
+          </p>
+        </div>
+        <div className="rows">
           <Row label="Spread override" hint="ticks">
             <Input
               type="number"
@@ -177,7 +185,7 @@ function TradingReality() {
                 if (cents !== null) update({ commissionFlat: cents })
               }}
             />
-            <span className="font-mono text-[11px] text-muted-foreground">
+            <span className="row-assist">
               {formatUsdCents(assumptions.commissionFlat)}
             </span>
           </Row>
@@ -207,12 +215,12 @@ function TradingReality() {
         </div>
       </section>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
+      <div className="page-footer">
         <Button variant="outline" asChild>
           <Link to="/strategy">Back to rules</Link>
         </Button>
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <span className="font-mono text-[11px] text-muted-foreground">
+        <div className="page-footer-right">
+          <span className="footer-status">
             {overridden
               ? 'using your cost overrides'
               : 'using each instrument’s own costs'}
@@ -242,14 +250,10 @@ function Row({
   children: React.ReactNode
 }) {
   return (
-    <div className="grid items-baseline gap-x-5 gap-y-1 border-b border-border/60 last:border-b-0 py-3 sm:grid-cols-[190px_minmax(0,1fr)]">
+    <div className="row">
       <Label className="runlog-label">{label}</Label>
-      <div className="flex flex-wrap items-center gap-3">{children}</div>
-      {hint ? (
-        <p className="font-mono text-[11px] text-muted-foreground sm:col-start-2">
-          {hint}
-        </p>
-      ) : null}
+      <div className="row-controls">{children}</div>
+      {hint ? <p className="row-hint">{hint}</p> : null}
     </div>
   )
 }
@@ -268,11 +272,7 @@ function Choice({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={
-        active
-          ? 'border border-primary bg-primary px-3 py-1.5 text-sm text-primary-foreground'
-          : 'border border-input bg-card px-3 py-1.5 text-sm hover:bg-accent'
-      }
+      className="choice"
     >
       {children}
     </button>

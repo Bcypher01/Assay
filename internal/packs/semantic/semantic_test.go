@@ -91,6 +91,151 @@ func TestBreakRetestDoesNotSignalOnBreakBar(t *testing.T) {
 	}
 }
 
+// topDownSeries builds the canonical ladder shape: a bearish candle (the
+// future zone), a bullish displacement away from it, then a multi-bar return
+// into that zone where the entry-timeframe shift must be looked for.
+func topDownSeries() *core.Series {
+	s := core.NewSeries("TEST", core.TFM1, 8)
+	for i, bar := range [][4]core.Price{
+		{12, 13, 9, 10},  // bearish, body 2 of range 4: becomes POI zone 9..13
+		{11, 16, 11, 15}, // bullish displacement, body 4 of range 5, activates the zone
+		{15, 16, 14, 15},
+		{15, 16, 13, 14}, // bearish touch of the zone from above; future zone 13..16
+		{14, 15, 12, 14}, // doji still inside the zone
+		{13, 18, 13, 17}, // bullish shift inside the zone; displacement replaces it
+		{18, 19, 17, 18},
+		{18, 20, 17, 19},
+	} {
+		s.Append(core.Time(i*60_000), bar[0], bar[1], bar[2], bar[3], 1)
+	}
+	return s
+}
+
+func topDownParams() map[string]any {
+	return map[string]any{"lookbackBars": 3, "toleranceTicks": 0, "expiryBars": 10, "displacementBodyMilli": 500, "useBody": false}
+}
+
+func TestPOIZoneHoldsStateAcrossEveryTouchingBar(t *testing.T) {
+	instance, err := (POIZone{side: core.SideLong}).New(params(t, topDownParams()), core.TFM1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, err := instance.Eval(&primitive.EvalCtx{Snapshot: "fixed"}, topDownSeries())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The zone is 9..13, created when bar 1 displaces. Bars 3, 4 and 5 all
+	// reach into it; unlike OrderBlockRetest none of them consumes the zone.
+	for _, bar := range []int{3, 4, 5} {
+		if !value.Bool.Get(bar) {
+			t.Fatalf("zone state missing at bar %d", bar)
+		}
+	}
+	if value.Bool.Get(1) || value.Bool.Get(2) {
+		t.Fatal("zone reported touched before price returned to it")
+	}
+	// Bar 5's displacement replaces the zone with 13..16 from bar 3; bar 6
+	// stays above both and must read false.
+	if value.Bool.Get(6) || value.Bool.Get(7) {
+		t.Fatal("zone reported touched after price left it")
+	}
+}
+
+func TestPOIZoneExpiresAndIsReplacedByNewerDisplacement(t *testing.T) {
+	short := topDownParams()
+	short["expiryBars"] = 2 // zone born at bar 1 expires after bar 3
+	instance, err := (POIZone{side: core.SideLong}).New(params(t, short), core.TFM1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, err := instance.Eval(&primitive.EvalCtx{}, topDownSeries())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value.Bool.Get(4) || value.Bool.Get(5) {
+		t.Fatal("expired zone still reported as active")
+	}
+
+	// The bar-5 displacement must replace the exhausted zone with the last
+	// bearish candle inside its lookback: bar 3, giving 13..16. Bar 6 returns
+	// to touch that replacement zone exactly.
+	s := topDownSeries()
+	s.Low[6], s.Open[6] = 16, 16
+	replacement, err := (POIZone{side: core.SideLong}).New(params(t, topDownParams()), core.TFM1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, err = replacement.Eval(&primitive.EvalCtx{}, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !value.Bool.Get(6) {
+		t.Fatal("replacement zone 13..16 not active where bar 6 touches it")
+	}
+}
+
+func TestShiftCandleFiresOnlyOnDirectionalDisplacement(t *testing.T) {
+	instance, err := (ShiftCandle{side: core.SideLong}).New(params(t, topDownParams()), core.TFM1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, err := instance.Eval(&primitive.EvalCtx{Snapshot: "fixed"}, topDownSeries())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Bars 1 and 5 are the only bullish candles with a body of at least half
+	// their range; bar 4 is a doji and must not qualify.
+	if !value.Bool.Get(1) || !value.Bool.Get(5) {
+		t.Fatal("directional displacement candles missing from the shift stream")
+	}
+	if value.Bool.Get(4) {
+		t.Fatal("small-bodied candle accepted as a shift")
+	}
+	bear, err := (ShiftCandle{side: core.SideShort}).New(params(t, topDownParams()), core.TFM1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, err = bear.Eval(&primitive.EvalCtx{}, topDownSeries())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !value.Bool.Get(0) || value.Bool.Get(1) {
+		t.Fatal("bearish shift stream must fire on the bearish candle only")
+	}
+}
+
+func TestTopDownDetectorsAreDeterministic(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		primitive primitive.Primitive
+	}{
+		{"poi zone", POIZone{side: core.SideLong}},
+		{"shift candle", ShiftCandle{side: core.SideLong}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			run := func() []byte {
+				instance, err := test.primitive.New(params(t, topDownParams()), core.TFM1)
+				if err != nil {
+					t.Fatal(err)
+				}
+				value, err := instance.Eval(&primitive.EvalCtx{Snapshot: "fixed"}, topDownSeries())
+				if err != nil {
+					t.Fatal(err)
+				}
+				out, err := json.Marshal(value)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return out
+			}
+			first, second := run(), run()
+			if !bytes.Equal(first, second) {
+				t.Fatal("detector output is not deterministic")
+			}
+		})
+	}
+}
+
 func TestFairValueGapDrawingCompilesToLaterRetest(t *testing.T) {
 	s := core.NewSeries("TEST", core.TFM1, 6)
 	for i, bar := range [][4]core.Price{

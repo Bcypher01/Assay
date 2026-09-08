@@ -117,8 +117,10 @@ func TestTemplateCatalogueAndDescriptionRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(listed.Msg.Templates) != 9 {
-		t.Fatalf("templates = %d, want 9", len(listed.Msg.Templates))
+	// The catalogue is whatever the engine offers; pinning a number here only
+	// records how many templates existed the day the test was written.
+	if want := len(ir.PopularTemplates()); len(listed.Msg.Templates) != want {
+		t.Fatalf("templates = %d, want %d", len(listed.Msg.Templates), want)
 	}
 	first := listed.Msg.Templates[0]
 	if first.Id != "moving-average-crossover" || first.StrategyDescription.GetSummary() == "" || len(first.StrategyJson) == 0 {

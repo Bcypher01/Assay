@@ -27,9 +27,13 @@ type StudyResult struct {
 	CostCurve             []Metrics
 	NearMisses            []NearMiss
 	Unresolved            int
-	WalkForward           []WalkForwardResult
-	CostStress            []CostStressPoint
-	NextActions           []NextAction
+	// Unfilled counts entries whose resting order was never reached. It is
+	// reported beside the trade count so a limit study's lower activity reads
+	// as the strategy's own behaviour rather than as missing setups.
+	Unfilled    int
+	WalkForward []WalkForwardResult
+	CostStress  []CostStressPoint
+	NextActions []NextAction
 }
 
 // Assumptions records the effective execution choices used for a study. It is

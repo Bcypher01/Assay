@@ -96,6 +96,10 @@ func Run(ctx context.Context, strategy *ir.Strategy, data Data) (sim.RunResult, 
 		}
 		values[n.ID] = v
 	}
+	ex, err := resolvePlan(ctx, strategy, data, values, reg)
+	if err != nil {
+		return result, miss, err
+	}
 	sig := sim.Signals{Enter: core.NewBitset(data.Series.Len())}
 	useRelativeExits := strategy.Slots.Invalidation == "" && strategy.Slots.Target == ""
 	poiAt := -1
@@ -103,7 +107,7 @@ func Run(ctx context.Context, strategy *ir.Strategy, data Data) (sim.RunResult, 
 	windowed := strategy.Slots.Trigger.Within > 0 || strategy.Slots.Trigger.WithinBars > 0
 	for bar := 0; bar < data.Series.Len(); bar++ {
 		if strategy.Schema == ir.SchemaV2 {
-			runV2Bar(strategy, data.Series, values, &sig, &miss, bar, useRelativeExits)
+			runV2Bar(strategy, data.Series, values, &sig, &miss, bar, useRelativeExits, ex)
 			continue
 		}
 		bias := holds(strategy.Slots.Bias, values, bar)
@@ -119,10 +123,17 @@ func Run(ctx context.Context, strategy *ir.Strategy, data Data) (sim.RunResult, 
 			triggerOK = trigger && poiOK
 		}
 		if bias && poiOK && triggerOK {
-			if useRelativeExits {
-				addRelativeSides(&sig, strategy.Direction, bar, strategy.Risk.Stop, strategy.Risk.Target)
-			} else {
-				addSides(&sig, strategy.Direction, bar, values[strategy.Slots.Invalidation].Level[bar], values[strategy.Slots.Target].Level[bar])
+			switch {
+			case !ex.ready(bar):
+				// The rule fired but the distance or level it needs is not
+				// readable yet, and an entry sized against nothing would vanish
+				// without comment.
+				miss.SlotFailures["atr_warmup"]++
+				miss.Bars = append(miss.Bars, Miss{Bar: bar, Failed: []string{"atr_warmup"}})
+			case useRelativeExits:
+				addRelativeSides(&sig, strategy.Direction, bar, strategy.Risk.Stop, strategy.Risk.Target, ex)
+			default:
+				addSides(&sig, strategy.Direction, bar, values[strategy.Slots.Invalidation].Level[bar], values[strategy.Slots.Target].Level[bar], ex)
 			}
 		} else {
 			m := Miss{Bar: bar}
@@ -176,6 +187,9 @@ func referencedNodesForStrategy(strategy *ir.Strategy) map[string]bool {
 	}
 	collectExpressionNodes(used, strategy.Entries.Long.When)
 	collectExpressionNodes(used, strategy.Entries.Short.When)
+	if o := strategy.Entries.Order; o != nil && o.Node != "" {
+		used[o.Node] = true
+	}
 	if strategy.Slots.Invalidation != "" {
 		used[strategy.Slots.Invalidation] = true
 	}
@@ -342,6 +356,12 @@ func parameterMessage(name string) (proto.Message, error) {
 		return &assayv1.TimeOfDayRangeParams{}, nil
 	case "assay.v1.BarOfSessionParams":
 		return &assayv1.BarOfSessionParams{}, nil
+	case "assay.v1.PeriodExtremeParams":
+		return &assayv1.PeriodExtremeParams{}, nil
+	case "assay.v1.OpeningRangeParams":
+		return &assayv1.OpeningRangeParams{}, nil
+	case "assay.v1.VwapParams":
+		return &assayv1.VwapParams{}, nil
 	case "assay.v1.MarketStructureParams":
 		return &assayv1.MarketStructureParams{}, nil
 	case "assay.v1.DisplacementParams":
@@ -562,7 +582,7 @@ func inZone(price core.Price, zone primitive.Zone) bool {
 	return price >= zone.Low && price <= zone.High
 }
 
-func runV2Bar(strategy *ir.Strategy, series *core.Series, values map[string]primitive.Value, sig *sim.Signals, miss *NearMiss, bar int, relativeExits bool) {
+func runV2Bar(strategy *ir.Strategy, series *core.Series, values map[string]primitive.Value, sig *sim.Signals, miss *NearMiss, bar int, relativeExits bool, ex entryPlan) {
 	long := strategy.Entries.Long.Enabled && holdsExpression(series, strategy.Entries.Long.When, values, bar)
 	short := strategy.Entries.Short.Enabled && holdsExpression(series, strategy.Entries.Short.When, values, bar)
 	if long && short {
@@ -573,14 +593,21 @@ func runV2Bar(strategy *ir.Strategy, series *core.Series, values map[string]prim
 		return
 	}
 	if long || short {
+		if !ex.ready(bar) {
+			// The rule fired but its ATR distance cannot be resolved yet. An
+			// entry sized against a zero distance would vanish without comment.
+			miss.SlotFailures["atr_warmup"]++
+			miss.Bars = append(miss.Bars, Miss{Bar: bar, Failed: []string{"atr_warmup"}})
+			return
+		}
 		side := core.SideLong
 		if short {
 			side = core.SideShort
 		}
 		if relativeExits {
-			addRelativeSide(sig, side, bar, strategy.Risk.Stop, strategy.Risk.Target)
+			addRelativeSide(sig, side, bar, strategy.Risk.Stop, strategy.Risk.Target, ex)
 		} else {
-			addSide(sig, side, bar, values[strategy.Slots.Invalidation].Level[bar], values[strategy.Slots.Target].Level[bar])
+			addSide(sig, side, bar, values[strategy.Slots.Invalidation].Level[bar], values[strategy.Slots.Target].Level[bar], ex)
 		}
 		return
 	}
@@ -596,35 +623,169 @@ func runV2Bar(strategy *ir.Strategy, series *core.Series, values map[string]prim
 	miss.Bars = append(miss.Bars, m)
 }
 
-func addSides(sig *sim.Signals, d ir.Direction, bar int, stop, target core.Price) {
+func addSides(sig *sim.Signals, d ir.Direction, bar int, stop, target core.Price, ex entryPlan) {
 	switch d {
 	case ir.DirectionShort:
-		addSide(sig, core.SideShort, bar, stop, target)
+		addSide(sig, core.SideShort, bar, stop, target, ex)
 	default:
-		addSide(sig, core.SideLong, bar, stop, target)
+		addSide(sig, core.SideLong, bar, stop, target, ex)
 	}
 }
 
-func addRelativeSides(sig *sim.Signals, d ir.Direction, bar int, stopDistance, targetDistance core.Distance) {
+func addRelativeSides(sig *sim.Signals, d ir.Direction, bar int, stopDistance, targetDistance core.Distance, ex entryPlan) {
 	side := core.SideLong
 	if d == ir.DirectionShort {
 		side = core.SideShort
 	}
-	addRelativeSide(sig, side, bar, stopDistance, targetDistance)
+	addRelativeSide(sig, side, bar, stopDistance, targetDistance, ex)
 }
 
-func addSide(sig *sim.Signals, side core.Side, bar int, stop, target core.Price) {
+func addSide(sig *sim.Signals, side core.Side, bar int, stop, target core.Price, ex entryPlan) {
 	sig.Enter.Set(bar)
 	sig.Side = append(sig.Side, side)
 	sig.StopLevel = append(sig.StopLevel, stop)
-	sig.TargetPlan = append(sig.TargetPlan, sim.TargetPlan{Level: target})
+	sig.TargetPlan = append(sig.TargetPlan, targetPlan(ex.management, target))
+	addATR(sig, bar, ex)
 }
 
-func addRelativeSide(sig *sim.Signals, side core.Side, bar int, stopDistance, targetDistance core.Distance) {
+func addRelativeSide(sig *sim.Signals, side core.Side, bar int, stopDistance, targetDistance core.Distance, ex entryPlan) {
 	sig.Enter.Set(bar)
 	sig.Side = append(sig.Side, side)
 	sig.StopLevel = append(sig.StopLevel, 0)
-	sig.TargetPlan = append(sig.TargetPlan, sim.TargetPlan{})
+	// The level is filled in by the simulator once the entry fill resolves the
+	// target distance; the management carried here is independent of it.
+	sig.TargetPlan = append(sig.TargetPlan, targetPlan(ex.management, 0))
 	sig.StopSpec = append(sig.StopSpec, stopDistance)
 	sig.TargetSpec = append(sig.TargetSpec, targetDistance)
+	addATR(sig, bar, ex)
+}
+
+// addATR records the ATR the simulator will resolve this entry's distances
+// against, and the order the signal becomes. Both are read at the signal bar,
+// not at the fill: the fill happens on the next bar, whose range the signal
+// cannot see.
+func addATR(sig *sim.Signals, bar int, ex entryPlan) {
+	if ex.hasATR {
+		sig.ATR = append(sig.ATR, ex.value(bar))
+	}
+	if ex.order != nil && ex.order.Resting() {
+		sig.Orders = append(sig.Orders, ex.orderAt(bar))
+	}
+}
+
+// orderAt builds the resting order for a signal detected at bar. A level node
+// gives the trigger outright; an offset gives it relative to the signal bar's
+// close, which the simulator turns into a price once it knows the tick size.
+func (e entryPlan) orderAt(bar int) sim.Order {
+	order := sim.Order{Type: sim.OrderLimit}
+	if e.order.Type == ir.OrderStop {
+		order.Type = sim.OrderStop
+	}
+	if e.hasLevel {
+		order.Level = e.level.Level[bar]
+		return order
+	}
+	order.Spec, order.Ref = *e.order.Offset, e.close[bar]
+	return order
+}
+
+// targetPlan carries the document's trade management onto the entry. A nil
+// management is the pre-management behaviour: close the whole position at the
+// target and leave the stop where it was placed.
+func targetPlan(m *ir.Management, level core.Price) sim.TargetPlan {
+	plan := sim.TargetPlan{Level: level}
+	if m == nil {
+		return plan
+	}
+	plan.Close = m.Close
+	plan.MoveStopToBreakEven = m.BreakEven
+	plan.TrailSpec = m.Trail
+	return plan
+}
+
+// entryPlan is everything about a document's entry and exit handling that a
+// signal carries into the simulator. It exists so that adding an order or exit
+// concept does not add another positional argument to every signal-emitting
+// function.
+type entryPlan struct {
+	order      *ir.Order
+	close      []core.Price
+	level      primitive.Value
+	hasLevel   bool
+	management *ir.Management
+	// atr holds the ATR reading per entry-series bar. The simulator has no
+	// indicators of its own, so a distance expressed as a multiple of ATR can
+	// only be resolved from a series the engine supplies.
+	atr    primitive.Value
+	hasATR bool
+}
+
+// ready reports whether an entry detected at bar can be resolved into an order.
+// An ATR distance read before the indicator has warmed up resolves to a zero
+// distance, which sizes the position at zero lots and drops the entry without
+// saying so. Refusing it here turns a silent gap into a counted near miss.
+func (e entryPlan) ready(bar int) bool {
+	if e.hasATR && (e.atr.Valid == nil || !e.atr.Valid.Get(bar)) {
+		return false
+	}
+	// A resting order whose level primitive has not produced a reading yet has
+	// no price to rest at. Entering at the market instead would be a different
+	// strategy, so the signal is refused and counted.
+	return !e.hasLevel || (e.level.Valid != nil && e.level.Valid.Get(bar))
+}
+
+// value returns the ATR at bar in ticks, or zero when the document never asks
+// for one.
+func (e entryPlan) value(bar int) core.Price {
+	if !e.hasATR || bar >= len(e.atr.Level) {
+		return 0
+	}
+	return e.atr.Level[bar]
+}
+
+// ATRPeriod is the lookback used to resolve a distance written as a multiple of
+// ATR. A Distance carries no period of its own, so the engine commits to
+// Wilder's standard 14 and says so wherever an ATR unit is offered, rather than
+// letting each surface assume its own.
+const ATRPeriod = 14
+
+// resolvePlan gathers everything an entry needs beyond its own condition: the
+// order it becomes, and the ATR its distances resolve against. The ATR is read
+// through the same registry, cache and alignment as any other primitive, so it
+// matches the atr detector exactly instead of reimplementing it.
+func resolvePlan(ctx context.Context, strategy *ir.Strategy, data Data, values map[string]primitive.Value, reg *primitive.Registry) (entryPlan, error) {
+	ex := entryPlan{management: strategy.Risk.Management, close: data.Series.Close}
+	// Entries, and so the order, belong to schema v2. A v1 document hashes
+	// without them, so honouring one here would let two documents with the same
+	// identity run differently.
+	if strategy.Schema == ir.SchemaV2 {
+		ex.order = strategy.Entries.Order
+	}
+	if o := ex.order; o != nil && o.Node != "" {
+		v, ok := values[o.Node]
+		if !ok {
+			return ex, fmt.Errorf("engine: order level: node %s was not evaluated", o.Node)
+		}
+		ex.level, ex.hasLevel = v, true
+	}
+	needs := strategy.Risk.Stop.NeedsATR() || strategy.Risk.Target.NeedsATR()
+	if strategy.Risk.Management != nil && strategy.Risk.Management.Trail.NeedsATR() {
+		needs = true
+	}
+	if !needs {
+		return ex, nil
+	}
+	p, err := reg.Get("indicator", "atr")
+	if err != nil {
+		return ex, fmt.Errorf("engine: atr distance: %w", err)
+	}
+	v, _, err := primitive.EvaluateAligned(ctx, p, &assayv1.AtrParams{Period: ATRPeriod}, data.Series.TF, data.Series, data.Snapshot, data.Cache, data.Stale)
+	if err != nil {
+		return ex, fmt.Errorf("engine: atr distance: %w", err)
+	}
+	if v.Len() != data.Series.Len() {
+		return ex, fmt.Errorf("engine: atr distance: reading cannot be aligned to the entry series")
+	}
+	ex.atr, ex.hasATR = v, true
+	return ex, nil
 }

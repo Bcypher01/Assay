@@ -62,7 +62,7 @@ export function riskLabel(unit: RiskUnit, kind: 'stop' | 'target') {
     case 'price':
       return `${base} (price units)`
     case 'atr':
-      return `${base} (ATR multiple)`
+      return `${base} (× ATR(14))`
     default:
       return `${base} (pips)`
   }

@@ -2768,19 +2768,23 @@ func (x *TradeChunk) GetCount() uint32 {
 }
 
 type RunSummary struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Trades        uint32                 `protobuf:"varint,1,opt,name=trades,proto3" json:"trades,omitempty"`
-	Unresolved    uint32                 `protobuf:"varint,2,opt,name=unresolved,proto3" json:"unresolved,omitempty"`
-	Error         string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	RunId         string                 `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	Wins          uint32                 `protobuf:"varint,5,opt,name=wins,proto3" json:"wins,omitempty"`
-	Losses        uint32                 `protobuf:"varint,6,opt,name=losses,proto3" json:"losses,omitempty"`
-	LongTrades    uint32                 `protobuf:"varint,7,opt,name=long_trades,json=longTrades,proto3" json:"long_trades,omitempty"`
-	ShortTrades   uint32                 `protobuf:"varint,8,opt,name=short_trades,json=shortTrades,proto3" json:"short_trades,omitempty"`
-	NetPnl        int64                  `protobuf:"zigzag64,9,opt,name=net_pnl,json=netPnl,proto3" json:"net_pnl,omitempty"`
-	Expectancy    float64                `protobuf:"fixed64,10,opt,name=expectancy,proto3" json:"expectancy,omitempty"`
-	ProfitFactor  float64                `protobuf:"fixed64,11,opt,name=profit_factor,json=profitFactor,proto3" json:"profit_factor,omitempty"`
-	ErrorCode     string                 `protobuf:"bytes,12,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Trades       uint32                 `protobuf:"varint,1,opt,name=trades,proto3" json:"trades,omitempty"`
+	Unresolved   uint32                 `protobuf:"varint,2,opt,name=unresolved,proto3" json:"unresolved,omitempty"`
+	Error        string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	RunId        string                 `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	Wins         uint32                 `protobuf:"varint,5,opt,name=wins,proto3" json:"wins,omitempty"`
+	Losses       uint32                 `protobuf:"varint,6,opt,name=losses,proto3" json:"losses,omitempty"`
+	LongTrades   uint32                 `protobuf:"varint,7,opt,name=long_trades,json=longTrades,proto3" json:"long_trades,omitempty"`
+	ShortTrades  uint32                 `protobuf:"varint,8,opt,name=short_trades,json=shortTrades,proto3" json:"short_trades,omitempty"`
+	NetPnl       int64                  `protobuf:"zigzag64,9,opt,name=net_pnl,json=netPnl,proto3" json:"net_pnl,omitempty"`
+	Expectancy   float64                `protobuf:"fixed64,10,opt,name=expectancy,proto3" json:"expectancy,omitempty"`
+	ProfitFactor float64                `protobuf:"fixed64,11,opt,name=profit_factor,json=profitFactor,proto3" json:"profit_factor,omitempty"`
+	ErrorCode    string                 `protobuf:"bytes,12,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
+	// Entry signals whose resting order the next bar never reached. A limit or
+	// stop study trades less often than it signals, and hiding that would make
+	// the run look like it found fewer setups than it did.
+	Unfilled      uint32 `protobuf:"varint,13,opt,name=unfilled,proto3" json:"unfilled,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2897,6 +2901,13 @@ func (x *RunSummary) GetErrorCode() string {
 		return x.ErrorCode
 	}
 	return ""
+}
+
+func (x *RunSummary) GetUnfilled() uint32 {
+	if x != nil {
+		return x.Unfilled
+	}
+	return 0
 }
 
 type RunUpdate struct {
@@ -3427,6 +3438,7 @@ type RunDetails struct {
 	MonteCarlo       *MonteCarloSummary     `protobuf:"bytes,18,opt,name=monte_carlo,json=monteCarlo,proto3" json:"monte_carlo,omitempty"`
 	Sensitivity      *SensitivityGrid       `protobuf:"bytes,19,opt,name=sensitivity,proto3" json:"sensitivity,omitempty"`
 	NextActions      []*NextAction          `protobuf:"bytes,20,rep,name=next_actions,json=nextActions,proto3" json:"next_actions,omitempty"`
+	Unfilled         uint32                 `protobuf:"varint,21,opt,name=unfilled,proto3" json:"unfilled,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -3599,6 +3611,13 @@ func (x *RunDetails) GetNextActions() []*NextAction {
 		return x.NextActions
 	}
 	return nil
+}
+
+func (x *RunDetails) GetUnfilled() uint32 {
+	if x != nil {
+		return x.Unfilled
+	}
+	return 0
 }
 
 type PeriodMetrics struct {
@@ -4959,7 +4978,7 @@ const file_assay_v1_service_proto_rawDesc = "" +
 	"\x06values\x18\x01 \x03(\x12R\x06values\"\"\n" +
 	"\n" +
 	"TradeChunk\x12\x14\n" +
-	"\x05count\x18\x01 \x01(\rR\x05count\"\xde\x02\n" +
+	"\x05count\x18\x01 \x01(\rR\x05count\"\xfa\x02\n" +
 	"\n" +
 	"RunSummary\x12\x16\n" +
 	"\x06trades\x18\x01 \x01(\rR\x06trades\x12\x1e\n" +
@@ -4980,7 +4999,8 @@ const file_assay_v1_service_proto_rawDesc = "" +
 	"expectancy\x12#\n" +
 	"\rprofit_factor\x18\v \x01(\x01R\fprofitFactor\x12\x1d\n" +
 	"\n" +
-	"error_code\x18\f \x01(\tR\terrorCode\"\xdb\x01\n" +
+	"error_code\x18\f \x01(\tR\terrorCode\x12\x1a\n" +
+	"\bunfilled\x18\r \x01(\rR\bunfilled\"\xdb\x01\n" +
 	"\tRunUpdate\x120\n" +
 	"\bprogress\x18\x01 \x01(\v2\x12.assay.v1.ProgressH\x00R\bprogress\x12/\n" +
 	"\x06equity\x18\x02 \x01(\v2\x15.assay.v1.EquityChunkH\x00R\x06equity\x12.\n" +
@@ -5018,7 +5038,7 @@ const file_assay_v1_service_proto_rawDesc = "" +
 	"\x06trades\x18\x06 \x01(\rR\x06trades\x12\x12\n" +
 	"\x04wins\x18\a \x01(\rR\x04wins\x12\x16\n" +
 	"\x06losses\x18\b \x01(\rR\x06losses\x122\n" +
-	"\x15longest_losing_streak\x18\t \x01(\rR\x13longestLosingStreak\"\x99\a\n" +
+	"\x15longest_losing_streak\x18\t \x01(\rR\x13longestLosingStreak\"\xb5\a\n" +
 	"\n" +
 	"RunDetails\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12#\n" +
@@ -5046,7 +5066,8 @@ const file_assay_v1_service_proto_rawDesc = "" +
 	"\vmonte_carlo\x18\x12 \x01(\v2\x1b.assay.v1.MonteCarloSummaryR\n" +
 	"monteCarlo\x12;\n" +
 	"\vsensitivity\x18\x13 \x01(\v2\x19.assay.v1.SensitivityGridR\vsensitivity\x127\n" +
-	"\fnext_actions\x18\x14 \x03(\v2\x14.assay.v1.NextActionR\vnextActions\"\x9d\x01\n" +
+	"\fnext_actions\x18\x14 \x03(\v2\x14.assay.v1.NextActionR\vnextActions\x12\x1a\n" +
+	"\bunfilled\x18\x15 \x01(\rR\bunfilled\"\x9d\x01\n" +
 	"\rPeriodMetrics\x12\x16\n" +
 	"\x06period\x18\x01 \x01(\tR\x06period\x120\n" +
 	"\anet_pnl\x18\x02 \x01(\v2\x17.assay.v1.BoundedMetricR\x06netPnl\x12\x16\n" +

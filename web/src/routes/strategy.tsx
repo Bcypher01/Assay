@@ -24,12 +24,28 @@ import {
   timeframesAtOrAbove,
   toEngineStrategy,
   withEntrySide,
+  withManagement,
   withNodeParams,
   withNodeTimeframe,
   withNodeWindow,
+  ORDER_LEVEL_ID,
+  withOrder,
+  withOrderLevel,
+  withPriceRule,
   withStarterEntry,
 } from '@/lib/strategy'
-import type { LadderSlot, StrategyDoc, StrategyNode } from '@/lib/strategy'
+import type {
+  Distance,
+  EntryOrder,
+  LadderSlot,
+  LevelRuleSpec,
+  PriceRelation,
+  PriceSource,
+  StrategyDoc,
+  StrategyNode,
+} from '@/lib/strategy'
+import { useLevelPrimitives } from '@/lib/primitives'
+import type { LevelPrimitive } from '@/lib/primitives'
 import { barsToDuration, displayDuration, durationToBars } from '@/lib/duration'
 import {
   isTimeframeSupportedForInstrument,
@@ -40,9 +56,33 @@ import {
 export const Route = createFileRoute('/strategy')({ component: DefineRules })
 
 const LADDER_LABELS: Record<LadderSlot, string> = {
-  bias: 'Bias',
-  poi: 'POI',
-  entry: 'Entry',
+  bias: 'Context',
+  poi: 'Zone',
+  entry: 'Trigger',
+}
+
+/**
+ * Which rung of the ladder a node lives on. A node's own timeframe decides it,
+ * falling back to the entry rung when it has none: a node parked on the bias
+ * timeframe is context, one on the poi timeframe is the zone, everything else
+ * is the trigger. When bias and poi share the entry timeframe (a
+ * single-timeframe study) there is only one tier.
+ */
+function tierOfNode(node: StrategyNode, doc: StrategyDoc): LadderSlot {
+  const tf = node.timeframe || doc.timeframes.entry
+  if (
+    doc.timeframes.bias &&
+    tf === doc.timeframes.bias &&
+    doc.timeframes.bias !== doc.timeframes.entry
+  )
+    return 'bias'
+  if (
+    doc.timeframes.poi &&
+    tf === doc.timeframes.poi &&
+    doc.timeframes.poi !== doc.timeframes.entry
+  )
+    return 'poi'
+  return 'entry'
 }
 
 interface FieldError {
@@ -63,6 +103,7 @@ function DefineRules() {
   )
 
   const [errors, setErrors] = useState<FieldError[]>([])
+  const levelPrimitives = useLevelPrimitives()
   const [described, setDescribed] = useState<LocalDescription | null>(null)
   const [describeFallback, setDescribeFallback] = useState(false)
   const [requestError, setRequestError] = useState<string | null>(null)
@@ -95,7 +136,7 @@ function DefineRules() {
     setDescribed(local)
 
     const timer = window.setTimeout(() => {
-      let strategyJson: Uint8Array
+      let strategyJson: Uint8Array<ArrayBuffer>
       try {
         strategyJson = toJsonBytes(toEngineStrategy(document))
       } catch (cause) {
@@ -137,7 +178,7 @@ function DefineRules() {
 
   if (!document) {
     return (
-      <div className="space-y-6">
+      <div className="page-form">
         <PageHeader step={2} title="Define the rules" />
         <Alert variant="destructive">
           <AlertTriangle className="size-4" />
@@ -181,7 +222,7 @@ function DefineRules() {
   const conditionCount = Number(hasEntry(document))
 
   return (
-    <div className="space-y-6">
+    <div className="page-form">
       <PageHeader
         step={2}
         title="Define the rules"
@@ -282,10 +323,10 @@ function DefineRules() {
                   ))
                 )}
                 <span className="text-sm text-muted-foreground">
-                  Bias sits at the top and entry at the bottom; each rung must
-                  be the same or finer than the one above it. Entry is the chart
-                  the run loads — coarser rungs are aggregated from it and read
-                  at their close. Leave all three the same for a
+                  Context sits at the top and the trigger at the bottom; each
+                  rung must be the same or finer than the one above it. Entry is
+                  the chart the run loads — coarser rungs are aggregated from it
+                  and read at their close. Leave all three the same for a
                   single-timeframe study.
                 </span>
                 {symbol &&
@@ -328,6 +369,15 @@ function DefineRules() {
             const entry = document.entries[side]
             const nodes = nodesFor(expressionNodeIDs(entry.when))
             if (!entry.enabled || nodes.length === 0) return null
+            const byTier = (LADDER_SLOTS as readonly LadderSlot[]).reduce(
+              (acc, slot) => {
+                acc[slot] = nodes.filter(
+                  (n) => tierOfNode(n, document) === slot,
+                )
+                return acc
+              },
+              {} as Record<LadderSlot, StrategyNode[]>,
+            )
             return (
               <section
                 key={side}
@@ -338,26 +388,48 @@ function DefineRules() {
                 </h2>
                 <p className="text-sm text-muted-foreground">{entry.name}</p>
                 <div className="mt-2">
-                  {nodes.map((node) => (
-                    <ConditionRow
-                      key={node.id}
-                      node={node}
-                      entryTimeframe={document.timeframes.entry}
-                      timeframeError={errorFor(
-                        `nodes[${document.nodes.indexOf(node)}].timeframe`,
-                      )}
-                      heldFor={nodeWindowOf(entry.when, node.id)}
-                      onChange={(params) =>
-                        update(withNodeParams(document, node.id, params))
-                      }
-                      onTimeframe={(tf) =>
-                        update(withNodeTimeframe(document, node.id, tf))
-                      }
-                      onHeldFor={(window) =>
-                        update(withNodeWindow(document, side, node.id, window))
-                      }
-                    />
-                  ))}
+                  {(LADDER_SLOTS as readonly LadderSlot[]).map((slot) => {
+                    const tierNodes = byTier[slot]
+                    if (tierNodes.length === 0) return null
+                    return (
+                      <div key={slot} className="mb-4 last:mb-0">
+                        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                          {LADDER_LABELS[slot]}
+                        </p>
+                        <div>
+                          {tierNodes.map((node) => (
+                            <ConditionRow
+                              key={node.id}
+                              node={node}
+                              entryTimeframe={document.timeframes.entry}
+                              timeframeError={errorFor(
+                                `nodes[${document.nodes.indexOf(node)}].timeframe`,
+                              )}
+                              heldFor={nodeWindowOf(entry.when, node.id)}
+                              onChange={(params) =>
+                                update(
+                                  withNodeParams(document, node.id, params),
+                                )
+                              }
+                              onTimeframe={(tf) =>
+                                update(withNodeTimeframe(document, node.id, tf))
+                              }
+                              onHeldFor={(window) =>
+                                update(
+                                  withNodeWindow(
+                                    document,
+                                    side,
+                                    node.id,
+                                    window,
+                                  ),
+                                )
+                              }
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </section>
             )
@@ -386,6 +458,23 @@ function DefineRules() {
             </Alert>
           ) : null}
 
+          <LevelRuleForm
+            levels={levelPrimitives}
+            onAdd={(spec) =>
+              update(
+                withPriceRule(
+                  document,
+                  document.entries.long.enabled
+                    ? 'long'
+                    : document.entries.short.enabled
+                      ? 'short'
+                      : 'long',
+                  spec,
+                ),
+              )
+            }
+          />
+
           <section className="space-y-1 border-t border-border pt-4">
             <h2 className="text-base font-semibold">Stop and target</h2>
             <p className="text-sm text-muted-foreground">
@@ -409,11 +498,77 @@ function DefineRules() {
                   }
                 />
               </Row>
-              <Row label="Entry timing">
-                <span className="text-sm">Next bar open</span>
-                <span className="font-mono text-[11px] text-muted-foreground">
-                  the only fill policy the simulator executes
-                </span>
+              <Row label="Entry order" error={errorFor('entries.order')}>
+                <OrderInput
+                  order={document.entries.order}
+                  levels={levelPrimitives}
+                  orderLevel={(() => {
+                    const n = document.nodes.find(
+                      (x) => x.id === ORDER_LEVEL_ID,
+                    )
+                    return n ? { pack: n.pack, type: n.type } : undefined
+                  })()}
+                  onChange={(patch) => update(withOrder(document, patch))}
+                  onLevel={(orderType, level) =>
+                    update(withOrderLevel(document, orderType, level))
+                  }
+                />
+              </Row>
+            </div>
+          </section>
+
+          <section className="space-y-1 border-t border-border pt-4">
+            <h2 className="text-base font-semibold">Trade management</h2>
+            <p className="text-sm text-muted-foreground">
+              Optional. Leave it alone and the whole position closes at the
+              target with the stop where you put it — which is what every study
+              did before these controls existed.
+            </p>
+            <div className="mt-2">
+              <Row
+                label="Take part at the target"
+                error={errorFor('risk.management.close')}
+              >
+                <PartialInput
+                  management={document.risk.management}
+                  onChange={(patch) => update(withManagement(document, patch))}
+                />
+              </Row>
+              <Row
+                label="Then move stop to break-even"
+                error={errorFor('risk.management.breakEven')}
+              >
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4"
+                    disabled={!document.risk.management?.close}
+                    checked={document.risk.management?.breakEven === true}
+                    onChange={(e) =>
+                      update(
+                        withManagement(document, {
+                          breakEven: e.target.checked,
+                        }),
+                      )
+                    }
+                  />
+                  <span className="text-muted-foreground">
+                    {document.risk.management?.close
+                      ? 'protect the remainder at your entry price'
+                      : 'needs a partial close — a full exit leaves nothing to protect'}
+                  </span>
+                </label>
+              </Row>
+              <Row
+                label="Trail the stop"
+                error={errorFor('risk.management.trail')}
+              >
+                <TrailInput
+                  trail={document.risk.management?.trail}
+                  onChange={(trail) =>
+                    update(withManagement(document, { trail }))
+                  }
+                />
               </Row>
             </div>
           </section>
@@ -484,12 +639,12 @@ function DefineRules() {
         </TabsContent>
       </Tabs>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
+      <div className="page-footer">
         <Button variant="outline" asChild>
           <Link to="/">Back to starting points</Link>
         </Button>
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <span className="font-mono text-[11px] text-muted-foreground">
+        <div className="page-footer-right">
+          <span className="footer-status">
             {s.validatedHash
               ? `validated · ${s.validatedHash.slice(0, 10)}…`
               : 'waiting for the server to accept these rules'}
@@ -516,12 +671,10 @@ function Row({
   children: React.ReactNode
 }) {
   return (
-    <div className="grid items-baseline gap-x-5 gap-y-1 border-b border-border/60 last:border-b-0 py-3 sm:grid-cols-[170px_minmax(0,1fr)]">
+    <div className="row">
       <Label className="runlog-label">{label}</Label>
-      <div className="flex flex-wrap items-center gap-3">{children}</div>
-      {error ? (
-        <p className="text-sm text-destructive sm:col-start-2">{error}</p>
-      ) : null}
+      <div className="row-controls">{children}</div>
+      {error ? <p className="row-error">{error}</p> : null}
     </div>
   )
 }
@@ -540,11 +693,7 @@ function Choice({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={
-        active
-          ? 'border border-primary bg-primary px-3 py-1.5 text-sm text-primary-foreground'
-          : 'border border-input bg-card px-3 py-1.5 text-sm hover:bg-accent'
-      }
+      className="choice"
     >
       {children}
     </button>
@@ -557,6 +706,104 @@ function humanise(key: string): string {
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .replace(/_/g, ' ')
     .toLowerCase()
+}
+
+const PRICE_SOURCES: { value: PriceSource; label: string }[] = [
+  { value: 'close', label: 'Close' },
+  { value: 'high', label: 'High' },
+  { value: 'low', label: 'Low' },
+  { value: 'open', label: 'Open' },
+]
+const PRICE_RELATIONS: { value: PriceRelation; label: string }[] = [
+  { value: 'crosses_above', label: 'crosses above' },
+  { value: 'crosses_below', label: 'crosses below' },
+  { value: 'above', label: 'is above' },
+  { value: 'below', label: 'is below' },
+]
+
+// Author a price-versus-level rule by hand. The level options come from the
+// live primitive registry (filtered to level outputs), so the picker can only
+// offer references the engine actually has.
+function LevelRuleForm({
+  levels,
+  onAdd,
+}: {
+  levels: LevelPrimitive[]
+  onAdd: (spec: LevelRuleSpec) => void
+}) {
+  const [source, setSource] = useState<PriceSource>('close')
+  const [relation, setRelation] = useState<PriceRelation>('crosses_above')
+  const [levelKey, setLevelKey] = useState('')
+  if (levels.length === 0) return null
+  const selected =
+    levels.find((l) => `${l.pack}/${l.type}` === levelKey) ?? levels[0]
+  return (
+    <section className="space-y-1 border-t border-border pt-4">
+      <h2 className="text-base font-semibold">Add a level condition</h2>
+      <p className="text-sm text-muted-foreground">
+        Compare a price to a reference level — a previous high, a moving
+        average, the session VWAP. The level is read at each bar's close and the
+        rule fires when price relates to it.
+      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <select
+          aria-label="Price source"
+          className="h-8 border border-input bg-card pl-2 pr-7 text-xs"
+          value={source}
+          onChange={(e) => setSource(e.target.value as PriceSource)}
+        >
+          {PRICE_SOURCES.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Relation"
+          className="h-8 border border-input bg-card pl-2 pr-7 text-xs"
+          value={relation}
+          onChange={(e) => setRelation(e.target.value as PriceRelation)}
+        >
+          {PRICE_RELATIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Level"
+          className="h-8 border border-input bg-card pl-2 pr-7 text-xs"
+          value={`${selected.pack}/${selected.type}`}
+          onChange={(e) => setLevelKey(e.target.value)}
+        >
+          {levels.map((l) => (
+            <option key={`${l.pack}/${l.type}`} value={`${l.pack}/${l.type}`}>
+              {l.label}
+            </option>
+          ))}
+        </select>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            const src = PRICE_SOURCES.find((o) => o.value === source)
+            const rel = PRICE_RELATIONS.find((o) => o.value === relation)
+            onAdd({
+              pack: selected.pack,
+              type: selected.type,
+              params: selected.params,
+              source,
+              relation,
+              name: `${src?.label} ${rel?.label} the ${selected.label.toLowerCase()}`,
+            })
+          }}
+        >
+          Add condition
+          <ArrowRight className="size-4" />
+        </Button>
+      </div>
+    </section>
+  )
 }
 
 function ConditionRow({
@@ -655,6 +902,219 @@ function ConditionRow({
   )
 }
 
+/**
+ * How the signal reaches the market. A market order takes the next bar's open —
+ * the only fill the engine had before this control existed. A limit or stop
+ * rests at a level for that one bar and is then withdrawn; the run reports the
+ * signals whose order never filled, so a quieter study reads as the rule's own
+ * behaviour rather than as missing setups.
+ *
+ * The document can also aim the trigger at a level primitive. That form is not
+ * offered here because the guided builder does not know which of its nodes
+ * produce a price.
+ */
+function OrderInput({
+  order,
+  levels,
+  orderLevel,
+  onChange,
+  onLevel,
+}: {
+  order: StrategyDoc['entries']['order']
+  levels: LevelPrimitive[]
+  orderLevel?: { pack: string; type: string }
+  onChange: (patch: EntryOrder | null) => void
+  onLevel: (orderType: 'limit' | 'stop', level: LevelPrimitive) => void
+}) {
+  const type = order?.type ?? 'market'
+  const offset: Distance = order?.offset ?? { unit: 'pips', value: 10 }
+  const mode = order?.node ? 'level' : 'offset'
+  const selectedLevelKey = orderLevel
+    ? `${orderLevel.pack}/${orderLevel.type}`
+    : levels[0]
+      ? `${levels[0].pack}/${levels[0].type}`
+      : ''
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <select
+        className="h-9 border border-input bg-card pl-3 pr-9 text-sm"
+        value={type}
+        onChange={(e) =>
+          onChange(
+            e.target.value === 'market'
+              ? null
+              : { type: e.target.value as 'limit' | 'stop' },
+          )
+        }
+      >
+        <option value="market">Market at the next bar open</option>
+        <option value="limit">Limit — wait for price to come back</option>
+        <option value="stop">Stop — wait for the breakout</option>
+      </select>
+      {type === 'market' ? (
+        <span className="font-mono text-[11px] text-muted-foreground">
+          fills on the next bar, always
+        </span>
+      ) : (
+        <>
+          {levels.length > 0 ? (
+            <select
+              aria-label="Trigger source"
+              className="h-9 border border-input bg-card pl-3 pr-9 text-sm"
+              value={mode}
+              onChange={(e) => {
+                if (e.target.value === 'level') {
+                  if (levels[0]) onLevel(type, levels[0])
+                } else {
+                  onChange({ type, offset: { unit: 'pips', value: 10 } })
+                }
+              }}
+            >
+              <option value="offset">at an offset</option>
+              <option value="level">at a level</option>
+            </select>
+          ) : null}
+          {mode === 'level' ? (
+            <select
+              aria-label="Trigger level"
+              className="h-9 border border-input bg-card pl-3 pr-9 text-sm"
+              value={selectedLevelKey}
+              onChange={(e) => {
+                const lv = levels.find(
+                  (l) => `${l.pack}/${l.type}` === e.target.value,
+                )
+                if (lv) onLevel(type, lv)
+              }}
+            >
+              {levels.map((l) => (
+                <option
+                  key={`${l.pack}/${l.type}`}
+                  value={`${l.pack}/${l.type}`}
+                >
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <>
+              <Input
+                type="number"
+                step="0.1"
+                min="0"
+                className="h-9 w-24 font-mono text-sm"
+                value={offset.value}
+                onChange={(e) =>
+                  onChange({
+                    type,
+                    offset: { ...offset, value: Number(e.target.value) },
+                  })
+                }
+              />
+              <select
+                className="h-9 border border-input bg-card pl-3 pr-9 text-sm"
+                value={offset.unit}
+                onChange={(e) =>
+                  onChange({
+                    type,
+                    offset: {
+                      ...offset,
+                      unit: e.target.value as Distance['unit'],
+                    },
+                  })
+                }
+              >
+                <option value="pips">pips</option>
+                <option value="ticks">ticks</option>
+                <option value="percent">percent</option>
+                <option value="atr">× ATR(14)</option>
+                <option value="price">price</option>
+              </select>
+              <span className="text-sm text-muted-foreground">
+                {type === 'limit' ? 'better than' : 'beyond'} the signal
+                bar&rsquo;s close
+              </span>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The partial close is authored as a percentage because that is how traders
+ * say it, and stored as the fraction the engine takes. Zero — an empty field —
+ * means no partial: the whole position leaves at the target.
+ */
+function PartialInput({
+  management,
+  onChange,
+}: {
+  management: StrategyDoc['risk']['management']
+  onChange: (patch: { close: number }) => void
+}) {
+  const percent = management?.close ? Math.round(management.close * 100) : 0
+  return (
+    <div className="flex items-center gap-2">
+      <Input
+        type="number"
+        step="5"
+        min="0"
+        max="99"
+        className="h-9 w-28 font-mono text-sm"
+        value={percent || ''}
+        placeholder="0"
+        onChange={(e) => onChange({ close: Number(e.target.value) / 100 })}
+      />
+      <span className="text-sm text-muted-foreground">
+        % of the position, the rest keeps running
+      </span>
+    </div>
+  )
+}
+
+/** A trail carries a unit like every other distance in the document. */
+function TrailInput({
+  trail,
+  onChange,
+}: {
+  trail: Distance | undefined
+  onChange: (trail: Distance) => void
+}) {
+  const current: Distance = trail ?? { unit: 'pips', value: 0 }
+  return (
+    <div className="flex items-center gap-2">
+      <Input
+        type="number"
+        step="0.1"
+        min="0"
+        className="h-9 w-28 font-mono text-sm"
+        value={current.value || ''}
+        placeholder="0"
+        onChange={(e) =>
+          onChange({ ...current, value: Number(e.target.value) })
+        }
+      />
+      <select
+        className="h-9 border border-input bg-card pl-3 pr-9 text-sm"
+        value={current.unit}
+        onChange={(e) =>
+          onChange({ ...current, unit: e.target.value as Distance['unit'] })
+        }
+      >
+        <option value="pips">pips</option>
+        <option value="ticks">ticks</option>
+        <option value="percent">percent</option>
+        <option value="atr">× ATR(14)</option>
+        <option value="price">price</option>
+      </select>
+      <span className="text-sm text-muted-foreground">
+        behind each bar&rsquo;s extreme
+      </span>
+    </div>
+  )
+}
+
 function DistanceInput({
   distance,
   onChange,
@@ -687,7 +1147,7 @@ function DistanceInput({
         <option value="pips">pips</option>
         <option value="ticks">ticks</option>
         <option value="percent">percent</option>
-        <option value="atr">× ATR</option>
+        <option value="atr">× ATR(14)</option>
         <option value="price">price</option>
       </select>
     </div>

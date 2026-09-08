@@ -1,0 +1,204 @@
+{
+  "timeframe": "m15",
+  "bars": [
+    {
+      "time": "2025-01-01T08:45:00Z",
+      "open": 5,
+      "high": 20,
+      "low": 1,
+      "close": 5,
+      "volume": 2
+    },
+    {
+      "time": "2025-01-01T09:00:00Z",
+      "open": 5,
+      "high": 10,
+      "low": 4,
+      "close": 8,
+      "volume": 3
+    },
+    {
+      "time": "2025-01-01T09:15:00Z",
+      "open": 8,
+      "high": 12,
+      "low": 6,
+      "close": 7,
+      "volume": 5
+    },
+    {
+      "time": "2025-01-01T09:30:00Z",
+      "open": 7,
+      "high": 30,
+      "low": 0,
+      "close": 20,
+      "volume": 7
+    },
+    {
+      "time": "2025-01-01T10:00:00Z",
+      "open": 20,
+      "high": 31,
+      "low": 0,
+      "close": 25,
+      "volume": 11
+    },
+    {
+      "time": "2025-01-02T09:00:00Z",
+      "open": 25,
+      "high": 40,
+      "low": 21,
+      "close": 33,
+      "volume": 13
+    },
+    {
+      "time": "2025-01-02T09:15:00Z",
+      "open": 33,
+      "high": 41,
+      "low": 20,
+      "close": 25,
+      "volume": 17
+    },
+    {
+      "time": "2025-01-02T09:30:00Z",
+      "open": 25,
+      "high": 99,
+      "low": 0,
+      "close": 50,
+      "volume": 19
+    }
+  ],
+  "cases": [
+    {
+      "type": "period_high",
+      "params": {
+        "lookback": 0
+      },
+      "level": [
+        20,
+        10,
+        12,
+        30,
+        31,
+        40,
+        41,
+        99
+      ],
+      "valid": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "type": "period_low",
+      "params": {
+        "lookback": 1
+      },
+      "level": [
+        0,
+        1,
+        4,
+        6,
+        0,
+        0,
+        21,
+        20
+      ],
+      "valid": [
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "type": "opening_range_high",
+      "params": {
+        "rangeMinutes": 30,
+        "startMinuteUtc": 540
+      },
+      "level": [
+        0,
+        0,
+        0,
+        12,
+        12,
+        0,
+        0,
+        41
+      ],
+      "valid": [
+        false,
+        false,
+        false,
+        true,
+        true,
+        false,
+        false,
+        true
+      ]
+    },
+    {
+      "type": "opening_range_low",
+      "params": {
+        "rangeMinutes": 30,
+        "startMinuteUtc": 540
+      },
+      "level": [
+        0,
+        0,
+        0,
+        4,
+        4,
+        0,
+        0,
+        20
+      ],
+      "valid": [
+        false,
+        false,
+        false,
+        true,
+        true,
+        false,
+        false,
+        true
+      ]
+    },
+    {
+      "type": "session_vwap",
+      "params": {
+        "endMinuteUtc": 600,
+        "startMinuteUtc": 540
+      },
+      "level": [
+        0,
+        7,
+        7,
+        12,
+        0,
+        31,
+        29,
+        37
+      ],
+      "valid": [
+        false,
+        true,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true
+      ]
+    }
+  ]
+}

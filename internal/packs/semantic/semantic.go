@@ -22,6 +22,8 @@ func init() {
 		BreakerRetest{side: core.SideLong}, BreakerRetest{side: core.SideShort},
 		FairValueGapRetest{side: core.SideLong}, FairValueGapRetest{side: core.SideShort},
 		DrawnPrecedent{side: core.SideLong}, DrawnPrecedent{side: core.SideShort},
+		POIZone{side: core.SideLong}, POIZone{side: core.SideShort},
+		ShiftCandle{side: core.SideLong}, ShiftCandle{side: core.SideShort},
 	} {
 		primitive.MustRegister(p)
 	}
@@ -452,6 +454,114 @@ func (x *orderBlockRetest) zoneRetested(s *core.Series, i int, z pendingZone) bo
 	return touches && s.Close[i] < s.Open[i]
 }
 func (x *orderBlockRetest) Overlays(from, to core.Time) []primitive.Overlay {
+	return clip(x.overlays, from, to)
+}
+
+// POIZone is the state half of the top-down entry ladder. It marks every bar
+// whose range touches the active point-of-interest zone — the last opposing
+// candle before a directional displacement, exactly the zone OrderBlockRetest
+// signals from — but unlike that detector the zone is not consumed by the
+// touch. Read on a coarse timeframe and projected onto a fine entry series,
+// it answers "is price back inside my higher-timeframe zone right now", which
+// the entry-half trigger (ShiftCandle) combines with a fine-timeframe shift.
+type POIZone struct{ side core.Side }
+
+func (x POIZone) Spec() primitive.Spec {
+	if x.side == core.SideShort {
+		return semanticSpec("poi_zone_bearish")
+	}
+	return semanticSpec("poi_zone_bullish")
+}
+func (x POIZone) New(p proto.Message, _ core.TF) (primitive.Instance, error) {
+	params, err := readParameters(p)
+	return &poiZone{parameters: params, side: x.side}, err
+}
+
+type poiZone struct {
+	parameters
+	side     core.Side
+	overlays []primitive.Overlay
+}
+
+func (x *poiZone) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.Value, error) {
+	b, valid := core.NewBitset(s.Len()), core.NewBitset(s.Len())
+	var pending *pendingZone
+	for i := 1; i < s.Len(); i++ {
+		valid.Set(i)
+		if pending != nil {
+			if i > pending.expires {
+				pending = nil
+			} else if zoneTouched(s, i, *pending, core.Price(x.tolerance)) {
+				b.Set(i)
+			}
+		}
+		if !directionalDisplacement(s, i, x.side, x.displacementBody) {
+			continue
+		}
+		from := max(0, i-x.lookback)
+		for j := i - 1; j >= from; j-- {
+			if !opposingCandle(s, j, x.side) {
+				continue
+			}
+			low, high := s.Low[j], s.High[j]
+			if x.useBody {
+				low, high = core.Min(s.Open[j], s.Close[j]), core.Max(s.Open[j], s.Close[j])
+			}
+			pending = &pendingZone{low: low, high: high, created: i, expires: i + x.expiry}
+			x.overlays = append(x.overlays, primitive.Overlay{Kind: primitive.OverlayZoneBox, From: s.Time[j], To: s.Time[min(i+x.expiry, s.Len()-1)], Price: low, Price2: high, Text: "POI zone"})
+			break
+		}
+	}
+	return primitive.Value{Kind: primitive.KindBool, Bool: b, Valid: valid}, nil
+}
+
+// zoneTouched reports whether bar i's high-to-low range reaches into the zone,
+// with the configured tolerance widening it. It is a state probe, not an
+// event: the same zone can report touched on many consecutive bars.
+func zoneTouched(s *core.Series, i int, z pendingZone, tolerance core.Price) bool {
+	return s.Low[i] <= z.high+tolerance && s.High[i] >= z.low-tolerance
+}
+
+func (x *poiZone) Overlays(from, to core.Time) []primitive.Overlay {
+	return clip(x.overlays, from, to)
+}
+
+// ShiftCandle is the entry half of the top-down ladder: a single candle on the
+// entry timeframe whose body is at least the configured share of its range and
+// which closes in the trade direction — the displacement "shift" a trader
+// waits for after price arrives at a higher-timeframe point of interest.
+type ShiftCandle struct{ side core.Side }
+
+func (x ShiftCandle) Spec() primitive.Spec {
+	if x.side == core.SideShort {
+		return semanticSpec("shift_candle_bearish")
+	}
+	return semanticSpec("shift_candle_bullish")
+}
+func (x ShiftCandle) New(p proto.Message, _ core.TF) (primitive.Instance, error) {
+	params, err := readParameters(p)
+	return &shiftCandle{parameters: params, side: x.side}, err
+}
+
+type shiftCandle struct {
+	parameters
+	side     core.Side
+	overlays []primitive.Overlay
+}
+
+func (x *shiftCandle) Eval(_ *primitive.EvalCtx, s *core.Series) (primitive.Value, error) {
+	b, valid := core.NewBitset(s.Len()), core.NewBitset(s.Len())
+	for i := range s.Time {
+		valid.Set(i)
+		if !directionalDisplacement(s, i, x.side, x.displacementBody) {
+			continue
+		}
+		b.Set(i)
+		x.overlays = append(x.overlays, primitive.Overlay{Kind: primitive.OverlayMarker, From: s.Time[i], To: s.Time[i], Price: s.Close[i], Text: "shift"})
+	}
+	return primitive.Value{Kind: primitive.KindBool, Bool: b, Valid: valid}, nil
+}
+func (x *shiftCandle) Overlays(from, to core.Time) []primitive.Overlay {
 	return clip(x.overlays, from, to)
 }
 

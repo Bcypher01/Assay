@@ -73,10 +73,13 @@ func Run(ctx context.Context, s *core.Series, fine *core.Series, sig Signals, cf
 		for i := 0; i < len(positions); {
 			p := &positions[i]
 			if partialTarget(*p) && hitTarget(s, bar, p.side, p.target.Level) && !hitStop(s, bar, p.side, p.stop) {
-				realizePartial(p, s.Time[bar], bar, cfg, fillTarget(s, bar, p.side, p.target.Level, cfg.Spec.Gap))
-				equityP += p.realP.Net
-				equityO += p.realO.Net
-				p.realP, p.realO = Outcome{}, Outcome{}
+				// The realised part is added to equity once, here, and kept on
+				// the position so the trade record still reports it. Clearing it
+				// would leave a partially closed trade understating its own P&L
+				// while the equity curve told a different story.
+				realised := realizePartial(p, s.Time[bar], bar, cfg, fillTarget(s, bar, p.side, p.target.Level, cfg.Spec.Gap))
+				equityP += realised.Net
+				equityO += realised.Net
 				i++
 				continue
 			}
@@ -113,9 +116,15 @@ func Run(ctx context.Context, s *core.Series, fine *core.Series, sig Signals, cf
 			if capped(cfg.DailyLossCap, dayStartP, equityP) || capped(cfg.DailyLossCap, dayStartO, equityO) {
 				continue
 			}
+			atr := core.Price(0)
+			if len(sig.ATR) != 0 {
+				atr = sig.ATR[idx]
+			}
 			order := orderAt(sig, idx)
+			order.Level = order.trigger(sig.Side[idx], cfg.Spec.PipTicks, atr)
 			fill, ok := entryFill(s, bar, sig.Side[idx], order, cfg.Spec.Gap)
 			if !ok {
+				out.Unfilled++
 				continue
 			}
 			fill = applyEntryCosts(fill, sig.Side[idx], cfg)
@@ -124,8 +133,8 @@ func Run(ctx context.Context, s *core.Series, fine *core.Series, sig Signals, cf
 				stop, target.Level = levelsFromDistances(
 					fill,
 					sig.Side[idx],
-					sig.StopSpec[idx].Ticks(cfg.Spec.PipTicks, fill, 0),
-					sig.TargetSpec[idx].Ticks(cfg.Spec.PipTicks, fill, 0),
+					sig.StopSpec[idx].Ticks(cfg.Spec.PipTicks, fill, atr),
+					sig.TargetSpec[idx].Ticks(cfg.Spec.PipTicks, fill, atr),
 				)
 			} else if len(sig.StopDistance) != 0 {
 				stop, target.Level = levelsFromDistances(
@@ -134,6 +143,12 @@ func Run(ctx context.Context, s *core.Series, fine *core.Series, sig Signals, cf
 					sig.StopDistance[idx],
 					sig.TargetDistance[idx],
 				)
+			}
+			// A trail carrying a unit is resolved from the actual fill, for the
+			// same reason the stop and target distances are: pips, percent and
+			// price mean nothing until the entry price is known.
+			if target.TrailSpec.Value > 0 {
+				target.TrailDistance = target.TrailSpec.Ticks(cfg.Spec.PipTicks, fill, atr)
 			}
 			req, lots := sizeFor(equityP, fill, stop, cfg)
 			if lots <= 0 {
@@ -184,10 +199,13 @@ func partialTarget(p position) bool {
 	return p.target.Level != 0 && p.target.Close > 0 && p.target.Close < core.One
 }
 
-func realizePartial(p *position, t core.Time, bar int, cfg Config, exit core.Price) {
+// realizePartial closes p.target.Close of the position at the target and
+// returns the outcome it realised, which the caller applies to equity exactly
+// once. The same outcome is accumulated onto the position for the trade record.
+func realizePartial(p *position, t core.Time, bar int, cfg Config, exit core.Price) Outcome {
 	closed := p.target.Close.Mul(p.lots)
 	if closed <= 0 || closed >= p.lots {
-		return
+		return Outcome{}
 	}
 	part := *p
 	part.lots = closed
@@ -198,6 +216,7 @@ func realizePartial(p *position, t core.Time, bar int, cfg Config, exit core.Pri
 		p.stop = p.entry
 	}
 	p.target.Level = 0 // a target is consumed once; remaining size follows its stop/trail.
+	return o
 }
 
 func addOutcome(a, b Outcome) Outcome {
@@ -223,7 +242,7 @@ func validSignals(n int, x Signals) error {
 	if len(x.StopDistance) != 0 && len(x.StopSpec) != 0 {
 		return ErrInvalidSignals
 	}
-	if x.Enter == nil || x.Enter.Len() != n || len(x.Side) != count || len(x.StopLevel) != count || len(x.TargetPlan) != count || (len(x.Orders) != 0 && len(x.Orders) != count) || !relative || !relativeSpec {
+	if x.Enter == nil || x.Enter.Len() != n || len(x.Side) != count || len(x.StopLevel) != count || len(x.TargetPlan) != count || (len(x.Orders) != 0 && len(x.Orders) != count) || (len(x.ATR) != 0 && len(x.ATR) != count) || !relative || !relativeSpec {
 		return ErrInvalidSignals
 	}
 	for _, side := range x.Side {
@@ -267,6 +286,7 @@ func resetResult(o *RunResult, bars, trades int) {
 	}
 	o.Unresolved = 0
 	o.RoundingLoss = 0
+	o.Unfilled = 0
 }
 func max(a, b int) int {
 	if a > b {

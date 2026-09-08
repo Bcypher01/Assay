@@ -18,6 +18,7 @@ import {
 import type { ChartDrawing, ChartPoint, ChartTool } from '@/lib/chart-drawings'
 import { drawingID } from '@/lib/chart-drawings'
 import type {
+  SetupBar,
   SetupChart as ChartData,
   SetupMatch,
   SetupSide,
@@ -88,7 +89,54 @@ const MIN_BARS = 20
  * the user zoom out if they want the shape of the whole window.
  */
 const DEFAULT_VISIBLE = 120
-const DRAWING_STORAGE = 'assay:setup-chart-drawings:v1'
+export const DRAWING_STORAGE = 'assay:setup-chart-drawings:v1'
+
+/** The storage key drawings live under. Drawings form one set per market and
+ *  follow the user across timeframes, so the key is scoped to the symbol only
+ *  and never to the timeframe the shape happens to have been placed on. */
+export function drawingStorageKeyFor(symbol: string): string {
+  return `${DRAWING_STORAGE}:${symbol}`
+}
+
+/** One-time adoption of drawings saved under the legacy per-timeframe keys
+ *  (`…:symbol:timeframe`) into the symbol-scoped key. Guerrilla fact: the
+ *  shapes were drawn on one specific timeframe, but the key carried it forward
+ *  by pretending a different timeframe was the same surface; we cannot tell
+ *  which set is the "current" one anymore, so the timeframe that matches the
+ *  chart on screen wins, and any other non-empty set is the fallback. */
+function adoptLegacyDrawingSet(
+  storageKey: string,
+  preferTimeframe: string | undefined,
+): string | null {
+  const symbol = storageKey.slice(`${DRAWING_STORAGE}:`.length)
+  const legacyPrefix = `${DRAWING_STORAGE}:${symbol}:`
+  let best: string | null = null
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (!key || !key.startsWith(legacyPrefix)) continue
+    if (key.slice(legacyPrefix.length).includes(':')) continue
+    const raw = localStorage.getItem(key)
+    if (!raw) continue
+    if (key.slice(legacyPrefix.length) === preferTimeframe) return raw
+    best = best ?? raw
+  }
+  return best
+}
+
+/** Default horizontal width, in bars, of the base a long/short marker is placed with. */
+const ENTRY_BASE_BARS = 10
+
+/** The far end of a long/short base: ENTRY_BASE_BARS bars later, same price. */
+function basePointFor(
+  point: ChartPoint,
+  indexByTime: Map<number, number>,
+  bars: Array<SetupBar>,
+): ChartPoint {
+  if (bars.length === 0) return point
+  const start = indexByTime.get(point.timeMs) ?? 0
+  const end = Math.max(0, Math.min(bars.length - 1, start + ENTRY_BASE_BARS))
+  return { timeMs: bars[end].timeMs, price: point.price }
+}
 
 const DRAWING_TOOLS: Array<{
   id: ChartTool
@@ -104,13 +152,6 @@ const DRAWING_TOOLS: Array<{
   { id: 'short', label: 'Short entry', icon: TrendingDown },
   { id: 'note', label: 'Note', icon: CaseSensitive },
 ]
-
-interface Viewport {
-  /** Index of the leftmost visible bar. */
-  offset: number
-  /** Number of visible bars. */
-  count: number
-}
 
 interface ChartGeometry {
   plotW: number
@@ -182,6 +223,13 @@ function timeLabel(ms: number, timeframe: string): string {
       })
 }
 
+export interface Viewport {
+  /** Index of the leftmost visible bar. */
+  offset: number
+  /** Number of visible bars. */
+  count: number
+}
+
 export function SetupChart({
   chart,
   anchorIndex,
@@ -199,6 +247,21 @@ export function SetupChart({
   matches = [],
   className,
   emptyMessage = 'Prepare the chart, then draw a zone and place an entry marker.',
+  /** Override the drawings storage key. Keeps drawings tied to the pattern
+   *  timeframe while the same surface redraws a finer series. */
+  drawingStorageKey,
+  /** Block the anchor from moving. Used while a finer entry series is shown,
+   *  because the anchor is a pattern-timeframe concept and the entry rung has
+   *  no pattern candle of its own. */
+  anchorLocked = false,
+  /** Hide the drawing tool rack. Used while a finer entry series is shown:
+   *  the zone is a pattern-timeframe fact and dragging it on the finer series
+   *  would claim a shape was drawn there. Entry/stop/target stay editable. */
+  disableDrawingTools = false,
+  /** Initial viewport to restore when chart loads. */
+  initialViewport,
+  /** Called when viewport changes (pan/zoom). */
+  onViewportChange,
 }: {
   chart: ChartData | null
   anchorIndex: number | null
@@ -216,10 +279,17 @@ export function SetupChart({
   matches?: Array<SetupMatch>
   className?: string
   emptyMessage?: string
+  drawingStorageKey?: string | null
+  anchorLocked?: boolean
+  disableDrawingTools?: boolean
+  initialViewport?: Viewport | null
+  onViewportChange?: (viewport: Viewport) => void
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
-  const [viewport, setViewport] = useState<Viewport>({ offset: 0, count: 0 })
+  const [viewport, setViewport] = useState<Viewport>(
+    () => initialViewport ?? { offset: 0, count: 0 },
+  )
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null)
   const [hoverLine, setHoverLine] = useState<LineName | null>(null)
   const [selected, setSelected] = useState<LineName | null>(null)
@@ -239,13 +309,17 @@ export function SetupChart({
   const frameRef = useRef<number | null>(null)
   const undoRef = useRef<Array<Array<ChartDrawing>>>([])
   const draftRef = useRef<ChartDrawing | null>(null)
+  const trendArmedRef = useRef(false)
   const skipPersistRef = useRef(false)
 
   const bars = chart?.bars ?? []
   const barCount = bars.length
-  const storageKey = chart
-    ? `${DRAWING_STORAGE}:${chart.symbol}:${chart.timeframe}`
-    : null
+  const storageKey =
+    drawingStorageKey ?? (chart ? drawingStorageKeyFor(chart.symbol) : null)
+  // Migration tie-break read through a ref so the load effect stays keyed on
+  // storageKey alone — a render (scale-down, prepare) must not reload drawings.
+  const chartTimeframeRef = useRef<string | undefined>(undefined)
+  chartTimeframeRef.current = chart?.timeframe
   const editableLines = useMemo(
     () =>
       showRuleZone
@@ -262,9 +336,19 @@ export function SetupChart({
       return
     }
     try {
-      const saved = localStorage.getItem(storageKey)
+      let save = localStorage.getItem(storageKey)
+      if (save === null) {
+        const adopted = adoptLegacyDrawingSet(
+          storageKey,
+          chartTimeframeRef.current,
+        )
+        if (adopted !== null) {
+          localStorage.setItem(storageKey, adopted)
+          save = adopted
+        }
+      }
       skipPersistRef.current = true
-      setDrawings(saved ? (JSON.parse(saved) as Array<ChartDrawing>) : [])
+      setDrawings(save ? (JSON.parse(save) as Array<ChartDrawing>) : [])
     } catch {
       skipPersistRef.current = true
       setDrawings([])
@@ -273,6 +357,7 @@ export function SetupChart({
     setSelectedDrawing(null)
     setDraft(null)
     draftRef.current = null
+    trendArmedRef.current = false
     setTool('select')
   }, [storageKey])
 
@@ -294,12 +379,31 @@ export function SetupChart({
   }, [drawings, selectedDrawing, onSelectDrawing])
 
   // A new chart resets the view. Keeping a previous offset would silently show
-  // a different window than the one the user just asked for.
-  useEffect(() => {
-    const count = Math.min(DEFAULT_VISIBLE, barCount)
-    setViewport({ offset: Math.max(0, barCount - count), count })
+  // a different window than the one the user just asked for. The reset runs
+  // during render (the documented "adjusting a prop change" pattern) instead of
+  // in an effect, so the correct window is committed before the deferred frame
+  // scheduler ever sees the new bars. With an effect, the frame scheduled for
+  // the first paint of the new chart draws the stale offset — and because that
+  // frame is still pending when the corrected render schedules its own, the
+  // coalescing guard drops the correct draw, leaving the chart stuck on the
+  // wrong slice until the next pointer event.
+  const chartKey = `${chart?.symbol ?? ''}|${chart?.timeframe ?? ''}|${chart?.fromMs ?? ''}|${chart?.toMs ?? ''}|${barCount}`
+  const [resolvedChartKey, setResolvedChartKey] = useState<string | null>(null)
+  if (chartKey !== resolvedChartKey) {
+    setResolvedChartKey(chartKey)
+    setViewport(
+      initialViewport ?? {
+        count: Math.min(DEFAULT_VISIBLE, barCount),
+        offset: Math.max(0, barCount - Math.min(DEFAULT_VISIBLE, barCount)),
+      },
+    )
     setSelected(null)
-  }, [chart?.symbol, chart?.timeframe, chart?.fromMs, chart?.toMs, barCount])
+  }
+
+  // Notify parent of viewport changes for persistence
+  useEffect(() => {
+    onViewportChange?.(viewport)
+  }, [viewport, onViewportChange])
 
   useEffect(() => {
     if (anchorIndex === null || barCount === 0) return
@@ -430,27 +534,74 @@ export function SetupChart({
     showRuleZone,
   ])
 
-  const geometry = useCallback(
-    (width: number, height: number) => {
-      const plotW = Math.max(1, width - PAD.left - PAD.right)
-      const plotH = Math.max(1, height - PAD.top - PAD.bottom)
-      const step = plotW / Math.max(1, visible.length)
-      return {
-        plotW,
-        plotH,
-        step,
-        yFor: (value: number) =>
-          PAD.top + ((bounds.hi - value) / (bounds.hi - bounds.lo)) * plotH,
-        valueAt: (y: number) =>
-          Math.round(
-            bounds.hi - ((y - PAD.top) / plotH) * (bounds.hi - bounds.lo),
-          ),
-        xFor: (index: number) => PAD.left + (index + 0.5) * step,
-        indexAt: (x: number) => Math.floor((x - PAD.left) / step) + view.offset,
-      }
-    },
-    [visible.length, bounds, view.offset],
-  )
+  const geometry = (width: number, height: number) => {
+    const b = boundsRef.current
+    const v = viewRef.current
+    const vs = visibleRef.current
+    const plotW = Math.max(1, width - PAD.left - PAD.right)
+    const plotH = Math.max(1, height - PAD.top - PAD.bottom)
+    const step = plotW / Math.max(1, vs.length)
+    return {
+      plotW,
+      plotH,
+      step,
+      yFor: (value: number) =>
+        PAD.top + ((b.hi - value) / (b.hi - b.lo)) * plotH,
+      valueAt: (y: number) =>
+        Math.round(b.hi - ((y - PAD.top) / plotH) * (b.hi - b.lo)),
+      xFor: (index: number) => PAD.left + (index + 0.5) * step,
+      indexAt: (x: number) => Math.floor((x - PAD.left) / step) + v.offset,
+    }
+  }
+
+  // Refs for hot-path state to avoid draw callback recreation
+  const viewportRef = useRef(viewport)
+  viewportRef.current = viewport
+  const hoverRef = useRef(hover)
+  hoverRef.current = hover
+  const hoverLineRef = useRef(hoverLine)
+  hoverLineRef.current = hoverLine
+  const selectedRef = useRef(selected)
+  selectedRef.current = selected
+  const draggingRef = useRef(dragging)
+  draggingRef.current = dragging
+  const snappedRef = useRef(snapped)
+  snappedRef.current = snapped
+  const viewRef = useRef(view)
+  viewRef.current = view
+  const visibleRef = useRef(visible)
+  visibleRef.current = visible
+  const boundsRef = useRef(bounds)
+  boundsRef.current = bounds
+  const geometryRef = useRef(geometry)
+  geometryRef.current = geometry
+  const linesRef = useRef(lines)
+  linesRef.current = lines
+  const anchorIndexRef = useRef(anchorIndex)
+  anchorIndexRef.current = anchorIndex
+  const focusedMatchRef = useRef(focusedMatch)
+  focusedMatchRef.current = focusedMatch
+  const drawingsRef = useRef(drawings)
+  drawingsRef.current = drawings
+  draftRef.current = draft
+  const selectedDrawingRef = useRef(selectedDrawing)
+  selectedDrawingRef.current = selectedDrawing
+  const matchesRef = useRef(matches)
+  matchesRef.current = matches
+  const showAnchorRef = useRef(showAnchor)
+  showAnchorRef.current = showAnchor
+  const showRuleZoneRef = useRef(showRuleZone)
+  showRuleZoneRef.current = showRuleZone
+  const precedentBarsRef = useRef(precedentBars)
+  precedentBarsRef.current = precedentBars
+  const sideRef = useRef(side)
+  sideRef.current = side
+  const editableLinesRef = useRef(editableLines)
+  editableLinesRef.current = editableLines
+  const chartRef = useRef(chart)
+  chartRef.current = chart
+  const indexByTimeRef = useRef(indexByTime)
+  indexByTimeRef.current = indexByTime
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -475,12 +626,38 @@ export function SetupChart({
     }
     context.setTransform(ratio, 0, 0, ratio, 0, 0)
     context.clearRect(0, 0, width, height)
-    if (!chart || visible.length === 0) return
+    const chartData = chartRef.current
+    const visibleBars = visibleRef.current
+    if (!chartData || visibleBars.length === 0) return
 
     const colors =
       paletteRef.current ?? (paletteRef.current = readPalette(wrap))
-    const g = geometry(width, height)
-    const tick = chart.tickSize
+    const g = geometryRef.current(width, height)
+    const tick = chartData.tickSize
+
+    // All paint-state is read from refs into these once, so every later
+    // section shares the single freshest value instead of re-reading the ref
+    // (which would force distinct names to avoid shadowing).
+    const view = viewRef.current
+    const visible = visibleRef.current
+    const lines = linesRef.current
+    const showAnchor = showAnchorRef.current
+    const anchorIndex = anchorIndexRef.current
+    const focusedMatch = focusedMatchRef.current
+    const hover = hoverRef.current
+    const dragging = draggingRef.current
+    const snapped = snappedRef.current
+    const hoverLine = hoverLineRef.current
+    const selected = selectedRef.current
+    const editableLines = editableLinesRef.current
+    const matches = matchesRef.current
+    const side = sideRef.current
+    const indexByTime = indexByTimeRef.current
+    const precedentBars = precedentBarsRef.current
+    const drawings = drawingsRef.current
+    const draft = draftRef.current
+    const selectedDrawing = selectedDrawingRef.current
+
     context.font =
       '11px ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace'
     context.textBaseline = 'middle'
@@ -495,7 +672,9 @@ export function SetupChart({
       context.moveTo(PAD.left, y)
       context.lineTo(width - PAD.right, y)
       context.stroke()
-      const value = bounds.hi - (i * (bounds.hi - bounds.lo)) / rows
+      const value =
+        boundsRef.current.hi -
+        (i * (boundsRef.current.hi - boundsRef.current.lo)) / rows
       context.fillStyle = colors.axis
       context.textAlign = 'left'
       context.fillText(
@@ -508,18 +687,18 @@ export function SetupChart({
     // Time scale: four evenly spaced labels, first and last inclusive.
     context.textAlign = 'center'
     context.fillStyle = colors.axis
-    const ticksAcross = Math.min(4, visible.length)
+    const ticksAcross = Math.min(4, visibleBars.length)
     for (let i = 0; i < ticksAcross; i++) {
       const index = Math.round(
-        (i * (visible.length - 1)) / Math.max(1, ticksAcross - 1),
+        (i * (visibleBars.length - 1)) / Math.max(1, ticksAcross - 1),
       )
-      const bar = visible[index]
+      const bar = visibleBars[index]
       const x = Math.min(
         width - PAD.right - 30,
         Math.max(PAD.left + 30, g.xFor(index)),
       )
       context.fillText(
-        timeLabel(bar.timeMs, chart.timeframe),
+        timeLabel(bar.timeMs, chartData.timeframe),
         x,
         height - PAD.bottom / 2,
       )
@@ -564,7 +743,7 @@ export function SetupChart({
     // pixel wide has stopped being one.
     const body = Math.max(1, g.step * 0.7)
     const hairline = body >= 3
-    visible.forEach((bar, index) => {
+    visibleBars.forEach((bar, index) => {
       const centre = g.xFor(index)
       const x = Math.round(centre) + 0.5
       const up = bar.close >= bar.open
@@ -668,6 +847,7 @@ export function SetupChart({
           drawing,
           g,
           indexByTime,
+          bars,
           view.offset,
           drawing.id === selectedDrawing || drawing.id === draft?.id,
           colors,
@@ -759,7 +939,7 @@ export function SetupChart({
       if (index >= 0 && index < visible.length) {
         const bar = visible[index]
         const text = [
-          timeLabel(bar.timeMs, chart.timeframe),
+          timeLabel(bar.timeMs, chartData.timeframe),
           `O ${formatTicks(bar.open, tick)}`,
           `H ${formatTicks(bar.high, tick)}`,
           `L ${formatTicks(bar.low, tick)}`,
@@ -787,32 +967,7 @@ export function SetupChart({
         height - PAD.bottom - 8,
       )
     }
-  }, [
-    chart,
-    visible,
-    bounds,
-    lines,
-    anchorIndex,
-    hover,
-    hoverLine,
-    selected,
-    dragging,
-    snapped,
-    geometry,
-    view.offset,
-    theme,
-    drawings,
-    draft,
-    selectedDrawing,
-    matches,
-    side,
-    indexByTime,
-    editableLines,
-    showAnchor,
-    showRuleZone,
-    focusedMatch,
-    precedentBars,
-  ])
+  }, [theme])
 
   // Painting is coalesced into one animation frame. A fast drag, pan or even a
   // hover fires many state updates in quick succession; without this, each one
@@ -832,7 +987,7 @@ export function SetupChart({
 
   useEffect(() => {
     schedule()
-  }, [draw, schedule])
+  })
 
   useEffect(
     () => () => {
@@ -927,7 +1082,7 @@ export function SetupChart({
       distance: number
     } | null = null
     for (const drawing of drawings) {
-      const hit = hitDrawing(drawing, x, y, g, indexByTime, view.offset)
+      const hit = hitDrawing(drawing, x, y, g, indexByTime, bars, view.offset)
       if (hit && (!best || hit.distance < best.distance)) {
         best = { id: drawing.id, ...hit }
       }
@@ -950,9 +1105,22 @@ export function SetupChart({
     const { x, y, rect } = pointFor(event)
     event.currentTarget.setPointerCapture(event.pointerId)
 
-    if (tool !== 'select') {
+    if (tool !== 'select' && !disableDrawingTools) {
       const point = chartPointAt(x, y, rect, event.altKey)
       if (!point) return
+      // Trend line: a tap only arms the start point. This click finishes the
+      // line, taking the cursor position as the far end.
+      if (tool === 'trend' && trendArmedRef.current && draftRef.current) {
+        const finished = { ...draftRef.current, to: point }
+        draftRef.current = null
+        trendArmedRef.current = false
+        remember()
+        setDrawings((current) => [...current, finished])
+        setSelectedDrawing(finished.id)
+        setDraft(null)
+        setTool('select')
+        return
+      }
       const text =
         tool === 'note' || tool === 'zone'
           ? noteText.trim() || (tool === 'zone' ? 'Zone' : 'Note')
@@ -961,7 +1129,10 @@ export function SetupChart({
         id: drawingID(),
         type: tool,
         from: point,
-        to: point,
+        to:
+          tool === 'long' || tool === 'short'
+            ? basePointFor(point, indexByTime, bars)
+            : point,
         text,
       }
       if (
@@ -1033,12 +1204,16 @@ export function SetupChart({
         current.map((drawing) => {
           if (drawing.id !== drawingDrag.id) return drawing
           if (drawingDrag.handle === 'from') return { ...drawing, from: point }
-          if (drawingDrag.handle === 'to') return { ...drawing, to: point }
-          if (
-            drawing.type === 'long' ||
-            drawing.type === 'short' ||
-            drawing.type === 'note'
-          ) {
+          if (drawingDrag.handle === 'to') {
+            if (drawing.type === 'long' || drawing.type === 'short') {
+              return {
+                ...drawing,
+                to: { timeMs: point.timeMs, price: drawing.from.price },
+              }
+            }
+            return { ...drawing, to: point }
+          }
+          if (drawing.type === 'note') {
             return { ...drawing, from: point, to: point }
           }
           const startIndex = indexByTime.get(drawingDrag.start.timeMs) ?? 0
@@ -1107,6 +1282,19 @@ export function SetupChart({
   const onPointerUp = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const finishedDraft = draftRef.current
     if (finishedDraft) {
+      const isTap =
+        finishedDraft.type === 'trend' &&
+        finishedDraft.from.timeMs === finishedDraft.to.timeMs &&
+        finishedDraft.from.price === finishedDraft.to.price
+      if (isTap) {
+        // A click without dragging only anchors the start: keep the line
+        // armed so the next pointer move extends it and the next click pins
+        // the far end. Committing a zero-length line here is what pushes the
+        // user into a second "click again to extend" round trip.
+        trendArmedRef.current = true
+        setSnapped(false)
+        return
+      }
       remember()
       setDrawings((current) => [...current, finishedDraft])
       setSelectedDrawing(finishedDraft.id)
@@ -1125,7 +1313,8 @@ export function SetupChart({
     panRef.current = null
     setDragging(null)
     setSnapped(false)
-    if (!chart || !pan || pan.moved || !allowAnchorSelection) return
+    if (!chart || !pan || pan.moved || !allowAnchorSelection || anchorLocked)
+      return
     const { x, rect } = pointFor(event)
     const g = geometry(rect.width, rect.height)
     const index = g.indexAt(x)
@@ -1146,16 +1335,16 @@ export function SetupChart({
       if (!event.ctrlKey && !event.metaKey) return
       event.preventDefault()
       const rect = canvas.getBoundingClientRect()
-      const g = geometry(rect.width, rect.height)
+      const g = geometryRef.current(rect.width, rect.height)
       const focus = g.indexAt(event.clientX - rect.left)
       setViewport((current) => {
-        const count = current.count || barCount
-        const next = Math.max(
-          Math.min(MIN_BARS, barCount),
-          Math.min(
-            barCount,
-            Math.round(count * (event.deltaY > 0 ? 1.15 : 0.87)),
-          ),
+        const count = current.count || Math.min(DEFAULT_VISIBLE, barCount)
+        // deltaY > 0 = scroll down = zoom IN (fewer bars)
+        // deltaY < 0 = scroll up = zoom OUT (more bars)
+        const zoomFactor = event.deltaY > 0 ? 1.15 : 0.87
+        const next = Math.min(
+          barCount,
+          Math.max(MIN_BARS, Math.round(count * zoomFactor)),
         )
         const ratio = (focus - current.offset) / Math.max(1, count)
         const offset = Math.max(
@@ -1167,7 +1356,7 @@ export function SetupChart({
     }
     canvas.addEventListener('wheel', handler, { passive: false })
     return () => canvas.removeEventListener('wheel', handler)
-  }, [barCount, geometry])
+  }, [barCount, DEFAULT_VISIBLE, MIN_BARS])
 
   /* ----------------------------------------------------------- keyboard */
 
@@ -1205,6 +1394,7 @@ export function SetupChart({
     }
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
       event.preventDefault()
+      if (anchorLocked) return
       const delta = event.key === 'ArrowRight' ? 1 : -1
       const next = Math.max(
         0,
@@ -1227,6 +1417,7 @@ export function SetupChart({
       setSelectedDrawing(null)
       setDraft(null)
       draftRef.current = null
+      trendArmedRef.current = false
       setTool('select')
     }
   }
@@ -1278,73 +1469,76 @@ export function SetupChart({
 
   return (
     <div ref={wrapRef} className={cn('setup-chart', className)}>
-      <div
-        className="setup-drawing-toolbar"
-        role="toolbar"
-        aria-label="Chart drawing tools"
-      >
-        {DRAWING_TOOLS.map((item) => {
-          const Icon = item.icon
-          return (
-            <button
-              key={item.id}
-              type="button"
-              aria-label={item.label}
-              aria-pressed={tool === item.id}
-              title={item.label}
-              disabled={!chart || Boolean(focusedMatch)}
-              onClick={() => {
-                setTool(item.id)
-                setSelected(null)
-                setDraft(null)
-                draftRef.current = null
-              }}
-            >
-              <Icon aria-hidden="true" />
-            </button>
-          )
-        })}
-        {tool === 'note' || tool === 'zone' ? (
-          <input
-            aria-label={tool === 'zone' ? 'Setup area label' : 'Note text'}
-            value={noteText}
-            onChange={(event) => setNoteText(event.target.value)}
-            onPointerDown={(event) => event.stopPropagation()}
-          />
-        ) : null}
-        <span aria-hidden="true" />
-        <button
-          type="button"
-          aria-label="Undo drawing"
-          title="Undo drawing (⌘Z)"
-          disabled={
-            !chart || Boolean(focusedMatch) || undoRef.current.length === 0
-          }
-          onClick={undo}
+      {disableDrawingTools ? null : (
+        <div
+          className="setup-drawing-toolbar"
+          role="toolbar"
+          aria-label="Chart drawing tools"
         >
-          <CornerUpLeft aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          aria-label="Delete selected drawing"
-          title="Delete selected drawing"
-          disabled={!selectedDrawing || Boolean(focusedMatch)}
-          onClick={() => {
-            if (!selectedDrawing) return
-            const removed = drawings.find(
-              (drawing) => drawing.id === selectedDrawing,
+          {DRAWING_TOOLS.map((item) => {
+            const Icon = item.icon
+            return (
+              <button
+                key={item.id}
+                type="button"
+                aria-label={item.label}
+                aria-pressed={tool === item.id}
+                title={item.label}
+                disabled={!chart || Boolean(focusedMatch)}
+                onClick={() => {
+                  setTool(item.id)
+                  setSelected(null)
+                  setDraft(null)
+                  draftRef.current = null
+                  trendArmedRef.current = false
+                }}
+              >
+                <Icon aria-hidden="true" />
+              </button>
             )
-            remember()
-            setDrawings((current) =>
-              current.filter((drawing) => drawing.id !== selectedDrawing),
-            )
-            setSelectedDrawing(null)
-            if (removed) onDeleteDrawing?.(removed)
-          }}
-        >
-          <Trash2 aria-hidden="true" />
-        </button>
-      </div>
+          })}
+          {tool === 'note' || tool === 'zone' ? (
+            <input
+              aria-label={tool === 'zone' ? 'Setup area label' : 'Note text'}
+              value={noteText}
+              onChange={(event) => setNoteText(event.target.value)}
+              onPointerDown={(event) => event.stopPropagation()}
+            />
+          ) : null}
+          <span aria-hidden="true" />
+          <button
+            type="button"
+            aria-label="Undo drawing"
+            title="Undo drawing (⌘Z)"
+            disabled={
+              !chart || Boolean(focusedMatch) || undoRef.current.length === 0
+            }
+            onClick={undo}
+          >
+            <CornerUpLeft aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            aria-label="Delete selected drawing"
+            title="Delete selected drawing"
+            disabled={!selectedDrawing || Boolean(focusedMatch)}
+            onClick={() => {
+              if (!selectedDrawing) return
+              const removed = drawings.find(
+                (drawing) => drawing.id === selectedDrawing,
+              )
+              remember()
+              setDrawings((current) =>
+                current.filter((drawing) => drawing.id !== selectedDrawing),
+              )
+              setSelectedDrawing(null)
+              if (removed) onDeleteDrawing?.(removed)
+            }}
+          >
+            <Trash2 aria-hidden="true" />
+          </button>
+        </div>
+      )}
       <canvas
         ref={canvasRef}
         className="setup-chart-canvas"
@@ -1373,6 +1567,7 @@ export function SetupChart({
           setDragging(null)
           setDraft(null)
           draftRef.current = null
+          trendArmedRef.current = false
           setSnapped(false)
         }}
         onPointerLeave={() => {
@@ -1420,14 +1615,42 @@ function pill(
   context.fillText(text, align === 'left' ? left + 6 : x - 6, y)
 }
 
+/** First bar index whose open time is >= timeMs, clamped to the last bar.
+ *  Drawings carry absolute timestamps from whatever resolution they were
+ *  placed on; on another timeframe that exact time rarely exists as a bar, so
+ *  the shape snaps to the nearest bar instead of silently vanishing. Matches
+ *  the fuzzy `>=` rule the viewport mapper already uses. */
+function nearestBarIndexAtOrAfter(
+  bars: Array<SetupBar>,
+  timeMs: number,
+): number {
+  let lo = 0
+  let hi = bars.length - 1
+  let best = -1
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    if (bars[mid].timeMs >= timeMs) {
+      best = mid
+      hi = mid - 1
+    } else {
+      lo = mid + 1
+    }
+  }
+  return best < 0 ? bars.length - 1 : best
+}
+
 function pointPixels(
   point: ChartPoint,
   geometry: ChartGeometry,
   indexByTime: Map<number, number>,
+  bars: Array<SetupBar>,
   offset: number,
 ) {
-  const index = indexByTime.get(point.timeMs)
-  if (index === undefined) return null
+  let index = indexByTime.get(point.timeMs)
+  if (index === undefined) {
+    if (bars.length === 0) return null
+    index = nearestBarIndexAtOrAfter(bars, point.timeMs)
+  }
   return { x: geometry.xFor(index - offset), y: geometry.yFor(point.price) }
 }
 
@@ -1454,18 +1677,30 @@ function hitDrawing(
   y: number,
   geometry: ChartGeometry,
   indexByTime: Map<number, number>,
+  bars: Array<SetupBar>,
   offset: number,
 ): { handle: 'from' | 'to' | 'move'; distance: number } | null {
-  const from = pointPixels(drawing.from, geometry, indexByTime, offset)
-  const to = pointPixels(drawing.to, geometry, indexByTime, offset)
+  const from = pointPixels(drawing.from, geometry, indexByTime, bars, offset)
+  const to = pointPixels(drawing.to, geometry, indexByTime, bars, offset)
   if (!from || !to) return null
   const fromDistance = Math.hypot(x - from.x, y - from.y)
   const toDistance = Math.hypot(x - to.x, y - to.y)
-  if (
-    drawing.type === 'long' ||
-    drawing.type === 'short' ||
-    drawing.type === 'note'
-  ) {
+  if (drawing.type === 'long' || drawing.type === 'short') {
+    const hasBase = Math.abs(to.x - from.x) > 4
+    if (hasBase && toDistance <= HIT_RADIUS + 2) {
+      return { handle: 'to', distance: toDistance }
+    }
+    if (fromDistance <= HIT_RADIUS + 4) {
+      return { handle: 'move', distance: fromDistance }
+    }
+    const left = Math.min(from.x, to.x)
+    const right = Math.max(from.x, to.x)
+    if (x >= left && x <= right && Math.abs(y - from.y) <= HIT_RADIUS) {
+      return { handle: 'move', distance: Math.abs(y - from.y) }
+    }
+    return null
+  }
+  if (drawing.type === 'note') {
     return fromDistance <= 18
       ? { handle: 'move', distance: fromDistance }
       : null
@@ -1498,12 +1733,13 @@ function paintDrawing(
   drawing: ChartDrawing,
   geometry: ChartGeometry,
   indexByTime: Map<number, number>,
+  bars: Array<SetupBar>,
   offset: number,
   selected: boolean,
   colors: Palette,
 ) {
-  const from = pointPixels(drawing.from, geometry, indexByTime, offset)
-  const to = pointPixels(drawing.to, geometry, indexByTime, offset)
+  const from = pointPixels(drawing.from, geometry, indexByTime, bars, offset)
+  const to = pointPixels(drawing.to, geometry, indexByTime, bars, offset)
   if (!from || !to) return
   const color =
     drawing.type === 'long'
@@ -1560,6 +1796,16 @@ function paintDrawing(
     context.globalAlpha = 1
   } else if (drawing.type === 'long' || drawing.type === 'short') {
     const direction = drawing.type === 'long' ? -1 : 1
+    const baseLeft = Math.min(from.x, to.x)
+    const baseRight = Math.max(from.x, to.x)
+    if (baseRight - baseLeft > 4) {
+      context.globalAlpha = 0.55
+      context.beginPath()
+      context.moveTo(baseLeft, from.y)
+      context.lineTo(baseRight, from.y)
+      context.stroke()
+      context.globalAlpha = 1
+    }
     context.beginPath()
     context.moveTo(from.x, from.y)
     context.lineTo(from.x - 6, from.y + direction * -10)

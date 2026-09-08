@@ -3136,6 +3136,15 @@ export class RunSummary extends Message<RunSummary> {
    */
   errorCode = ''
 
+  /**
+   * Entry signals whose resting order the next bar never reached. A limit or
+   * stop study trades less often than it signals, and hiding that would make
+   * the run look like it found fewer setups than it did.
+   *
+   * @generated from field: uint32 unfilled = 13;
+   */
+  unfilled = 0
+
   constructor(data?: PartialMessage<RunSummary>) {
     super()
     proto3.util.initPartial(data, this)
@@ -3186,6 +3195,7 @@ export class RunSummary extends Message<RunSummary> {
       kind: 'scalar',
       T: 9 /* ScalarType.STRING */,
     },
+    { no: 13, name: 'unfilled', kind: 'scalar', T: 13 /* ScalarType.UINT32 */ },
   ])
 
   static fromBinary(
@@ -3846,6 +3856,11 @@ export class RunDetails extends Message<RunDetails> {
    */
   nextActions: NextAction[] = []
 
+  /**
+   * @generated from field: uint32 unfilled = 21;
+   */
+  unfilled = 0
+
   constructor(data?: PartialMessage<RunDetails>) {
     super()
     proto3.util.initPartial(data, this)
@@ -3931,6 +3946,7 @@ export class RunDetails extends Message<RunDetails> {
       T: NextAction,
       repeated: true,
     },
+    { no: 21, name: 'unfilled', kind: 'scalar', T: 13 /* ScalarType.UINT32 */ },
   ])
 
   static fromBinary(

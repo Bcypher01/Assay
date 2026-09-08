@@ -11,13 +11,18 @@ import {
   Play,
   Save,
 } from 'lucide-react'
-import { SetupChart } from '@/components/setup-chart'
+import { SetupChart, drawingStorageKeyFor } from '@/components/setup-chart'
 import type { SetupLines } from '@/components/setup-chart'
 import type { ChartDrawing } from '@/lib/chart-drawings'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -47,6 +52,7 @@ import type {
   SetupMatch,
   SetupSide,
   PrecedentBar,
+  SetupBar,
 } from '@/lib/setup'
 import {
   SETUP_KINDS,
@@ -149,6 +155,35 @@ function windowFor(years: number) {
   return { fromMs: from.getTime(), toMs: to }
 }
 
+/** Map a viewport from one timeframe's bars to another, preserving the visible time range. */
+function mapViewportToTimeframe(
+  viewport: { offset: number; count: number },
+  sourceBars: Array<SetupBar>,
+  targetBars: Array<SetupBar>,
+): { offset: number; count: number } | null {
+  if (sourceBars.length === 0 || targetBars.length === 0) return null
+  const sourceStart = sourceBars[viewport.offset]?.timeMs
+  const sourceEnd =
+    sourceBars[
+      Math.min(viewport.offset + viewport.count - 1, sourceBars.length - 1)
+    ]?.timeMs
+  if (!sourceStart || !sourceEnd) return null
+  // Find corresponding indices in target bars
+  let targetStartIndex = targetBars.findIndex(
+    (bar) => bar.timeMs >= sourceStart,
+  )
+  let targetEndIndex = targetBars.findIndex((bar) => bar.timeMs > sourceEnd)
+  if (targetStartIndex < 0) targetStartIndex = 0
+  if (targetEndIndex < 0) targetEndIndex = targetBars.length - 1
+  const count = Math.max(1, targetEndIndex - targetStartIndex + 1)
+  // Clamp to target bounds
+  const offset = Math.max(
+    0,
+    Math.min(targetBars.length - count, targetStartIndex),
+  )
+  return { offset, count: Math.min(count, targetBars.length - offset) }
+}
+
 function normalizedPrecedent(
   chart: ChartData,
   fromTimeMs: number,
@@ -239,11 +274,26 @@ function SetupTestScreen() {
   const [years, setYears] = useState(3)
 
   const [chart, setChart] = useState<ChartData | null>(null)
+  const [entryChart, setEntryChart] = useState<ChartData | null>(null)
   const [preparing, setPreparing] = useState(false)
+  const [scaledDown, setScaledDown] = useState(false)
+  const [scaleOpen, setScaleOpen] = useState(false)
   const [status, setStatus] = useState<{
     tone: 'idle' | 'busy' | 'good' | 'bad'
     message: string
   }>({ tone: 'idle', message: 'Choose a market, then prepare the chart.' })
+
+  // Cache prepared charts per symbol+timeframe+years to avoid re-preparing on scale-down
+  const chartCacheRef = useRef<Map<string, ChartData>>(new Map())
+  const chartCacheKey = (sym: string, tf: string, yrs: number) =>
+    `${sym}:${tf}:${yrs}`
+  // Bumped every time a load begins. If a newer load starts while an earlier
+  // one is still fetching, the older response must not own the UI afterwards.
+  const loadSeqRef = useRef(0)
+  // The (symbol, timeframe, years) triple the on-screen chart was loaded for.
+  // Auto-prepare on change — but only on change, never on an unrelated
+  // re-render or a scale-down rung switch.
+  const preparedKeyRef = useRef<string | null>(null)
 
   const [setupMode, setSetupMode] = useState<'drawing' | 'template'>('drawing')
   const [kind, setKind] = useState<SetupKind>('drawn_precedent')
@@ -262,6 +312,17 @@ function SetupTestScreen() {
   const [saving, setSaving] = useState(false)
   const [unavailable, setUnavailable] = useState<string | null>(null)
   const [visualSource, setVisualSource] = useState<string | null>(null)
+
+  // Viewport persistence for HTF↔LTF switching
+  const [patternViewport, setPatternViewport] = useState<{
+    offset: number
+    count: number
+  } | null>(null)
+  const [entryViewport, setEntryViewport] = useState<{
+    offset: number
+    count: number
+  } | null>(null)
+
   const [comparisonSymbols, setComparisonSymbols] = useState<Array<string>>([
     'DUKAS:EURUSD',
   ])
@@ -348,21 +409,24 @@ function SetupTestScreen() {
   }, [])
 
   const selectAnchor = useCallback(
-    (index: number, nextSide: SetupSide = side) => {
+    (index: number) => {
       if (!chart) return
-      const bar = chart.bars[index]
       invalidate()
       setAnchorIndex(index)
-      setLines(linesForBar(bar, chart.pipTicks, nextSide))
+      setLines(null)
     },
-    [chart, side, invalidate],
+    [chart, invalidate],
   )
 
   const adoptVisualDrawing = useCallback(
     (visual: ChartDrawing | null) => {
       if (!visual || !chart) return
+      // The drawing may have been placed on another timeframe's candles. Adopt
+      // it by the same fuzzy rule the viewport mapper and the chart renderer
+      // use — the first bar at or after the marker's time — so a setup drawn on
+      // daily can be adopted from the H4 surface it now renders on.
       const index = chart.bars.findIndex(
-        (bar) => bar.timeMs === visual.from.timeMs,
+        (bar) => bar.timeMs >= visual.from.timeMs,
       )
       if (index < 0) return
       invalidate()
@@ -420,39 +484,90 @@ function SetupTestScreen() {
 
   const prepare = useCallback(async () => {
     const range = windowFor(years)
+    const priorChart = chart
+    const priorAnchorIndex = anchorIndex
+    const priorLines = lines
+    const seq = ++loadSeqRef.current
     setPreparing(true)
     setUnavailable(null)
     setStatus({ tone: 'busy', message: 'Preparing versioned bars…' })
     try {
-      const next = await loadSetupChart({
-        symbol,
-        timeframe,
-        fromMs: range.fromMs,
-        toMs: range.toMs,
-        maxBars: MAX_BARS,
-      })
-      setChart(next)
-      setPreview(null)
-      // A finer entry rung needs its own bars prepared: the pattern is detected
-      // on the drawing timeframe but the simulator fills on the entry timeframe.
-      if (entryTimeframe && entryTimeframe !== timeframe) {
-        await loadSetupChart({
+      const cacheKey = chartCacheKey(symbol, timeframe, years)
+      let next = chartCacheRef.current.get(cacheKey)
+      if (!next) {
+        next = await loadSetupChart({
           symbol,
-          timeframe: entryTimeframe,
+          timeframe,
           fromMs: range.fromMs,
           toMs: range.toMs,
           maxBars: MAX_BARS,
         })
+        chartCacheRef.current.set(cacheKey, next)
       }
-      const index = Math.max(0, next.bars.length - 2)
-      const bar = next.bars.at(index)
-      setAnchorIndex(bar ? index : null)
-      setLines(bar ? linesForBar(bar, next.pipTicks, side) : null)
+      // An entry rung chosen via scale-down needs its own bars prepared: the
+      // pattern is detected on the drawing timeframe but the simulator fills on
+      // the entry timeframe. A reload keeps the rung we are already on.
+      let nextEntry: ChartData | null = null
+      if (entryTimeframe && entryTimeframe !== timeframe) {
+        const entryCacheKey = chartCacheKey(symbol, entryTimeframe, years)
+        const cached = chartCacheRef.current.get(entryCacheKey)
+        nextEntry = cached ?? null
+        if (!nextEntry) {
+          nextEntry = await loadSetupChart({
+            symbol,
+            timeframe: entryTimeframe,
+            fromMs: range.fromMs,
+            toMs: range.toMs,
+            maxBars: MAX_BARS,
+          })
+          chartCacheRef.current.set(entryCacheKey, nextEntry)
+        }
+      }
+      // A newer load started while this one was fetching; it owns the UI now.
+      if (seq !== loadSeqRef.current) return
+      setChart(next)
+      setEntryChart(nextEntry)
+      setPreview(null)
+      setScaledDown(
+        entryTimeframe !== '' &&
+          entryTimeframe !== timeframe &&
+          nextEntry !== null,
+      )
+      // Carry an existing setup across a timeframe or history change instead of
+      // dropping it. The anchor travels by time — the first closed bar at or
+      // after the previous anchor's open — and the entry/stop/target plus the
+      // precedent survive as-is, being absolute ticks and timestamps with no
+      // resolution. The timeframe switch no longer blanks the chart, so `chart`
+      // still describes the series the setup was defined on; a fresh market
+      // (symbol change nulls it beforehand) starts from scratch.
+      let anchor = Math.max(0, next.bars.length - 2)
+      let carryLines = false
+      const priorAnchorTime =
+        priorChart && priorAnchorIndex !== null
+          ? priorChart.bars[priorAnchorIndex]?.timeMs
+          : undefined
+      if (
+        priorAnchorTime !== undefined &&
+        next.bars.length > 0 &&
+        priorAnchorTime >= next.bars[0].timeMs
+      ) {
+        const remapped = next.bars.findIndex(
+          (bar) => bar.timeMs >= priorAnchorTime,
+        )
+        if (remapped >= 0) {
+          anchor = remapped
+          carryLines = true
+        }
+      }
+      const anchorBar = next.bars.at(anchor)
+      setAnchorIndex(anchorBar ? anchor : null)
+      setLines(carryLines ? priorLines : null)
       setStatus({
         tone: 'good',
         message: `${next.bars.length} candles · snapshot ${next.snapshot.slice(0, 10)}…`,
       })
     } catch (error) {
+      if (seq !== loadSeqRef.current) return
       console.error('[Setup Test] Chart preparation failed', error)
       if (isSetupUnavailable(error)) {
         setUnavailable(friendlySetupError(error, 'prepare'))
@@ -464,17 +579,140 @@ function SetupTestScreen() {
         })
       }
     } finally {
-      setPreparing(false)
+      if (seq === loadSeqRef.current) setPreparing(false)
     }
-  }, [symbol, timeframe, entryTimeframe, years, side])
+  }, [
+    symbol,
+    timeframe,
+    entryTimeframe,
+    years,
+    side,
+    chart,
+    anchorIndex,
+    lines,
+  ])
 
-  // Entry may sit on the pattern rung or any finer supported rung.
-  const entryTimeframes = useMemo(() => {
+  // Auto-load the chart for the (symbol, timeframe, years) actually selected.
+  // Switching candles or market used to drop to a blank canvas that demanded
+  // another explicit "Prepare chart" click; the change itself now loads the
+  // bars and, through the chart's drawing storage key, that rung's drawings.
+  // The key guard means unrelated re-renders and scale-down rung changes never
+  // trigger a reload — and the availability check lets the timeframe-correction
+  // effect (above) settle before the corrected choice is fetched.
+  useEffect(() => {
+    if (!symbol || !timeframe) return
+    if (timeframes.length > 0 && !timeframes.includes(timeframe)) return
+    const key = `${symbol}|${timeframe}|${years}`
+    if (preparedKeyRef.current === key) return
+    preparedKeyRef.current = key
+    void prepare()
+  }, [symbol, timeframe, years, timeframes, prepare])
+
+  /** Scale the chart down to an entry rung, preparing its bars on demand. */
+  const scaleTo = useCallback(
+    async (rung: string) => {
+      if (rung === timeframe) {
+        setScaledDown(false)
+        return
+      }
+      const cacheKey = chartCacheKey(symbol, rung, years)
+      const cached = chartCacheRef.current.get(cacheKey)
+      if (cached) {
+        // Map current pattern viewport to entry timeframe
+        let mappedViewport: { offset: number; count: number } | null = null
+        if (patternViewport && chart) {
+          mappedViewport = mapViewportToTimeframe(
+            patternViewport,
+            chart.bars,
+            cached.bars,
+          )
+        }
+        if (mappedViewport) setEntryViewport(mappedViewport)
+        setEntryChart(cached)
+        setEntryTimeframe(rung)
+        setScaledDown(true)
+        setPreview(null)
+        setFocusedMatch(null)
+        setStatus({
+          tone: 'good',
+          message: `${cached.bars.length} candles · snapshot ${cached.snapshot.slice(0, 10)}…`,
+        })
+        return
+      }
+      if (entryTimeframe === rung && entryChart) {
+        setScaledDown(true)
+        return
+      }
+      const range = windowFor(years)
+      setPreparing(true)
+      setUnavailable(null)
+      setStatus({
+        tone: 'busy',
+        message: `Preparing ${displayTimeframe(rung)} bars…`,
+      })
+      try {
+        const next = await loadSetupChart({
+          symbol,
+          timeframe: rung,
+          fromMs: range.fromMs,
+          toMs: range.toMs,
+          maxBars: MAX_BARS,
+        })
+        chartCacheRef.current.set(cacheKey, next)
+        // Map current pattern viewport to entry timeframe
+        let mappedViewport: { offset: number; count: number } | null = null
+        if (patternViewport && chart) {
+          mappedViewport = mapViewportToTimeframe(
+            patternViewport,
+            chart.bars,
+            next.bars,
+          )
+        }
+        if (mappedViewport) setEntryViewport(mappedViewport)
+        setEntryChart(next)
+        setEntryTimeframe(rung)
+        setScaledDown(true)
+        setPreview(null)
+        setFocusedMatch(null)
+        setStatus({
+          tone: 'good',
+          message: `${next.bars.length} candles · snapshot ${next.snapshot.slice(0, 10)}…`,
+        })
+      } catch (error) {
+        console.error('[Setup Test] Entry rung preparation failed', error)
+        if (isSetupUnavailable(error)) {
+          setUnavailable(friendlySetupError(error, 'prepare'))
+          setStatus({ tone: 'bad', message: 'Setup Test not available' })
+        } else {
+          setStatus({
+            tone: 'bad',
+            message: friendlySetupError(error, 'prepare'),
+          })
+        }
+      } finally {
+        setPreparing(false)
+      }
+    },
+    [
+      symbol,
+      timeframe,
+      entryTimeframe,
+      entryChart,
+      years,
+      patternViewport,
+      chart,
+    ],
+  )
+
+  // Rungs strictly finer than the pattern: these are what a scale-down can
+  // show. The user declares the entry rung by scaling to it, not by picking it
+  // in a top-nav list they never look at.
+  const finerTimeframes = useMemo(() => {
     const pattern = timeframeMinutes(timeframe)
-    if (pattern === null) return [timeframe]
+    if (pattern === null) return []
     return timeframes.filter((item) => {
       const m = timeframeMinutes(item)
-      return m !== null && m <= pattern
+      return m !== null && m < pattern
     })
   }, [timeframes, timeframe])
 
@@ -544,6 +782,29 @@ function SetupTestScreen() {
   )
   const errorList = Object.values(errors)
   const rr = drawing ? riskReward(drawing) : null
+
+  // Scale-down shows the entry rung's own candles so the entry is picked from
+  // the precedent area's fine structure. All prices are absolute ticks, so the
+  // drawn lines and the storage of the drawings themselves are unchanged; only
+  // the underlying candle series (and the anchor, which lives on the pattern
+  // timeframe) need remapping.
+  const displayChart = scaledDown && entryChart ? entryChart : chart
+  const displayAnchorIndex = useMemo(() => {
+    if (!scaledDown || !entryChart || !chart || anchorIndex === null)
+      return anchorIndex
+    const patternTime = chart.bars[anchorIndex]?.timeMs
+    if (patternTime === undefined) return null
+    // The finer series is bucketed on the same open-time clock but may open a
+    // session a bar earlier, carry a DST duplicate, or start some way into the
+    // window (the server caps the series at maxBars from the end). Demand the
+    // same fuzzy match the viewport mapper uses — the first bar at or after the
+    // pattern bar's time — rather than an exact timeMs, so the anchor frame
+    // degrades to the nearest entry bar instead of silently vanishing.
+    const entryIndex = entryChart.bars.findIndex(
+      (bar) => bar.timeMs >= patternTime,
+    )
+    return entryIndex >= 0 ? entryIndex : entryChart.bars.length - 1
+  }, [scaledDown, entryChart, chart, anchorIndex])
 
   const useDetectedMatch = useCallback(
     (match: SetupMatch) => {
@@ -742,10 +1003,15 @@ function SetupTestScreen() {
                 onValueChange={(value) => {
                   setSymbol(value)
                   setChart(null)
+                  setEntryChart(null)
+                  setScaledDown(false)
                   setPreview(null)
                   setZonePlaced(false)
                   setEntryPlaced(false)
                   setPrecedentFromTimeMs(null)
+                  setPatternViewport(null)
+                  setEntryViewport(null)
+                  chartCacheRef.current.clear()
                 }}
               >
                 <SelectTrigger id="setup-market" className="h-9">
@@ -771,11 +1037,12 @@ function SetupTestScreen() {
                 onValueChange={(value) => {
                   setTimeframe(value)
                   setEntryTimeframe('')
-                  setChart(null)
+                  setEntryChart(null)
+                  setScaledDown(false)
                   setPreview(null)
-                  setZonePlaced(false)
-                  setEntryPlaced(false)
-                  setPrecedentFromTimeMs(null)
+                  setPatternViewport(null)
+                  setEntryViewport(null)
+                  chartCacheRef.current.clear()
                 }}
               >
                 <SelectTrigger id="setup-timeframe" className="h-9">
@@ -792,34 +1059,13 @@ function SetupTestScreen() {
             </div>
 
             <div className="setup-field">
-              <label htmlFor="setup-entry-timeframe">Entry candles</label>
-              <Select
-                value={entryTimeframe || timeframe}
-                onValueChange={(value) => {
-                  setEntryTimeframe(value === timeframe ? '' : value)
-                  setPreview(null)
-                }}
-              >
-                <SelectTrigger id="setup-entry-timeframe" className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {entryTimeframes.map((item) => (
-                    <SelectItem key={item} value={item}>
-                      {displayTimeframe(item)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="setup-field">
               <label htmlFor="setup-history">History</label>
               <Select
                 value={String(years)}
                 onValueChange={(value) => {
                   setYears(Number(value))
                   setPreview(null)
+                  chartCacheRef.current.clear()
                 }}
               >
                 <SelectTrigger id="setup-history" className="h-9">
@@ -884,9 +1130,61 @@ function SetupTestScreen() {
         ) : null}
 
         <div className="setup-canvas-body" ref={chartRegionRef}>
+          {chart && finerTimeframes.length > 0 ? (
+            <Popover open={scaleOpen} onOpenChange={setScaleOpen}>
+              <PopoverTrigger
+                type="button"
+                className="setup-scale-toggle"
+                data-scaled={scaledDown}
+                aria-label="Choose entry candles"
+              >
+                <ArrowDown aria-hidden="true" />
+                {scaledDown
+                  ? `Scale to ${displayTimeframe(timeframe)}`
+                  : entryTimeframe
+                    ? `Entry: ${displayTimeframe(entryTimeframe)}`
+                    : 'Scale down to pick entry'}
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                sideOffset={8}
+                className="setup-scale-menu"
+              >
+                <p className="setup-scale-menu-title">Entry candles</p>
+                {finerTimeframes.map((rung) => (
+                  <button
+                    type="button"
+                    key={rung}
+                    className="setup-scale-rung"
+                    data-active={
+                      scaledDown && entryTimeframe === rung ? true : undefined
+                    }
+                    onClick={() => {
+                      setScaleOpen(false)
+                      void scaleTo(rung)
+                    }}
+                  >
+                    {displayTimeframe(rung)}
+                  </button>
+                ))}
+                {scaledDown ? (
+                  <button
+                    type="button"
+                    className="setup-scale-rung"
+                    onClick={() => {
+                      setScaleOpen(false)
+                      void scaleTo(timeframe)
+                    }}
+                  >
+                    {displayTimeframe(timeframe)} · back on pattern candles
+                  </button>
+                ) : null}
+              </PopoverContent>
+            </Popover>
+          ) : null}
           <SetupChart
-            chart={chart}
-            anchorIndex={anchorIndex}
+            chart={displayChart}
+            anchorIndex={displayAnchorIndex}
             lines={lines}
             side={side}
             showAnchor={setupMode === 'template' || entryPlaced}
@@ -895,6 +1193,16 @@ function SetupTestScreen() {
             matches={preview?.matches}
             focusedMatch={focusedMatch}
             precedentBars={drawing?.precedent.length ?? 0}
+            drawingStorageKey={
+              chart ? drawingStorageKeyFor(chart.symbol) : null
+            }
+            anchorLocked={scaledDown}
+            disableDrawingTools={scaledDown}
+            initialViewport={scaledDown ? entryViewport : patternViewport}
+            onViewportChange={(vp) => {
+              if (scaledDown) setEntryViewport(vp)
+              else setPatternViewport(vp)
+            }}
             onSelectAnchor={(index) => selectAnchor(index)}
             onChangeLines={(next) => {
               invalidate()
@@ -1217,6 +1525,33 @@ function SetupTestScreen() {
                     </p>
                   </div>
                 </>
+              ) : kind === 'poi_shift_entry' ? (
+                <>
+                  <NumberField
+                    id="setup-lookback"
+                    label="Zone lookback"
+                    suffix="candles"
+                    hint="How far back the displacement searches for the zone candle."
+                    value={rule.lookbackBars}
+                    error={errors.lookbackBars}
+                    onChange={(lookbackBars) => updateRule({ lookbackBars })}
+                  />
+                  <NumberField
+                    id="setup-tolerance"
+                    label="Zone touch tolerance"
+                    suffix="ticks"
+                    hint={
+                      chart
+                        ? `About ${formatTicks(rule.toleranceTicks, tick)} of price.`
+                        : 'Measured in instrument ticks.'
+                    }
+                    value={rule.toleranceTicks}
+                    error={errors.toleranceTicks}
+                    onChange={(toleranceTicks) =>
+                      updateRule({ toleranceTicks })
+                    }
+                  />
+                </>
               ) : (
                 <>
                   <NumberField
@@ -1276,17 +1611,19 @@ function SetupTestScreen() {
                     />
                     <span>Use candle bodies only</span>
                   </label>
-                  <label className="setup-check setup-full">
-                    <input
-                      type="checkbox"
-                      className="size-4"
-                      checked={rule.confirmByClose}
-                      onChange={(event) =>
-                        updateRule({ confirmByClose: event.target.checked })
-                      }
-                    />
-                    <span>Require candle close</span>
-                  </label>
+                  {kind !== 'poi_shift_entry' ? (
+                    <label className="setup-check setup-full">
+                      <input
+                        type="checkbox"
+                        className="size-4"
+                        checked={rule.confirmByClose}
+                        onChange={(event) =>
+                          updateRule({ confirmByClose: event.target.checked })
+                        }
+                      />
+                      <span>Require candle close</span>
+                    </label>
+                  ) : null}
                 </>
               ) : null}
             </div>

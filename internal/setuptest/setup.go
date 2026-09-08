@@ -32,6 +32,10 @@ const (
 	OrderBlockRetest   Kind = "order_block_retest"
 	BreakerRetest      Kind = "breaker_retest"
 	FairValueGapRetest Kind = "fair_value_gap_retest"
+	// POIShiftEntry is the top-down ladder: a point of interest marked on the
+	// drawing (higher) timeframe and entered on a finer rung when a directional
+	// displacement candle fires while price is back inside that zone.
+	POIShiftEntry Kind = "poi_shift_entry"
 )
 
 // PrecedentBar is one candle from the user-selected example, normalized to
@@ -134,7 +138,7 @@ func (d Drawing) Validate() []ValidationError {
 	var out []ValidationError
 	add := func(path, message string) { out = append(out, ValidationError{Path: path, Message: message}) }
 	switch d.Kind {
-	case DrawnPrecedent, BreakRetest, OrderBlockRetest, BreakerRetest, FairValueGapRetest:
+	case DrawnPrecedent, BreakRetest, OrderBlockRetest, BreakerRetest, FairValueGapRetest, POIShiftEntry:
 	default:
 		add("kind", "must be a supported visual strategy pattern")
 	}
@@ -156,6 +160,11 @@ func (d Drawing) Validate() []ValidationError {
 		case patternErr == nil && patternTf.Finer(entryTf):
 			add("entryTimeframe", "entry timeframe must be the same as or finer than the pattern timeframe")
 		}
+	}
+	// The top-down ladder is the strategy itself: without a finer entry rung
+	// there is no scale-down and the drawing is not the setup it is labelled as.
+	if d.Kind == POIShiftEntry && (d.EntryTimeframe == "" || d.EntryTimeframe == d.Timeframe) {
+		add("entryTimeframe", "a top-down setup needs a finer entry timeframe; scale down to M15 or M30")
 	}
 	if d.AnchorTimeMS <= 0 {
 		add("anchorTimeMs", "select a setup candle")
@@ -262,6 +271,16 @@ func Compile(d Drawing) (*ir.Strategy, error) {
 	}
 	entry := ir.EntryBranch{Enabled: true, Name: interpretationRule(d), When: ir.Expression{Node: "setup"}}
 	entries := ir.Entries{Timing: ir.EntryTimingNextOpen}
+	nodes := []ir.Node{{ID: "setup", Pack: "semantic", Type: string(d.Kind) + "_" + suffix, Params: params, Timeframe: tf}}
+	if d.Kind == POIShiftEntry {
+		// The genuine ladder: the zone state lives on the drawing timeframe and
+		// is projected down; the shift trigger fires on the entry rung itself.
+		nodes = []ir.Node{
+			{ID: "poi", Pack: "semantic", Type: "poi_zone_" + suffix, Params: params, Timeframe: tf},
+			{ID: "shift", Pack: "semantic", Type: "shift_candle_" + suffix, Params: params, Timeframe: entryTf},
+		}
+		entry.When = ir.Expression{All: []ir.Expression{{Node: "poi"}, {Node: "shift"}}}
+	}
 	if d.Side == "long" {
 		entries.Long = entry
 	} else {
@@ -287,7 +306,7 @@ func Compile(d Drawing) (*ir.Strategy, error) {
 		},
 		Template: ir.Template{ID: "semantic-drawing/" + string(d.Kind), Version: 1},
 		Entries:  entries,
-		Nodes:    []ir.Node{{ID: "setup", Pack: "semantic", Type: string(d.Kind) + "_" + suffix, Params: params, Timeframe: tf}},
+		Nodes:    nodes,
 	}, nil
 }
 
@@ -308,6 +327,8 @@ func interpretationRule(d Drawing) string {
 		return fmt.Sprintf("first %s retest of an order block created before displacement", side)
 	case FairValueGapRetest:
 		return fmt.Sprintf("first %s %s of a fair value gap at least %d ticks wide", side, strings.ReplaceAll(d.MitigationRule, "_", " "), d.MinSizeTicks)
+	case POIShiftEntry:
+		return fmt.Sprintf("first %s displacement candle while price is inside the higher-timeframe point-of-interest zone", side)
 	case DrawnPrecedent:
 		return fmt.Sprintf("%s price action matching the %d-candle drawn precedent at %d%% similarity", side, len(d.Precedent), d.SimilarityMilli/10)
 	default:
@@ -422,9 +443,10 @@ func EvaluateMultiTimeframe(ctx context.Context, d Drawing, base, detection *cor
 			Optimistic:            int64(trade.Optimistic.Net),
 			Ambiguous:             trade.Ambiguous,
 		}
-		if d.Kind == FairValueGapRetest {
+		switch d.Kind {
+		case FairValueGapRetest:
 			match.LevelLow, match.LevelHigh = fairValueGapAtSignal(d, detection, signalBar)
-		} else if d.Kind == DrawnPrecedent {
+		case DrawnPrecedent:
 			match.LevelLow, match.LevelHigh = precedentRangeAtSignal(d, detection, signalBar)
 			score := semantic.ScoreSeriesPrecedent(precedent, detection, signalBar, d.SimilarityMilli)
 			match.SimilarityMilli = score.Overall
@@ -433,6 +455,8 @@ func EvaluateMultiTimeframe(ctx context.Context, d Drawing, base, detection *cor
 			match.DirectionMilli = score.Direction
 			match.AnatomyMilli = score.Anatomy
 			match.TriggerMilli = score.Trigger
+		case POIShiftEntry:
+			match.LevelLow, match.LevelHigh = poiZoneAtSignal(d, detection, signalBar)
 		}
 		out.Matches = append(out.Matches, match)
 		out.RuleMatched = out.RuleMatched || match.SignalTimeMS == d.AnchorTimeMS
@@ -578,12 +602,64 @@ func fairValueGapAtSignal(d Drawing, series *core.Series, signalBar int) (core.P
 	return 0, 0
 }
 
+// poiZoneAtSignal replays the poi_zone detector's zone state up to the signal
+// bar so each match can show the higher-timeframe zone the rule acted on. It
+// mirrors semantic.POIZone bar for bar; a divergence between the two is a bug,
+// and the detector tests pin both sides of that pairing.
+func poiZoneAtSignal(d Drawing, s *core.Series, signalBar int) (core.Price, core.Price) {
+	type zone struct {
+		low, high        core.Price
+		created, expires int
+	}
+	displacement := func(i int) bool {
+		r := s.High[i] - s.Low[i]
+		body := (s.Close[i] - s.Open[i]).Abs()
+		if r <= 0 || body*1000 < r*core.Price(d.DisplacementBodyMilli) {
+			return false
+		}
+		if d.Side == "long" {
+			return s.Close[i] > s.Open[i]
+		}
+		return s.Close[i] < s.Open[i]
+	}
+	opposing := func(i int) bool {
+		if d.Side == "long" {
+			return s.Close[i] < s.Open[i]
+		}
+		return s.Close[i] > s.Open[i]
+	}
+	var active *zone
+	for i := 1; i <= signalBar && i < s.Len(); i++ {
+		if active != nil && i > active.expires {
+			active = nil
+		}
+		if !displacement(i) {
+			continue
+		}
+		for j := i - 1; j >= max(0, i-d.LookbackBars); j-- {
+			if !opposing(j) {
+				continue
+			}
+			low, high := s.Low[j], s.High[j]
+			if d.UseBody {
+				low, high = core.Min(s.Open[j], s.Close[j]), core.Max(s.Open[j], s.Close[j])
+			}
+			active = &zone{low: low, high: high, created: i, expires: i + d.ExpiryBars}
+			break
+		}
+	}
+	if active == nil {
+		return 0, 0
+	}
+	return active.low, active.high
+}
+
 func drawingMatchesDetectedStructure(ctx context.Context, d Drawing, strategy *ir.Strategy, series *core.Series, snapshot string) (bool, error) {
 	if d.Kind == DrawnPrecedent {
 		return drawnPrecedentMatchesAtAnchor(d, series), nil
 	}
-	if strategy == nil || len(strategy.Nodes) != 1 {
-		return false, fmt.Errorf("setup test: expected one semantic detector node")
+	if strategy == nil || len(strategy.Nodes) == 0 {
+		return false, fmt.Errorf("setup test: expected a semantic detector node")
 	}
 	node := strategy.Nodes[0]
 	detector, err := primitive.DefaultRegistry.Get(node.Pack, node.Type)

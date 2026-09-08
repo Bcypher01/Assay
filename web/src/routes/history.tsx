@@ -152,7 +152,7 @@ function HistoryScreen() {
   const options = useMemo(() => hashes, [hashes])
 
   return (
-    <div className="space-y-8">
+    <div className="page-form">
       <PageHeader
         step={6}
         title="History & Compare"

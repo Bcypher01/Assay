@@ -42,8 +42,12 @@ func (c *MemoCache) GetOrEval(key ConfigHash, f func() (Value, error)) (Value, e
 	}
 	if c.lru.Len() == c.capacity {
 		last := c.lru.Back()
+		evicted := last.Value.(cacheItem).value
 		delete(c.items, last.Value.(cacheItem).key)
 		c.lru.Remove(last)
+		if evicted.Kind == KindZone {
+			releaseZones(evicted.Zone)
+		}
 	}
 	c.items[key] = c.lru.PushFront(cacheItem{key: key, value: v})
 	return v, nil

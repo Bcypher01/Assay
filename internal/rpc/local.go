@@ -644,7 +644,10 @@ func robustnessResult(ctx context.Context, strategy *ir.Strategy, series *core.S
 	}
 	starting := float64(cfg.Risk.InitialEquity)
 	balanceMetrics := analytics.WithStartingEquity(metrics, starting)
-	out := &analytics.StudyResult{OutOfSample: balanceMetrics, InSample: balanceMetrics, Distribution: distribution.WithStartingEquity(starting), CostStress: []analytics.CostStressPoint{{Multiplier: 1, Metrics: balanceMetrics}}}
+	// The full period is what the run made over the requested window. It is not
+	// evidence about unseen data, so it lives in its own field rather than
+	// masquerading as the out-of-sample result.
+	out := &analytics.StudyResult{FullPeriod: balanceMetrics, Distribution: distribution.WithStartingEquity(starting), CostStress: []analytics.CostStressPoint{{Multiplier: 1, Metrics: balanceMetrics}}}
 	for _, multiplier := range []int{2, 3} {
 		stress := scaleCosts(cfg, multiplier)
 		r, _, err := engine.Run(ctx, strategy, engine.Data{Series: series, Config: stress, Snapshot: snapshot})
@@ -665,22 +668,81 @@ func robustnessResult(ctx context.Context, strategy *ir.Strategy, series *core.S
 	if err != nil {
 		return nil, err
 	}
-	for _, window := range windows {
-		windowReturns := analytics.Returns{}
-		for _, trade := range result.Trades {
-			if trade.EntryBar >= window.TestFrom && trade.EntryBar < window.TestTo {
-				windowReturns.Pessimistic = append(windowReturns.Pessimistic, float64(trade.Pessimistic.Net))
-				windowReturns.Optimistic = append(windowReturns.Optimistic, float64(trade.Optimistic.Net))
-			}
-		}
-		m, err := analytics.MetricsFor(windowReturns)
+	testSpans := make([][2]int, 0, len(windows))
+	var trainSpan [2]int
+	for i, window := range windows {
+		m, err := analytics.MetricsFor(pooledWindowReturns(result.Trades, [][2]int{{window.TestFrom, window.TestTo}}))
 		if err != nil {
 			return nil, err
 		}
-		out.WalkForward = append(out.WalkForward, analytics.WalkForwardResult{Window: window, Metrics: analytics.WithStartingEquity(m, starting)})
+		trainFrom, trainTo, testFrom, testTo := windowTimes(series, window)
+		out.WalkForward = append(out.WalkForward, analytics.WalkForwardResult{
+			Window:      window,
+			TrainFromMs: trainFrom, TrainToMs: trainTo,
+			TestFromMs: testFrom, TestToMs: testTo,
+			Metrics: analytics.WithStartingEquity(m, starting),
+		})
+		testSpans = append(testSpans, [2]int{window.TestFrom, window.TestTo})
+		if i == 0 {
+			trainSpan = [2]int{window.TrainFrom, window.TrainTo}
+		}
 	}
-	out.NextActions = nextActions(metrics, out.CostStress, len(out.WalkForward))
+	// Walk-forward test windows are disjoint, so pooling their trades gives one
+	// unseen sample instead of an average of window averages. When no window
+	// produced a trade, the sample stays empty and the verdict must say "too
+	// little evidence" rather than "unprofitable".
+	oos, err := analytics.MetricsFor(pooledWindowReturns(result.Trades, testSpans))
+	if err != nil {
+		return nil, err
+	}
+	out.OutOfSample = analytics.WithStartingEquity(oos, starting)
+	inSample := analytics.Metrics{}
+	if len(windows) > 0 {
+		inSample, err = analytics.MetricsFor(pooledWindowReturns(result.Trades, [][2]int{trainSpan}))
+		if err != nil {
+			return nil, err
+		}
+	}
+	out.InSample = analytics.WithStartingEquity(inSample, starting)
+	out.NextActions = nextActions(out.OutOfSample, out.CostStress, len(out.WalkForward))
 	return out, nil
+}
+
+// pooledWindowReturns collects trades whose entry bar falls inside any of the
+// given half-open spans. Spans are walked in trade order and a trade is counted
+// once, even if a caller passes overlapping spans.
+func pooledWindowReturns(trades []sim.Trade, spans [][2]int) analytics.Returns {
+	var out analytics.Returns
+	for _, trade := range trades {
+		for _, span := range spans {
+			if trade.EntryBar >= span[0] && trade.EntryBar < span[1] {
+				out.Pessimistic = append(out.Pessimistic, float64(trade.Pessimistic.Net))
+				out.Optimistic = append(out.Optimistic, float64(trade.Optimistic.Net))
+				break
+			}
+		}
+	}
+	return out
+}
+
+// windowTimes converts a bar-index window into the timestamps actually covered
+// by its first and last bars. Half-open bar ranges become inclusive date ranges
+// because that is what a reader expects to see.
+func windowTimes(series *core.Series, window analytics.WFWindow) (trainFrom, trainTo, testFrom, testTo int64) {
+	n := series.Len()
+	if n == 0 {
+		return 0, 0, 0, 0
+	}
+	at := func(i int) int64 {
+		if i < 0 {
+			i = 0
+		}
+		if i >= n {
+			i = n - 1
+		}
+		return int64(series.Time[i])
+	}
+	return at(window.TrainFrom), at(window.TrainTo - 1), at(window.TestFrom), at(window.TestTo - 1)
 }
 
 func costRiskSensitivity(ctx context.Context, strategy *ir.Strategy, series *core.Series, cfg sim.Config, snapshot string) (analytics.Grid, error) {

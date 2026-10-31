@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -74,6 +75,10 @@ func (s *LocalStore) manifestPath(sym string, tf core.TF, month string) string {
 	return filepath.Join(s.dir(sym, tf), month+".manifest.json")
 }
 
+func (s *LocalStore) partialPath(sym string, tf core.TF, month string) string {
+	return filepath.Join(s.dir(sym, tf), month+".parquet.partial")
+}
+
 // Write encodes s to Parquet and persists it with a completed manifest. The
 // caller supplies identity and provenance (symbol, timeframe, month, source,
 // build version); Write fills the data-derived fields (rows, bounds, content
@@ -139,6 +144,13 @@ func (s *LocalStore) Write(ctx context.Context, series *core.Series, meta Manife
 func (s *LocalStore) WritePublished(ctx context.Context, data []byte, meta Manifest) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.writePublishedLocked(ctx, data, meta)
+}
+
+// writePublishedLocked is WritePublished's body without the lock, so composite
+// operations (CommitPartial) can update the cache atomically. Callers must hold
+// s.mu.
+func (s *LocalStore) writePublishedLocked(ctx context.Context, data []byte, meta Manifest) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -160,6 +172,84 @@ func (s *LocalStore) WritePublished(ctx context.Context, data []byte, meta Manif
 		return err
 	}
 	return s.enforceLimit()
+}
+
+// PartialSize returns the number of bytes already written for an interrupted
+// month download, or zero when there is none.
+func (s *LocalStore) PartialSize(sym string, tf core.TF, month string) int64 {
+	info, err := os.Stat(s.partialPath(sym, tf, month))
+	if err != nil {
+		return 0
+	}
+	return info.Size()
+}
+
+// AppendPartial appends src to the in-progress download for a month and returns
+// the new length. The partial file sits beside the final object and is promoted
+// only by CommitPartial, so an interrupted transfer never leaves a readable but
+// incomplete month in the cache. Callers must not append to the same month from
+// two goroutines; the library client prepares each month in one worker.
+func (s *LocalStore) AppendPartial(ctx context.Context, sym string, tf core.TF, month string, src io.Reader) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	dir := s.dir(sym, tf)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return 0, fmt.Errorf("store: creating %s: %w", dir, err)
+	}
+	path := s.partialPath(sym, tf, month)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return 0, fmt.Errorf("store: opening partial %s: %w", path, err)
+	}
+	if _, err := io.Copy(f, src); err != nil {
+		_ = f.Close()
+		return 0, fmt.Errorf("store: writing partial %s: %w", path, err)
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return 0, fmt.Errorf("store: syncing partial %s: %w", path, err)
+	}
+	if err := f.Close(); err != nil {
+		return 0, fmt.Errorf("store: closing partial %s: %w", path, err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0, fmt.Errorf("store: sizing partial %s: %w", path, err)
+	}
+	return info.Size(), nil
+}
+
+// DiscardPartial removes an in-progress month download. It is a no-op when none
+// exists.
+func (s *LocalStore) DiscardPartial(sym string, tf core.TF, month string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := os.Remove(s.partialPath(sym, tf, month)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("store: discarding partial %s: %w", s.partialPath(sym, tf, month), err)
+	}
+	return nil
+}
+
+// CommitPartial verifies a completed month download against its manifest,
+// promotes it into the cache, and removes the partial on success. It returns
+// ErrHashMismatch, leaving the partial in place, when the bytes do not match.
+func (s *LocalStore) CommitPartial(ctx context.Context, sym string, tf core.TF, month string, meta Manifest) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	data, err := os.ReadFile(s.partialPath(sym, tf, month))
+	if err != nil {
+		return fmt.Errorf("store: reading partial %s: %w", s.partialPath(sym, tf, month), err)
+	}
+	if err := s.writePublishedLocked(ctx, data, meta); err != nil {
+		return err
+	}
+	if err := os.Remove(s.partialPath(sym, tf, month)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("store: removing partial %s: %w", s.partialPath(sym, tf, month), err)
+	}
+	return nil
 }
 
 func (s *LocalStore) enforceLimit() error {
@@ -225,7 +315,12 @@ func (s *LocalStore) Load(ctx context.Context, sym string, tf core.TF, from, to 
 		return nil, nil, fmt.Errorf("store: load window end %d precedes start %d", int64(to), int64(from))
 	}
 
-	// First pass: read the manifests of files that overlap the window, to size
+	manifests, err := s.readManifests(ctx, sym, tf)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// First pass: select the manifests whose files overlap the window, to size
 	// the result and learn which files to decode. Second pass decodes them.
 	type touched struct {
 		manifest Manifest
@@ -233,35 +328,7 @@ func (s *LocalStore) Load(ctx context.Context, sym string, tf core.TF, from, to 
 	}
 	var files []touched
 	var capRows int
-
-	entries, err := os.ReadDir(s.dir(sym, tf))
-	if errors.Is(err, os.ErrNotExist) {
-		entries = nil // no data for this symbol/timeframe yet
-	} else if err != nil {
-		return nil, nil, fmt.Errorf("store: listing %s: %w", s.dir(sym, tf), err)
-	}
-
-	for _, e := range entries {
-		if err := ctx.Err(); err != nil {
-			return nil, nil, err
-		}
-		name := e.Name()
-		if e.IsDir() || !strings.HasSuffix(name, ".manifest.json") {
-			continue
-		}
-		mfPath := filepath.Join(s.dir(sym, tf), name)
-		mfBytes, err := os.ReadFile(mfPath)
-		if err != nil {
-			return nil, nil, fmt.Errorf("store: reading manifest %s: %w", mfPath, err)
-		}
-		var mf Manifest
-		if err := mf.UnmarshalJSON(mfBytes); err != nil {
-			return nil, nil, fmt.Errorf("store: parsing manifest %s: %w", mfPath, err)
-		}
-		if mf.SchemaVersion != SchemaVersion {
-			return nil, nil, fmt.Errorf("store: %w: %s declares version %d, want %d",
-				ErrSchemaVersion, mfPath, mf.SchemaVersion, SchemaVersion)
-		}
+	for _, mf := range manifests {
 		// A manifest's Last is the final candle's open, not an instantaneous
 		// observation. Treat the file as covering through that candle's close;
 		// otherwise a rolling D1 request beginning midday ignores a perfectly
@@ -274,10 +341,6 @@ func (s *LocalStore) Load(ctx context.Context, sym string, tf core.TF, from, to 
 		capRows += int(mf.Rows)
 	}
 
-	// Directory listing order is not guaranteed; sort by month so concatenation
-	// and the returned manifest order are deterministic.
-	sort.Slice(files, func(i, j int) bool { return files[i].manifest.Month < files[j].manifest.Month })
-
 	result := &core.Series{
 		Symbol: sym,
 		TF:     tf,
@@ -288,7 +351,7 @@ func (s *LocalStore) Load(ctx context.Context, sym string, tf core.TF, from, to 
 		Close:  make([]core.Price, 0, capRows),
 		Volume: make([]int64, 0, capRows),
 	}
-	manifests := make([]Manifest, 0, len(files))
+	manifests = make([]Manifest, 0, len(files))
 
 	for _, f := range files {
 		if err := ctx.Err(); err != nil {
@@ -311,6 +374,63 @@ func (s *LocalStore) Load(ctx context.Context, sym string, tf core.TF, from, to 
 	}
 
 	return result, manifests, nil
+}
+
+// Manifests returns the manifest of every cached month for a symbol and
+// timeframe, sorted by month, without reading or decoding any Parquet payload.
+//
+// It is the cheap preflight path: readiness and missing-month checks need
+// provenance, bounds and row counts, not the bars. It deliberately does not
+// verify a file's content hash against its manifest — that is Load's job, on
+// the exact months a study actually consumes. A manifest that cannot be parsed,
+// or that declares an incompatible schema version, is still an error here, so
+// structural cache damage still surfaces before a run.
+func (s *LocalStore) Manifests(ctx context.Context, sym string, tf core.TF) ([]Manifest, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.readManifests(ctx, sym, tf)
+}
+
+// readManifests lists and parses every manifest for a symbol and timeframe.
+// Callers must hold s.mu.
+func (s *LocalStore) readManifests(ctx context.Context, sym string, tf core.TF) ([]Manifest, error) {
+	entries, err := os.ReadDir(s.dir(sym, tf))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil // no data for this symbol/timeframe yet
+	}
+	if err != nil {
+		return nil, fmt.Errorf("store: listing %s: %w", s.dir(sym, tf), err)
+	}
+
+	var manifests []Manifest
+	for _, e := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".manifest.json") {
+			continue
+		}
+		mfPath := filepath.Join(s.dir(sym, tf), name)
+		mfBytes, err := os.ReadFile(mfPath)
+		if err != nil {
+			return nil, fmt.Errorf("store: reading manifest %s: %w", mfPath, err)
+		}
+		var mf Manifest
+		if err := mf.UnmarshalJSON(mfBytes); err != nil {
+			return nil, fmt.Errorf("store: parsing manifest %s: %w", mfPath, err)
+		}
+		if mf.SchemaVersion != SchemaVersion {
+			return nil, fmt.Errorf("store: %w: %s declares version %d, want %d",
+				ErrSchemaVersion, mfPath, mf.SchemaVersion, SchemaVersion)
+		}
+		manifests = append(manifests, mf)
+	}
+
+	// Directory listing order is not guaranteed; sort by month so callers and
+	// the concatenation in Load see a deterministic order.
+	sort.Slice(manifests, func(i, j int) bool { return manifests[i].Month < manifests[j].Month })
+	return manifests, nil
 }
 
 // appendWindow appends bars of src whose open time is in [from, to) onto dst.

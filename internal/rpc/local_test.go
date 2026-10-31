@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	assayv1 "github.com/bcypher01/assay/gen/go/assay/v1"
+	"github.com/bcypher01/assay/internal/analytics"
 	"github.com/bcypher01/assay/internal/core"
 	"github.com/bcypher01/assay/internal/instrument"
 	"github.com/bcypher01/assay/internal/ir"
@@ -16,6 +17,7 @@ import (
 	_ "github.com/bcypher01/assay/internal/packs/indicator"
 	"github.com/bcypher01/assay/internal/runstore"
 	"github.com/bcypher01/assay/internal/setuptest"
+	"github.com/bcypher01/assay/internal/sim"
 	"github.com/bcypher01/assay/internal/store"
 	"github.com/bcypher01/assay/internal/venue"
 )
@@ -266,5 +268,39 @@ func TestRunCostFreeUsesEffectiveInstrumentDefaults(t *testing.T) {
 	free, known := runCostFree(registry, &assayv1.RunRequest{StrategyJson: strategy})
 	if !known || free {
 		t.Fatalf("defaults reported free=%v known=%v; expected known non-zero costs", free, known)
+	}
+}
+
+// A walk-forward test window is what makes a result out-of-sample. Trades that
+// entered while the rules were still being fitted must not leak into the unseen
+// sample, and a window with no trades must stay empty rather than inherit the
+// full period's wins.
+func TestPooledWindowReturnsKeepsUnseenSampleHonest(t *testing.T) {
+	trades := []sim.Trade{
+		{EntryBar: 2, Pessimistic: sim.Outcome{Net: 100}, Optimistic: sim.Outcome{Net: 100}}, // fitted window
+		{EntryBar: 6, Pessimistic: sim.Outcome{Net: 10}, Optimistic: sim.Outcome{Net: 20}},   // unseen window
+		{EntryBar: 9, Pessimistic: sim.Outcome{Net: -4}, Optimistic: sim.Outcome{Net: 6}},    // unseen window
+	}
+	full, err := analytics.MetricsFor(tradeReturns(trades))
+	if err != nil {
+		t.Fatal(err)
+	}
+	unseen, err := analytics.MetricsFor(pooledWindowReturns(trades, [][2]int{{5, 7}, {8, 12}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if full.Trades != 3 || unseen.Trades != 2 {
+		t.Fatalf("full trades = %d, unseen trades = %d", full.Trades, unseen.Trades)
+	}
+	if full.Expectancy.Pessimistic == unseen.Expectancy.Pessimistic {
+		t.Fatalf("unseen expectancy borrowed the fitted trade: %v", unseen.Expectancy)
+	}
+
+	empty, err := analytics.MetricsFor(pooledWindowReturns(trades, [][2]int{{20, 30}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if empty.Trades != 0 || empty.Expectancy.Pessimistic != 0 || empty.Expectancy.Optimistic != 0 {
+		t.Fatalf("empty window = %#v", empty)
 	}
 }

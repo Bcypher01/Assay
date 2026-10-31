@@ -63,7 +63,11 @@ export interface StudyAssumptionsState {
 }
 
 export const DEFAULT_ASSUMPTIONS: StudyAssumptionsState = {
-  initialEquity: 10_000n,
+  // A realistic starting balance. The bundled templates risk 0.5-1% against
+  // 50-100 pip FX stops; on a $100 account that request rounds down to no
+  // position at the instrument's minimum lot, so every trade is skipped and
+  // the first run ends in "No trades" no matter how good the rule is.
+  initialEquity: 1_000_000n,
   riskPerTrade: 0.01,
   fixedLots: 0,
   spreadTicks: 0n,

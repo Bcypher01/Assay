@@ -123,6 +123,21 @@ serves no interface of its own. See
 A backtest describes what a rule did on one historical sample. It does not
 describe what it will do.
 
+
+## Contributing and licence
+
+Assay is open source under the [Apache License 2.0](LICENSE). Third-party
+licences are recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. The
+project uses the Developer Certificate of Origin: sign commits with
+`git commit -s`. Security reports should follow [SECURITY.md](SECURITY.md)
+rather than opening a public issue.
+
+The code licence does not cover market data. Assay ships no bars, and data
+fetched through the application remains subject to the terms of the venue that
+supplied it.
+
 ## Private beta
 
 The local first-run plan and supported-market/order limits are documented in

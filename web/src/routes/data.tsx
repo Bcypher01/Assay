@@ -53,12 +53,46 @@ interface ProgressState {
 
 type Phase = 'idle' | 'streaming' | 'done' | 'error' | 'cancelled'
 
+/**
+ * The windows a person actually asks for. Hand-picking two dates to get "the
+ * last three years" is busywork, and a blank window makes the step look
+ * unfinished. The presets end at today's UTC midnight and run backwards.
+ */
+const PRESET_YEARS = [1, 3, 5, 10] as const
+
+function presetWindow(years: number): { fromMs: bigint; toMs: bigint } {
+  const now = new Date()
+  return {
+    fromMs: BigInt(
+      Date.UTC(
+        now.getUTCFullYear() - years,
+        now.getUTCMonth(),
+        now.getUTCDate(),
+      ),
+    ),
+    toMs: BigInt(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    ),
+  }
+}
+
+function matchesPreset(
+  fromMs: bigint | null,
+  toMs: bigint | null,
+  years: number,
+): boolean {
+  if (fromMs === null || toMs === null) return false
+  const window = presetWindow(years)
+  return window.fromMs === fromMs && window.toMs === toMs
+}
+
 function DataScreen() {
   const s = useSession()
   const [loading, setLoading] = useState(false)
   const [listError, setListError] = useState<string | null>(null)
   const [restoreNotice, setRestoreNotice] = useState<string | null>(null)
 
+  const [defaultedWindow, setDefaultedWindow] = useState(false)
   const [phase, setPhase] = useState<Phase>('idle')
   const [progress, setProgress] = useState<ProgressState | null>(null)
   const [ensureError, setEnsureError] = useState<string | null>(null)
@@ -119,6 +153,17 @@ function DataScreen() {
   useEffect(() => {
     void loadInstruments()
   }, [loadInstruments])
+
+  // A chosen market with no window yet opens on a useful default rather than
+  // two empty fields. The person can still change either date.
+  useEffect(() => {
+    if (defaultedWindow) return
+    if (s.fromMs === null && s.toMs === null && s.symbol && s.timeframe) {
+      setDefaultedWindow(true)
+      const window = presetWindow(3)
+      session.set({ fromMs: window.fromMs, toMs: window.toMs })
+    }
+  }, [defaultedWindow, s.fromMs, s.toMs, s.symbol, s.timeframe])
 
   const selectedTimeframeIsSupported = isTimeframeSupportedForInstrument(
     s.symbol,
@@ -319,6 +364,28 @@ function DataScreen() {
               <Button variant="outline" size="sm" asChild>
                 <Link to="/strategy">Change rules</Link>
               </Button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">Quick range</span>
+              {PRESET_YEARS.map((years) => (
+                <Button
+                  key={years}
+                  type="button"
+                  size="sm"
+                  variant={
+                    matchesPreset(s.fromMs, s.toMs, years)
+                      ? 'default'
+                      : 'outline'
+                  }
+                  onClick={() => {
+                    const window = presetWindow(years)
+                    session.set({ fromMs: window.fromMs, toMs: window.toMs })
+                  }}
+                >
+                  {years}Y
+                </Button>
+              ))}
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">

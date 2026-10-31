@@ -3861,6 +3861,15 @@ export class RunDetails extends Message<RunDetails> {
    */
   unfilled = 0
 
+  /**
+   * full_period describes every trade in the requested window. out_of_sample
+   * describes only pooled walk-forward test windows and is the sample the
+   * verdict judges. in_sample describes the first train window.
+   *
+   * @generated from field: assay.v1.ResultMetrics full_period = 22;
+   */
+  fullPeriod?: ResultMetrics
+
   constructor(data?: PartialMessage<RunDetails>) {
     super()
     proto3.util.initPartial(data, this)
@@ -3947,6 +3956,7 @@ export class RunDetails extends Message<RunDetails> {
       repeated: true,
     },
     { no: 21, name: 'unfilled', kind: 'scalar', T: 13 /* ScalarType.UINT32 */ },
+    { no: 22, name: 'full_period', kind: 'message', T: ResultMetrics },
   ])
 
   static fromBinary(
@@ -4467,6 +4477,29 @@ export class WalkForwardWindow extends Message<WalkForwardWindow> {
    */
   outOfSample?: ResultMetrics
 
+  /**
+   * Inclusive timestamps of the first and last bars in each range, so the UI
+   * can show dates instead of bar indices.
+   *
+   * @generated from field: sint64 train_from_ms = 6;
+   */
+  trainFromMs = protoInt64.zero
+
+  /**
+   * @generated from field: sint64 train_to_ms = 7;
+   */
+  trainToMs = protoInt64.zero
+
+  /**
+   * @generated from field: sint64 test_from_ms = 8;
+   */
+  testFromMs = protoInt64.zero
+
+  /**
+   * @generated from field: sint64 test_to_ms = 9;
+   */
+  testToMs = protoInt64.zero
+
   constructor(data?: PartialMessage<WalkForwardWindow>) {
     super()
     proto3.util.initPartial(data, this)
@@ -4485,6 +4518,30 @@ export class WalkForwardWindow extends Message<WalkForwardWindow> {
     { no: 3, name: 'test_from', kind: 'scalar', T: 13 /* ScalarType.UINT32 */ },
     { no: 4, name: 'test_to', kind: 'scalar', T: 13 /* ScalarType.UINT32 */ },
     { no: 5, name: 'out_of_sample', kind: 'message', T: ResultMetrics },
+    {
+      no: 6,
+      name: 'train_from_ms',
+      kind: 'scalar',
+      T: 18 /* ScalarType.SINT64 */,
+    },
+    {
+      no: 7,
+      name: 'train_to_ms',
+      kind: 'scalar',
+      T: 18 /* ScalarType.SINT64 */,
+    },
+    {
+      no: 8,
+      name: 'test_from_ms',
+      kind: 'scalar',
+      T: 18 /* ScalarType.SINT64 */,
+    },
+    {
+      no: 9,
+      name: 'test_to_ms',
+      kind: 'scalar',
+      T: 18 /* ScalarType.SINT64 */,
+    },
   ])
 
   static fromBinary(

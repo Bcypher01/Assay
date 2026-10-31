@@ -1,9 +1,12 @@
 version: v1
 plugins:
-  - plugin: buf.build/protocolbuffers/go
+  # Local plugins are pinned by `go.mod` and installed by `make tools`. Remote
+  # plugins silently move to new major versions (connect-go v2 needs a different
+  # runtime module), which would break the build on an unrelated regeneration.
+  - plugin: go
     out: gen/go
     opt: paths=source_relative
-  - plugin: buf.build/connectrpc/go
+  - plugin: connect-go
     out: gen/go
     opt: paths=source_relative
   # The web client generates its own TypeScript stubs from the same source;

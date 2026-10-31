@@ -3,9 +3,12 @@ import {
   CalendarClock,
   Check,
   Minus,
+  Moon,
   PencilRuler,
   RotateCcw,
+  Sun,
 } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { hasReadyData, session as sessionStore, useSession } from '@/lib/store'
@@ -129,7 +132,7 @@ export function AppNav() {
 
   return (
     <aside className="runlog-spine">
-      <Link to="/" className="runlog-wordmark" aria-label="Assay — run log">
+      <Link to="/" className="runlog-wordmark" aria-label="Assay run log">
         {/* The mark is the A. The word continues out of it rather than
             restating it, so the lockup reads as one word, not a badge
             standing next to its own initial. */}
@@ -241,6 +244,11 @@ export function AppNav() {
         </Button>
       </section>
 
+      <div className="runlog-tools">
+        <p className="runlog-label">Appearance</p>
+        <ThemeToggle />
+      </div>
+
       <div className="runlog-note">
         <p>
           A backtest describes what a rule did on one historical sample. It does
@@ -248,5 +256,61 @@ export function AppNav() {
         </p>
       </div>
     </aside>
+  )
+}
+
+/**
+ * Manual light/dark override. The system preference is the default; once a
+ * person chooses, the choice wins and is remembered. The pre-paint script in
+ * the root document applies it before the first frame.
+ */
+function ThemeToggle() {
+  const [theme, setTheme] = useState<'light' | 'dark' | null>(null)
+
+  useEffect(() => {
+    let stored: string | null = null
+    try {
+      stored = window.localStorage.getItem('assay.theme')
+    } catch {
+      // Storage may be unavailable; fall back to the system preference.
+    }
+    if (stored === 'light' || stored === 'dark') {
+      setTheme(stored)
+      return
+    }
+    setTheme(
+      window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light',
+    )
+  }, [])
+
+  const toggle = () => {
+    const effective =
+      theme ??
+      (window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light')
+    const next = effective === 'dark' ? 'light' : 'dark'
+    setTheme(next)
+    document.documentElement.setAttribute('data-theme', next)
+    try {
+      window.localStorage.setItem('assay.theme', next)
+    } catch {
+      // Persistence is a convenience, never a requirement.
+    }
+  }
+
+  const showingDark = theme !== 'light'
+  return (
+    <button
+      type="button"
+      className="runlog-tool"
+      onClick={toggle}
+      aria-pressed={theme === 'dark'}
+    >
+      {showingDark ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
+      <span>{showingDark ? 'Light appearance' : 'Dark appearance'}</span>
+    </button>
   )
 }

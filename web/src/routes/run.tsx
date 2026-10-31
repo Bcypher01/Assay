@@ -244,16 +244,19 @@ function RunScreen() {
       return
     }
     let doc: Record<string, unknown>
+    const parsed = parseStrategy(s.strategyText)
+    if (!parsed) {
+      // Parse failures and semantic failures are different problems with
+      // different fixes. Folding the second into "isn't valid JSON" tells the
+      // user their syntax is broken when it is not.
+      setError('Strategy document isn’t valid JSON.')
+      setPhase('error')
+      return
+    }
     try {
-      const parsed = parseStrategy(s.strategyText)
-      if (!parsed) throw new Error('Strategy document isn’t valid JSON.')
       doc = toEngineStrategy(parsed)
     } catch (err) {
-      setError(
-        `Strategy document isn’t valid JSON: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      )
+      setError(err instanceof Error ? err.message : String(err))
       setPhase('error')
       return
     }
@@ -418,23 +421,29 @@ function RunScreen() {
               onValidateStrategy={() => void validateStrategy()}
             />
 
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <Button
                 variant="outline"
                 asChild
                 disabled={phase === 'streaming'}
+                className="w-full"
               >
-                <Link to="/data">Back to history</Link>
+                <Link to="/data">Back to prepare data</Link>
               </Button>
               <Button
                 onClick={() => void run()}
                 disabled={!canRun || phase === 'streaming'}
+                className="w-full"
               >
                 <Play className="size-4" />
                 {phase === 'streaming' ? 'Running…' : 'Run backtest'}
               </Button>
               {phase === 'streaming' ? (
-                <Button variant="outline" onClick={cancel}>
+                <Button
+                  variant="outline"
+                  onClick={cancel}
+                  className="col-span-2 w-full"
+                >
                   Cancel
                 </Button>
               ) : null}

@@ -93,6 +93,39 @@ func (p *LocalPublisher) Head(ctx context.Context, key string) (store.Manifest, 
 	return mf, true, nil
 }
 
+// GetRange returns a month's bytes from offset to its end. A filesystem read
+// always starts exactly at offset, so partial is always true.
+func (p *LocalPublisher) GetRange(ctx context.Context, key string, offset int64) (io.ReadCloser, bool, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, false, false, err
+	}
+	if filepath.IsAbs(key) || strings.Contains(key, "..") {
+		return nil, false, false, fmt.Errorf("pipeline: unsafe object key %q", key)
+	}
+	path := filepath.Join(p.root, filepath.FromSlash(key))
+	f, err := os.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, false, false, nil
+	}
+	if err != nil {
+		return nil, false, false, fmt.Errorf("pipeline: opening %s: %w", path, err)
+	}
+	info, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, false, false, fmt.Errorf("pipeline: stat %s: %w", path, err)
+	}
+	if offset >= info.Size() {
+		_ = f.Close()
+		return nil, false, false, nil
+	}
+	if _, err := f.Seek(offset, io.SeekStart); err != nil {
+		_ = f.Close()
+		return nil, false, false, fmt.Errorf("pipeline: seeking %s: %w", path, err)
+	}
+	return f, true, true, nil
+}
+
 func (p *LocalPublisher) Get(ctx context.Context, key string) (io.ReadCloser, bool, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, false, err

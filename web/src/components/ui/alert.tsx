@@ -35,11 +35,14 @@ const Alert = React.forwardRef<
 ))
 Alert.displayName = 'Alert'
 
+// The title is not a heading. Alerts appear inside cards and sections with their
+// own heading levels, and a fixed h5 here skipped h2–h4 on every page that used
+// one. The surrounding role="alert" carries the announcement semantics.
 const AlertTitle = React.forwardRef<
-  HTMLParagraphElement,
-  React.HTMLAttributes<HTMLHeadingElement>
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <h5
+  <div
     ref={ref}
     className={cn('mb-1 font-medium leading-none tracking-tight', className)}
     {...props}

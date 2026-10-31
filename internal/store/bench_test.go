@@ -1,7 +1,9 @@
 package store
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/bcypher01/assay/internal/core"
 )
@@ -68,4 +70,44 @@ func BenchmarkEncode2p6M(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+// BenchmarkReadinessManifestsVsLoad contrasts the cost of answering "is this
+// window ready" from manifests alone (the new preflight) against reading and
+// hash-verifying the full Parquet payload (what the old preflight did) across a
+// twelve-month window.
+func BenchmarkReadinessManifestsVsLoad(b *testing.B) {
+	st := NewLocalStore(b.TempDir())
+	ctx := context.Background()
+	from := core.MustParseTime("2020-01-01T00:00:00Z")
+	for m := 0; m < 12; m++ {
+		start := from.Std().AddDate(0, m, 0)
+		series := core.NewSeries("EURUSD", core.TFM1, 5000)
+		for i := 0; i < 5000; i++ {
+			ts := core.FromStd(start.Add(time.Duration(i) * time.Minute))
+			series.Append(ts, core.Price(108000+i), core.Price(108002+i), core.Price(107998+i), core.Price(108001+i), 1000)
+		}
+		if err := st.Write(ctx, series, Manifest{
+			Symbol: "EURUSD", TF: core.TFM1, Month: start.Format("2006-01"), Source: "bench", BuildVersion: "bench",
+		}); err != nil {
+			b.Fatal(err)
+		}
+	}
+	to := core.FromStd(from.Std().AddDate(1, 0, 0))
+	b.Run("manifests", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			if _, err := st.Manifests(ctx, "EURUSD", core.TFM1); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("load", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			if _, _, err := st.Load(ctx, "EURUSD", core.TFM1, from, to); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
 }

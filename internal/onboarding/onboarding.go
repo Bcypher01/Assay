@@ -2,7 +2,10 @@
 // to local clients. It contains no user state: completion belongs in the UI.
 package onboarding
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 const (
 	// DefaultTemplateID is intentionally a daily strategy. It can be prepared
@@ -22,6 +25,12 @@ type Plan struct {
 	ToMS        int64  `json:"to_ms"`
 	Title       string `json:"title"`
 	Explanation string `json:"explanation"`
+
+	// Strategy is the editable document the client opens first. It is embedded
+	// rather than left to be fetched separately so a static UI can start a real
+	// study from this one response; without it the client has a name and a
+	// window but nothing executable to run.
+	Strategy json.RawMessage `json:"strategy,omitempty"`
 }
 
 // Default is a fixed four-year historical window. Fixing the window makes the

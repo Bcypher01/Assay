@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bcypher01/assay/internal/core"
@@ -122,6 +124,18 @@ type ObjectStore interface {
 	Get(ctx context.Context, key string) (io.ReadCloser, bool, error)
 }
 
+// RangeReader is implemented by object stores that can serve a byte range from
+// an offset through the end of an object. The loader uses it to resume an
+// interrupted month download rather than restarting it.
+type RangeReader interface {
+	// GetRange returns the object from offset to its end. partial reports
+	// whether the stream actually starts at offset: an origin that ignores the
+	// Range header returns the whole object instead, and a caller must not
+	// append that after the bytes it already holds. ok is false when the object
+	// does not exist or the range cannot be served.
+	GetRange(ctx context.Context, key string, offset int64) (rc io.ReadCloser, partial, ok bool, err error)
+}
+
 type sourceNamer interface {
 	Source(sym string) (string, error)
 }
@@ -132,6 +146,11 @@ type Loader struct {
 	Objects  ObjectStore
 	Fallback venue.Fetcher
 	Registry *instrument.Registry
+
+	// Workers bounds how many missing months Ensure prepares at once. Zero uses
+	// runtime.GOMAXPROCS(0); it is always clamped to at least one and to the
+	// number of missing months.
+	Workers int
 }
 
 // New returns a Loader using cache as the local data manager.
@@ -176,6 +195,11 @@ func (l *Loader) DeriveRequest(symbols []string, needed []core.TF, from, to core
 
 // Ensure makes every object named by r available in the local cache. A warm
 // valid cache returns before touching object storage.
+//
+// Missing months are prepared by a bounded worker pool, so a four-year request
+// no longer pays one serial round-trip per month. Each month is an independent
+// file, so parallelism changes no bytes and no snapshot identity; the progress
+// sink is still called from one goroutine at a time.
 func (l *Loader) Ensure(ctx context.Context, r Request, progress func(Progress)) error {
 	if l.Cache == nil {
 		return fmt.Errorf("library: missing local cache")
@@ -214,25 +238,80 @@ func (l *Loader) Ensure(ctx context.Context, r Request, progress func(Progress))
 		report(progress, Progress{Percent: 100, Stage: "data already available"})
 		return nil
 	}
-	for i, task := range tasks {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		start := uint32(i * 100 / len(tasks))
-		forward := func(p Progress) {
-			p.Percent = start
-			report(progress, p)
-		}
-		if err := l.ensureMonth(ctx, task.symbol, task.tf, task.month, forward); err != nil {
-			return err
-		}
-		report(progress, Progress{
-			Percent:     uint32((i + 1) * 100 / len(tasks)),
-			Stage:       "preparing data",
-			CurrentFile: objectKey(task.symbol, task.tf, task.month.name),
-		})
+	total := len(tasks)
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var (
+		mu        sync.Mutex
+		completed int
+		firstErr  error
+		wg        sync.WaitGroup
+	)
+
+	// emit serialises the progress sink. Downloads run concurrently, but the
+	// callback may not: a client stream or a test recorder is not safe to call
+	// from several goroutines, so every event is issued under mu and the
+	// percentage is the count of finished months, not of started ones.
+	emit := func(p Progress) {
+		mu.Lock()
+		defer mu.Unlock()
+		p.Percent = uint32(completed * 100 / total)
+		report(progress, p)
 	}
-	return nil
+
+	taskCh := make(chan task)
+	for i := 0; i < l.workLimit(total); i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for t := range taskCh {
+				err := l.ensureMonth(runCtx, t.symbol, t.tf, t.month, emit)
+				mu.Lock()
+				if err != nil {
+					if firstErr == nil {
+						firstErr = err
+						cancel()
+					}
+				} else {
+					completed++
+					report(progress, Progress{
+						Percent:     uint32(completed * 100 / total),
+						Stage:       "preparing data",
+						CurrentFile: objectKey(t.symbol, t.tf, t.month.name),
+					})
+				}
+				mu.Unlock()
+			}
+		}()
+	}
+	for _, t := range tasks {
+		if runCtx.Err() != nil {
+			break
+		}
+		select {
+		case taskCh <- t:
+		case <-runCtx.Done():
+		}
+	}
+	close(taskCh)
+	wg.Wait()
+	return firstErr
+}
+
+// workLimit clamps the requested worker count to a sane bound for a task list.
+func (l *Loader) workLimit(tasks int) int {
+	workers := l.Workers
+	if workers <= 0 {
+		workers = runtime.GOMAXPROCS(0)
+	}
+	if workers > tasks {
+		workers = tasks
+	}
+	if workers < 1 {
+		workers = 1
+	}
+	return workers
 }
 
 // Status checks whether r is fully available in the local cache. Unlike Ensure,
@@ -270,30 +349,40 @@ func (l *Loader) Status(ctx context.Context, r Request) Status {
 	sourceSet := map[string]bool{}
 	for _, sym := range r.Symbols {
 		for _, tf := range r.TFs {
-			_, manifests, err := l.Cache.Load(ctx, sym, tf, r.From, r.To)
+			// Manifests reads and parses manifest files only. It does not decode
+			// Parquet or verify content hashes, so a readiness preflight no longer
+			// pays a full decode of the requested window. Hash verification still
+			// happens on Load, on exactly the months the study actually consumes.
+			manifests, err := l.Cache.Manifests(ctx, sym, tf)
 			if err != nil {
 				status.Readiness = ReadinessCorrupt
 				status.ErrorCode = "CACHE_CORRUPT"
 				status.Err = err
 				return status
 			}
-			allManifests = append(allManifests, manifests...)
-			for _, mf := range manifests {
-				if status.CachedFrom == 0 || mf.First < status.CachedFrom {
-					status.CachedFrom = mf.First
-				}
-				if mf.Last > status.CachedTo {
-					status.CachedTo = mf.Last
-				}
-				if mf.Source != "" {
-					sourceSet[mf.Source] = true
-				}
-				if mf.Last > status.LastSuccessfulPrep {
-					status.LastSuccessfulPrep = mf.Last
-				}
-			}
 			current := make([]store.Manifest, 0, len(manifests))
 			for _, mf := range manifests {
+				// Only months overlapping the exact request contribute to the
+				// snapshot identity, the cached bounds, the sources and the
+				// last-successful-preparation timestamp. A stale-but-present
+				// month still counts as cached, so the request reports partial
+				// rather than missing and Ensure knows to refresh it.
+				lastEnd := mf.Last + core.Time(tf.Millis())
+				if lastEnd > r.From && mf.First < r.To {
+					allManifests = append(allManifests, mf)
+					if status.CachedFrom == 0 || mf.First < status.CachedFrom {
+						status.CachedFrom = mf.First
+					}
+					if mf.Last > status.CachedTo {
+						status.CachedTo = mf.Last
+					}
+					if mf.Source != "" {
+						sourceSet[mf.Source] = true
+					}
+					if mf.Last > status.LastSuccessfulPrep {
+						status.LastSuccessfulPrep = mf.Last
+					}
+				}
 				if !l.staleManifest(sym, mf) {
 					current = append(current, mf)
 				}
@@ -361,6 +450,38 @@ func (l *Loader) ensureMonth(ctx context.Context, sym string, tf core.TF, month 
 
 func (l *Loader) downloadMonth(ctx context.Context, key string, meta store.Manifest, progress func(Progress)) error {
 	report(progress, Progress{Stage: "downloading", CurrentFile: key})
+	month := meta.Month
+
+	// A previous attempt may have been interrupted mid-transfer. If so, and the
+	// object store can serve a range, fetch only the remainder and keep what we
+	// already have. Anything that makes the resume unusable falls back to a
+	// clean full download rather than risk concatenating mismatched bytes.
+	if offset := l.Cache.PartialSize(meta.Symbol, meta.TF, month); offset > 0 {
+		if rr, ok := l.Objects.(RangeReader); ok {
+			rc, partial, found, err := rr.GetRange(ctx, key, offset)
+			if err != nil {
+				return err
+			}
+			switch {
+			case found && partial:
+				n, err := l.Cache.AppendPartial(ctx, meta.Symbol, meta.TF, month, rc)
+				rc.Close()
+				if err != nil {
+					return err
+				}
+				if n > offset {
+					return l.finishDownload(ctx, key, meta, progress)
+				}
+			case found:
+				// The origin ignored the range and returned the whole object.
+				rc.Close()
+			}
+		}
+		if err := l.Cache.DiscardPartial(meta.Symbol, meta.TF, month); err != nil {
+			return err
+		}
+	}
+
 	rc, ok, err := l.Objects.Get(ctx, key)
 	if err != nil {
 		return err
@@ -369,15 +490,18 @@ func (l *Loader) downloadMonth(ctx context.Context, key string, meta store.Manif
 		return fmt.Errorf("library: object disappeared: %s", key)
 	}
 	defer rc.Close()
-	data, err := io.ReadAll(rc)
-	if err != nil {
+	if _, err := l.Cache.AppendPartial(ctx, meta.Symbol, meta.TF, month, rc); err != nil {
 		return err
 	}
-	report(progress, Progress{Stage: "verifying", BytesDone: int64(len(data)), BytesTotal: int64(len(data)), CurrentFile: key})
-	if err := store.VerifyPublished(data, meta); err != nil {
-		return err
-	}
-	return l.Cache.WritePublished(ctx, data, meta)
+	return l.finishDownload(ctx, key, meta, progress)
+}
+
+// finishDownload verifies the completed partial for a month and promotes it
+// into the cache.
+func (l *Loader) finishDownload(ctx context.Context, key string, meta store.Manifest, progress func(Progress)) error {
+	size := l.Cache.PartialSize(meta.Symbol, meta.TF, meta.Month)
+	report(progress, Progress{Stage: "verifying", BytesDone: size, BytesTotal: size, CurrentFile: key})
+	return l.Cache.CommitPartial(ctx, meta.Symbol, meta.TF, meta.Month, meta)
 }
 
 func (l *Loader) fetchFallback(ctx context.Context, sym string, tf core.TF, month monthWindow, progress func(Progress)) error {
@@ -411,7 +535,7 @@ func (l *Loader) fetchFallback(ctx context.Context, sym string, tf core.TF, mont
 }
 
 func (l *Loader) missingMonths(ctx context.Context, sym string, tf core.TF, from, to core.Time) ([]monthWindow, error) {
-	_, manifests, err := l.Cache.Load(ctx, sym, tf, from, to)
+	manifests, err := l.Cache.Manifests(ctx, sym, tf)
 	if err != nil {
 		return months(from, to), err
 	}

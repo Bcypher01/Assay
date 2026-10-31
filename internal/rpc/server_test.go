@@ -265,7 +265,7 @@ func TestRunDetailsAndPaginatedTradesExposePersistedEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	study := &analytics.Study{Strategy: &ir.Strategy{Name: "evidence", Universe: ir.Universe{Symbols: []string{"EURUSD"}}}, Snapshot: "snapshot", Scope: analytics.Scope{Instruments: []string{"EURUSD"}, Period: "2024"}, Assumptions: analytics.Assumptions{InitialEquity: 100_000, SpreadTicks: 2, FillPolicy: "next_open"}, MonteCarlo: analytics.MCConfig{Samples: 3, BlockLength: 2, Seed: 7}}
-	result := &analytics.StudyResult{OutOfSample: analytics.Metrics{Trades: 2, FinalEquity: analytics.Bounded{Pessimistic: 10, Optimistic: 20}}, InSample: analytics.Metrics{Trades: 2}, NearMisses: []analytics.NearMiss{{Condition: "trigger", Count: 7}}, Unresolved: 1, Distribution: analytics.MCDistribution{FinalEquity: []float64{1, 2, 3}, MaxDrawdown: []float64{2, 4, 6}, RealisedFinal: 2, RealisedDrawdown: 4}, WalkForward: []analytics.WalkForwardResult{{Window: analytics.WFWindow{TrainTo: 10, TestFrom: 10, TestTo: 15}, Metrics: analytics.Metrics{Trades: 1}}}, CostStress: []analytics.CostStressPoint{{Multiplier: 1, Metrics: analytics.Metrics{Trades: 2}}, {Multiplier: 3, Metrics: analytics.Metrics{Trades: 2}}}, Sensitivity: analytics.Grid{X: []string{"1× costs"}, Y: []string{"1× risk"}, Cells: [][]analytics.Metrics{{{Trades: 2}}}}, NextActions: []analytics.NextAction{{Kind: "paper_trade", Reason: "stable"}}}
+	result := &analytics.StudyResult{FullPeriod: analytics.Metrics{Trades: 3, Wins: 2, Losses: 1, FinalEquity: analytics.Bounded{Pessimistic: 100_030, Optimistic: 100_060}}, OutOfSample: analytics.Metrics{Trades: 2, Wins: 1, Losses: 1, FinalEquity: analytics.Bounded{Pessimistic: 100_010, Optimistic: 100_020}, Expectancy: analytics.Bounded{Pessimistic: 5, Optimistic: 10}, ProfitFactor: analytics.Bounded{Pessimistic: 1.5, Optimistic: 2}}, InSample: analytics.Metrics{Trades: 2}, NearMisses: []analytics.NearMiss{{Condition: "trigger", Count: 7}}, Unresolved: 1, Unfilled: 3, Distribution: analytics.MCDistribution{FinalEquity: []float64{1, 2, 3}, MaxDrawdown: []float64{2, 4, 6}, RealisedFinal: 2, RealisedDrawdown: 4}, WalkForward: []analytics.WalkForwardResult{{Window: analytics.WFWindow{TrainTo: 10, TestFrom: 10, TestTo: 15}, TrainFromMs: 1_000, TrainToMs: 2_000, TestFromMs: 3_000, TestToMs: 4_000, Metrics: analytics.Metrics{Trades: 1}}}, CostStress: []analytics.CostStressPoint{{Multiplier: 1, Metrics: analytics.Metrics{Trades: 2}}, {Multiplier: 3, Metrics: analytics.Metrics{Trades: 2}}}, Sensitivity: analytics.Grid{X: []string{"1× costs"}, Y: []string{"1× risk"}, Cells: [][]analytics.Metrics{{{Trades: 2}}}}, NextActions: []analytics.NextAction{{Kind: "paper_trade", Reason: "stable"}}}
 	id, err := history.Put(context.Background(), study, result)
 	if err != nil {
 		t.Fatal(err)
@@ -291,11 +291,43 @@ func TestRunDetailsAndPaginatedTradesExposePersistedEvidence(t *testing.T) {
 	if got.GetMonteCarlo().GetSamples() != 3 || got.GetMonteCarlo().GetFinalEquity().GetP50() != 2 || len(got.GetWalkForward()) != 1 || len(got.GetCostStress()) != 2 || len(got.GetSensitivity().GetCells()) != 1 || got.GetNextActions()[0].GetKind() != "paper_trade" {
 		t.Fatalf("robustness = %#v", got)
 	}
+	// Full period and out of sample are separate samples, not two labels on the
+	// same numbers: the result page must be able to tell them apart.
+	if got.GetFullPeriod().GetTrades() != 3 || got.GetOutOfSample().GetTrades() != 2 || got.GetInSample().GetTrades() != 2 {
+		t.Fatalf("evidence samples = full %d, out %d, in %d", got.GetFullPeriod().GetTrades(), got.GetOutOfSample().GetTrades(), got.GetInSample().GetTrades())
+	}
+	if wf := got.GetWalkForward()[0]; wf.GetTestFromMs() != 3_000 || wf.GetTestToMs() != 4_000 || wf.GetTrainFromMs() != 1_000 {
+		t.Fatalf("walk-forward dates = %#v", wf)
+	}
+	summary, err := runs.GetRun(context.Background(), connect.NewRequest(&assayv1.GetRunRequest{Hash: string(id)}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Msg.GetRunId() != string(id) || summary.Msg.GetTrades() != 2 || summary.Msg.GetWins() != 1 || summary.Msg.GetLosses() != 1 || summary.Msg.GetUnresolved() != 1 || summary.Msg.GetUnfilled() != 3 || summary.Msg.GetNetPnl() != 10 || summary.Msg.GetExpectancy() != 5 || summary.Msg.GetProfitFactor() != 1.5 {
+		t.Fatalf("summary = %#v", summary.Msg)
+	}
 	page, err := runs.GetTrades(context.Background(), connect.NewRequest(&assayv1.GetRunTradesRequest{Hash: string(id), PageSize: 1}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if page.Msg.GetTotal() != 2 || len(page.Msg.GetTrades()) != 1 || page.Msg.GetNextOffset() != 1 || page.Msg.GetTrades()[0].GetCosts().GetPessimistic() != 1 {
 		t.Fatalf("trades page = %#v", page.Msg)
+	}
+}
+
+func TestPooledWindowReturnsCountsEachTradeOnce(t *testing.T) {
+	trades := []sim.Trade{
+		{EntryBar: 0, Pessimistic: sim.Outcome{Net: 10}, Optimistic: sim.Outcome{Net: 20}},
+		{EntryBar: 5, Pessimistic: sim.Outcome{Net: -4}, Optimistic: sim.Outcome{Net: 6}},
+		{EntryBar: 10, Pessimistic: sim.Outcome{Net: 7}, Optimistic: sim.Outcome{Net: 7}},
+	}
+	// The first two spans overlap; a trade in the overlap must still be counted
+	// once. The third trade sits outside every span.
+	got := pooledWindowReturns(trades, [][2]int{{0, 8}, {4, 8}, {12, 20}})
+	if len(got.Pessimistic) != 2 || got.Pessimistic[0] != 10 || got.Pessimistic[1] != -4 {
+		t.Fatalf("pooled returns = %#v", got)
+	}
+	if got.Optimistic[0] != 20 || got.Optimistic[1] != 6 {
+		t.Fatalf("pooled optimistic returns = %#v", got)
 	}
 }

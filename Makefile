@@ -1,7 +1,7 @@
 GOLANGCI_VERSION := v2.1.6
 TOOLS := $(shell go env GOPATH)/bin
 
-.PHONY: build test race bench cover lint fmt proto tools clean \
+.PHONY: build test race bench cover lint fmt proto tools bootstrap clean \
         web-install web-build web-start compose-up compose-down
 
 build:
@@ -32,12 +32,16 @@ fmt:
 	$(TOOLS)/golangci-lint fmt ./...
 
 proto:
-	$(TOOLS)/buf generate proto
+	PATH="$(TOOLS):$$PATH" $(TOOLS)/buf generate proto
 
 # Pinned developer tools. CI installs the same versions.
 tools:
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)
 	go install github.com/bufbuild/buf/cmd/buf@v1.50.0
+
+bootstrap: tools
+	go mod download
+	npm --prefix web ci
 
 clean:
 	rm -rf bin dist cover.out

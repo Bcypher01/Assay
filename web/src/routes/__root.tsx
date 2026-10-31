@@ -41,6 +41,15 @@ function RootDocument({ children }: { children: React.ReactNode }) {
     <html lang="en">
       <head>
         <HeadContent />
+        {/* Apply a saved appearance before first paint so a manual theme never
+            flashes the system default on the way in. This runs identically on
+            the server and the client, so it cannot cause a hydration mismatch. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var t=localStorage.getItem('assay.theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();",
+          }}
+        />
       </head>
       <body>
         {children}

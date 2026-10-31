@@ -37,7 +37,8 @@ import {
 } from '@/components/ui/select'
 import { runApi, rpcErrorMessage } from '@/lib/rpc'
 import { useSession } from '@/lib/store'
-import { formatUsdCents, shortHash } from '@/lib/codec'
+import { formatMs, formatUsdCents, shortHash } from '@/lib/codec'
+import { displaySymbol } from '@/lib/strategy'
 import { cn } from '@/lib/utils'
 
 export const Route = createFileRoute('/history')({ component: HistoryScreen })
@@ -45,8 +46,26 @@ export const Route = createFileRoute('/history')({ component: HistoryScreen })
 interface Summary {
   trades: number
   unresolved: number
+  wins: number
+  losses: number
+  netPnl: bigint
+  profitFactor: number
+  expectancy: number
+  unfilled: number
   error: string
   runId: string
+}
+
+/**
+ * What a run is, in words. A history list keyed on 64-character content hashes
+ * is unreadable: a person needs the rule's name, the market it ran on, and when
+ * before they can tell twenty-seven runs apart.
+ */
+interface RunMeta {
+  name: string
+  instruments: string[]
+  period: string
+  trades: number
 }
 
 interface ParamChange {
@@ -72,6 +91,7 @@ function HistoryScreen() {
   const [hashes, setHashes] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [listError, setListError] = useState<string | null>(null)
+  const [meta, setMeta] = useState<Record<string, RunMeta>>({})
 
   const [detailHash, setDetailHash] = useState<string | null>(null)
   const [detail, setDetail] = useState<Summary | null>(null)
@@ -89,6 +109,27 @@ function HistoryScreen() {
     try {
       const res = await runApi.listRuns({})
       setHashes(res.hashes)
+      // ListRuns carries only hashes, so fetch each run's details in parallel
+      // to label the list. A run whose details were evicted still lists by its
+      // hash rather than disappearing.
+      const next: Record<string, RunMeta> = {}
+      await Promise.all(
+        res.hashes.map(async (h) => {
+          try {
+            const { details } = await runApi.getDetails({ hash: h })
+            if (!details) return
+            next[h] = {
+              name: details.name,
+              instruments: details.instruments,
+              period: details.period,
+              trades: details.outOfSample?.trades ?? 0,
+            }
+          } catch {
+            // Keep the hash-only row.
+          }
+        }),
+      )
+      setMeta(next)
     } catch (err) {
       setListError(rpcErrorMessage(err))
     } finally {
@@ -114,6 +155,12 @@ function HistoryScreen() {
       setDetail({
         trades: res.trades,
         unresolved: res.unresolved,
+        wins: res.wins,
+        losses: res.losses,
+        netPnl: res.netPnl,
+        profitFactor: res.profitFactor,
+        expectancy: res.expectancy,
+        unfilled: res.unfilled,
         error: res.error,
         runId: res.runId,
       })
@@ -149,7 +196,16 @@ function HistoryScreen() {
     }
   }
 
-  const options = useMemo(() => hashes, [hashes])
+  const options = useMemo(
+    () =>
+      hashes.map((h) => ({
+        value: h,
+        label: meta[h]?.name
+          ? `${meta[h].name} · ${shortHash(h, 8)}`
+          : shortHash(h, 18),
+      })),
+    [hashes, meta],
+  )
 
   return (
     <div className="page-form">
@@ -197,26 +253,37 @@ function HistoryScreen() {
                 No runs yet. Complete a run to see it here.
               </p>
             ) : null}
-            {hashes.map((h) => (
-              <button
-                key={h}
-                type="button"
-                onClick={() => void openDetail(h)}
-                className={cn(
-                  'flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-left transition-colors',
-                  detailHash === h
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border hover:bg-accent',
-                )}
-              >
-                <code className="truncate font-mono text-xs" title={h}>
-                  {shortHash(h, 16)}
-                </code>
-                {s.lastRunId === h ? (
-                  <Badge variant="secondary">latest</Badge>
-                ) : null}
-              </button>
-            ))}
+            {hashes.map((h) => {
+              const m = meta[h]
+              return (
+                <button
+                  key={h}
+                  type="button"
+                  onClick={() => void openDetail(h)}
+                  title={h}
+                  className={cn(
+                    'flex w-full items-start justify-between gap-2 rounded-md border px-3 py-2 text-left transition-colors',
+                    detailHash === h
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border hover:bg-accent',
+                  )}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">
+                      {m?.name || shortHash(h, 16)}
+                    </span>
+                    <span className="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">
+                      {m
+                        ? `${m.instruments.map(displaySymbol).join(', ')} · ${formatPeriod(m.period)} · ${m.trades} unseen trade${m.trades === 1 ? '' : 's'}`
+                        : shortHash(h, 16)}
+                    </span>
+                  </span>
+                  {s.lastRunId === h ? (
+                    <Badge variant="secondary">latest</Badge>
+                  ) : null}
+                </button>
+              )
+            })}
           </CardContent>
         </Card>
 
@@ -246,6 +313,19 @@ function HistoryScreen() {
                       <AlertDescription>{detail.error}</AlertDescription>
                     </Alert>
                   ) : null}
+                  {meta[detailHash ?? ''] ? (
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">
+                        {meta[detailHash ?? ''].name}
+                      </p>
+                      <p className="font-mono text-xs text-muted-foreground">
+                        {meta[detailHash ?? ''].instruments
+                          .map(displaySymbol)
+                          .join(', ')}{' '}
+                        · {formatPeriod(meta[detailHash ?? ''].period)}
+                      </p>
+                    </div>
+                  ) : null}
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                     <Stat
                       label="Trades"
@@ -255,6 +335,27 @@ function HistoryScreen() {
                       label="Unresolved"
                       value={detail.unresolved.toLocaleString()}
                       tone={detail.unresolved > 0 ? 'warning' : undefined}
+                    />
+                    <Stat
+                      label="Wins / losses"
+                      value={`${detail.wins.toLocaleString()} / ${detail.losses.toLocaleString()}`}
+                    />
+                    <Stat
+                      label="Net P&L"
+                      value={formatUsdCents(detail.netPnl, { sign: true })}
+                    />
+                    <Stat
+                      label="Profit factor"
+                      value={
+                        Number.isFinite(detail.profitFactor)
+                          ? detail.profitFactor.toFixed(2)
+                          : '—'
+                      }
+                    />
+                    <Stat
+                      label="Unfilled"
+                      value={detail.unfilled.toLocaleString()}
+                      tone={detail.unfilled > 0 ? 'warning' : undefined}
                     />
                   </div>
                   <div className="flex flex-wrap gap-2 pt-1">
@@ -432,6 +533,20 @@ function CompareView({ result }: { result: CompareResult }) {
   )
 }
 
+function formatPeriod(period: string): string {
+  const [from, to] = period.split('-')
+  const start = Number(from)
+  const end = Number(to)
+  if (
+    !Number.isFinite(start) ||
+    !Number.isFinite(end) ||
+    start <= 0 ||
+    end <= 0
+  )
+    return 'unknown window'
+  return `${formatMs(start)} – ${formatMs(end)}`
+}
+
 function formatMetricDelta(name: string, n: number): string {
   if (!Number.isFinite(n)) return '—'
   if (/equity|pnl|drawdown|expectancy|cost|profit(?!_?factor)/i.test(name)) {
@@ -450,7 +565,7 @@ function HashSelect({
   label: string
   value: string
   onChange: (v: string) => void
-  options: string[]
+  options: { value: string; label: string }[]
 }) {
   return (
     <div className="space-y-1.5">
@@ -460,9 +575,9 @@ function HashSelect({
           <SelectValue placeholder="Select run" />
         </SelectTrigger>
         <SelectContent>
-          {options.map((h) => (
-            <SelectItem key={h} value={h}>
-              {shortHash(h, 18)}
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
             </SelectItem>
           ))}
         </SelectContent>

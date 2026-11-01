@@ -249,6 +249,7 @@ function DefineRules() {
           <section className="border-t border-border">
             <Row label="Market" error={errorFor('universe.symbols')}>
               <select
+                aria-label="Market"
                 className="h-9 border border-input bg-card pl-3 pr-9 text-sm"
                 value={symbol}
                 onChange={(e) => {
@@ -484,6 +485,7 @@ function DefineRules() {
             <div className="mt-2">
               <Row label="Stop" error={errorFor('risk.stop')}>
                 <DistanceInput
+                  label="Stop"
                   distance={document.risk.stop}
                   onChange={(stop) =>
                     update({ ...document, risk: { ...document.risk, stop } })
@@ -492,6 +494,7 @@ function DefineRules() {
               </Row>
               <Row label="Target" error={errorFor('risk.target')}>
                 <DistanceInput
+                  label="Target"
                   distance={document.risk.target}
                   onChange={(target) =>
                     update({ ...document, risk: { ...document.risk, target } })
@@ -649,12 +652,23 @@ function DefineRules() {
               ? `validated · ${s.validatedHash.slice(0, 10)}…`
               : 'waiting for the server to accept these rules'}
           </span>
-          <Button asChild disabled={!s.validatedHash}>
-            <Link to="/reality">
+          {s.validatedHash ? (
+            <Button asChild>
+              <Link to="/reality">
+                Continue to trading reality
+                <ArrowRight className="size-4" />
+              </Link>
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              disabled
+              title="Validate the rules before moving on"
+            >
               Continue to trading reality
               <ArrowRight className="size-4" />
-            </Link>
-          </Button>
+            </Button>
+          )}
         </div>
       </div>
     </div>
@@ -890,7 +904,8 @@ function ConditionRow({
               }}
             />
             <span className="font-mono text-[11px] text-muted-foreground">
-              {tf}-bars{heldFor ? ` · ${displayDuration(heldFor)}` : ''}
+              {tf}-bars
+              {heldFor ? ` · ${displayDuration(heldFor)}` : ' · optional'}
             </span>
           </label>
         </div>
@@ -937,6 +952,7 @@ function OrderInput({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <select
+        aria-label="Entry order"
         className="h-9 border border-input bg-card pl-3 pr-9 text-sm"
         value={type}
         onChange={(e) =>
@@ -1061,6 +1077,7 @@ function PartialInput({
         step="5"
         min="0"
         max="99"
+        aria-label="Partial close percentage"
         className="h-9 w-28 font-mono text-sm"
         value={percent || ''}
         placeholder="0"
@@ -1088,6 +1105,7 @@ function TrailInput({
         type="number"
         step="0.1"
         min="0"
+        aria-label="Trailing stop distance"
         className="h-9 w-28 font-mono text-sm"
         value={current.value || ''}
         placeholder="0"
@@ -1096,6 +1114,7 @@ function TrailInput({
         }
       />
       <select
+        aria-label="Trailing stop unit"
         className="h-9 border border-input bg-card pl-3 pr-9 text-sm"
         value={current.unit}
         onChange={(e) =>
@@ -1116,9 +1135,11 @@ function TrailInput({
 }
 
 function DistanceInput({
+  label,
   distance,
   onChange,
 }: {
+  label: string
   distance: StrategyDoc['risk']['stop']
   onChange: (next: StrategyDoc['risk']['stop']) => void
 }) {
@@ -1128,6 +1149,7 @@ function DistanceInput({
         type="number"
         step="0.1"
         min="0"
+        aria-label={`${label} distance`}
         className="h-9 w-28 font-mono text-sm"
         value={distance.value}
         onChange={(e) =>
@@ -1135,6 +1157,7 @@ function DistanceInput({
         }
       />
       <select
+        aria-label={`${label} unit`}
         className="h-9 border border-input bg-card pl-3 pr-9 text-sm"
         value={distance.unit}
         onChange={(e) =>

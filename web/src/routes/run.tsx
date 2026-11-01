@@ -307,7 +307,7 @@ function RunScreen() {
           }
           case 'summary': {
             const sum = update.payload.value
-            const parsed: Summary = {
+            const nextSummary: Summary = {
               trades: sum.trades,
               unresolved: sum.unresolved,
               error: sum.error,
@@ -321,7 +321,7 @@ function RunScreen() {
               profitFactor: sum.profitFactor,
               errorCode: sum.errorCode,
             }
-            setSummary(parsed)
+            setSummary(nextSummary)
             // Recording the run is what increments the disclosed trial count.
             if (sum.runId) session.recordRun(sum.runId)
             if (sum.error || sum.errorCode) {
@@ -422,14 +422,15 @@ function RunScreen() {
             />
 
             <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant="outline"
-                asChild
-                disabled={phase === 'streaming'}
-                className="w-full"
-              >
-                <Link to="/data">Back to prepare data</Link>
-              </Button>
+              {phase === 'streaming' ? (
+                <Button variant="outline" disabled className="w-full">
+                  Back to prepare data
+                </Button>
+              ) : (
+                <Button variant="outline" asChild className="w-full">
+                  <Link to="/data">Back to prepare data</Link>
+                </Button>
+              )}
               <Button
                 onClick={() => void run()}
                 disabled={!canRun || phase === 'streaming'}

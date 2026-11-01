@@ -1,7 +1,8 @@
-import { Link } from '@tanstack/react-router'
+import { Link, useRouterState } from '@tanstack/react-router'
 import {
   CalendarClock,
   Check,
+  History,
   Minus,
   Moon,
   PencilRuler,
@@ -34,8 +35,14 @@ interface Step {
   label: string
   /** One line describing what has been decided here, or null when nothing has. */
   summary: (s: SessionState) => string | null
-  /** Whether this step's decision is settled. */
+  /** Whether this step's decision is settled right now. */
   done: (s: SessionState) => boolean
+  /**
+   * Whether a usable decision exists on this step, even if a live check has
+   * not run yet. This is what unlocks the next step: a refresh clears
+   * readiness, but it must not send the user back through work they saved.
+   */
+  recorded: (s: SessionState) => boolean
 }
 
 const steps: Step[] = [
@@ -49,6 +56,7 @@ const steps: Step[] = [
       return document.name
     },
     done: (s) => !!s.templateId,
+    recorded: (s) => !!s.templateId,
   },
   {
     to: '/strategy',
@@ -67,6 +75,7 @@ const steps: Step[] = [
       return `${displaySymbol(symbol)} · ${displayTimeframe(document.timeframes.entry)} · ${sides || 'no entries'}`
     },
     done: (s) => !!s.validatedHash,
+    recorded: (s) => !!s.validatedHash,
   },
   {
     to: '/reality',
@@ -85,6 +94,7 @@ const steps: Step[] = [
       return `${formatUsdCents(initialEquity)} account · ${sizing} · ${slip}`
     },
     done: (s) => s.realityConfirmed,
+    recorded: (s) => s.realityConfirmed,
   },
   {
     to: '/data',
@@ -97,12 +107,14 @@ const steps: Step[] = [
       return `${years.toFixed(1)} years for ${displaySymbol(s.symbol)} ${s.timeframe}`
     },
     done: (s) => hasReadyData(s),
+    recorded: (s) => !!s.symbol && !!s.timeframe && !!s.fromMs && !!s.toMs,
   },
   {
     to: '/run',
     label: 'Run the test',
     summary: (s) => (s.lastRunId ? `run ${s.lastRunId.slice(0, 10)}…` : null),
     done: (s) => !!s.lastRunId,
+    recorded: (s) => !!s.lastRunId,
   },
   {
     to: '/history',
@@ -112,6 +124,7 @@ const steps: Step[] = [
         ? `${s.trials} ${s.trials === 1 ? 'run' : 'runs'} this session`
         : null,
     done: (s) => !!s.lastRunId,
+    recorded: (s) => !!s.lastRunId,
   },
 ]
 
@@ -129,6 +142,25 @@ function destination(step: Step, session: SessionState) {
 
 export function AppNav() {
   const session = useSession()
+  // The verdict step points at the latest run once one exists, so a result
+  // page must still light up step six. Route matching alone cannot see that:
+  // /runs/$runId is not /history.
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  })
+  const readingVerdict = pathname.startsWith('/runs/')
+  // Unlocking is cumulative: a step is reachable only when the one before it
+  // is both reachable and has a decision on record. Without the first half a
+  // recorded window could unlock "Run the test" while the step in between was
+  // still locked.
+  const reachable = steps.reduce<boolean[]>((open, _step, index) => {
+    const previous = steps[index - 1]
+    open.push(
+      index === 0 ||
+        (open[index - 1] && !!previous && previous.recorded(session)),
+    )
+    return open
+  }, [])
 
   return (
     <aside className="runlog-spine">
@@ -149,12 +181,16 @@ export function AppNav() {
         {steps.map((step, index) => {
           const done = step.done(session)
           const summary = step.summary(session)
-          const unlocked = index === 0 || steps[index - 1].done(session)
+          // Recorded, not necessarily settled: readiness is re-derived from
+          // the server on load, so a refresh must not lock the steps after a
+          // completed run.
+          const unlocked = reachable[index]
           // A step that has a decision on record but is not currently settled
           // reads as "recorded, needs re-checking" rather than reverting to
-          // blank. Validation is deliberately dropped on reload and on every
-          // edit, and a tick that silently disappears looks like lost work.
+          // blank. An edit drops validation and readiness is rechecked on
+          // load; a tick that silently disappears looks like lost work.
           const started = unlocked && !done && summary !== null
+          const atVerdict = step.to === '/history' && readingVerdict
           return (
             <Link
               key={step.to}
@@ -170,6 +206,7 @@ export function AppNav() {
               )}
               activeOptions={{ exact: step.to === '/' }}
               activeProps={{ 'data-status': 'active' }}
+              data-status={atVerdict ? 'active' : undefined}
             >
               <span
                 className={cn(
@@ -210,6 +247,14 @@ export function AppNav() {
           <span>Setup test</span>
         </Link>
         <Link
+          to="/history"
+          className="runlog-tool"
+          activeProps={{ 'data-status': 'active' }}
+        >
+          <History aria-hidden="true" />
+          <span>Run history</span>
+        </Link>
+        <Link
           to="/events"
           className="runlog-tool"
           activeProps={{ 'data-status': 'active' }}
@@ -244,7 +289,7 @@ export function AppNav() {
         </Button>
       </section>
 
-      <div className="runlog-tools">
+      <div className="runlog-tools runlog-tools-appearance">
         <p className="runlog-label">Appearance</p>
         <ThemeToggle />
       </div>

@@ -19,6 +19,11 @@ export const Route = createRootRoute({
       { charSet: 'utf-8' },
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
       { title: 'Assay — Honest Backtester' },
+      {
+        name: 'description',
+        content:
+          'Test a trading rule on historical prices and see what the evidence supports: unseen trades, costs, and the range an ambiguous exit creates.',
+      },
     ],
     links: [
       { rel: 'stylesheet', href: appCss },
@@ -72,7 +77,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 
 function RootLayout() {
   // A route can opt out of the shell entirely (see StaticDataRouteOption in
-  // router.tsx). The run-log spine is the wayfinder for the seven-step study
+  // router.tsx). The run-log spine is the wayfinder for the six-step study
   // flow; on a workspace screen like the setup chart it is a permanent 276px
   // tax on the surface the user is actually working on, and the step it would
   // highlight is not the one they are in.

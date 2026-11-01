@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import {
   RefreshCw,
   XCircle,
@@ -210,8 +210,7 @@ function HistoryScreen() {
   return (
     <div className="page-form">
       <PageHeader
-        step={6}
-        title="History & Compare"
+        title="Run history"
         description="Every run is addressed by its content hash. Inspect a run’s summary, or compare two to see ordered parameter changes and bounded metric deltas."
         actions={
           <Button
@@ -567,11 +566,12 @@ function HashSelect({
   onChange: (v: string) => void
   options: { value: string; label: string }[]
 }) {
+  const id = useId()
   return (
     <div className="space-y-1.5">
-      <Label>{label}</Label>
+      <Label htmlFor={id}>{label}</Label>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger>
+        <SelectTrigger id={id}>
           <SelectValue placeholder="Select run" />
         </SelectTrigger>
         <SelectContent>

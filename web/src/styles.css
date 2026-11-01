@@ -789,6 +789,16 @@ pre,
   .runlog-tools > .runlog-label {
     display: none;
   }
+  /* The other tool groups read clearly from their buttons alone. A lone
+     "Light appearance" button does not, so keep its heading and let it span
+     the row instead of sitting in half the grid. */
+  .runlog-tools-appearance > .runlog-label {
+    display: block;
+    grid-column: 1 / -1;
+  }
+  .runlog-tools-appearance > .runlog-tool {
+    grid-column: 1 / -1;
+  }
   .runlog-tool {
     min-height: 40px;
     justify-content: center;

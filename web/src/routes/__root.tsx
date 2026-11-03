@@ -19,6 +19,11 @@ export const Route = createRootRoute({
       { charSet: 'utf-8' },
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
       { title: 'Assay — Honest Backtester' },
+      {
+        name: 'description',
+        content:
+          'Test a trading rule on historical prices and see what the evidence supports: unseen trades, costs, and the range an ambiguous exit creates.',
+      },
     ],
     links: [
       { rel: 'stylesheet', href: appCss },
@@ -41,6 +46,15 @@ function RootDocument({ children }: { children: React.ReactNode }) {
     <html lang="en">
       <head>
         <HeadContent />
+        {/* Apply a saved appearance before first paint so a manual theme never
+            flashes the system default on the way in. This runs identically on
+            the server and the client, so it cannot cause a hydration mismatch. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var t=localStorage.getItem('assay.theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();",
+          }}
+        />
       </head>
       <body>
         {children}
@@ -63,7 +77,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 
 function RootLayout() {
   // A route can opt out of the shell entirely (see StaticDataRouteOption in
-  // router.tsx). The run-log spine is the wayfinder for the seven-step study
+  // router.tsx). The run-log spine is the wayfinder for the five-step study
   // flow; on a workspace screen like the setup chart it is a permanent 276px
   // tax on the surface the user is actually working on, and the step it would
   // highlight is not the one they are in.
@@ -121,9 +135,9 @@ function RootError({ error }: { error: unknown }) {
                     Refresh
                   </Button>
                   <Button variant="outline" asChild>
-                    <a href="/data">
+                    <a href="/run">
                       <Home className="size-4" />
-                      Go to data
+                      Go to the test
                     </a>
                   </Button>
                 </div>

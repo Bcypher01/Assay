@@ -1,11 +1,15 @@
-import { Link } from '@tanstack/react-router'
+import { Link, useRouterState } from '@tanstack/react-router'
 import {
   CalendarClock,
   Check,
+  History,
   Minus,
+  Moon,
   PencilRuler,
   RotateCcw,
+  Sun,
 } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { hasReadyData, session as sessionStore, useSession } from '@/lib/store'
@@ -24,15 +28,21 @@ import { formatUsdCents } from '@/lib/codec'
  * scrolled away from.
  */
 
-type StepPath = '/' | '/strategy' | '/reality' | '/data' | '/run' | '/history'
+type StepPath = '/' | '/strategy' | '/reality' | '/run' | '/history'
 
 interface Step {
   to: StepPath
   label: string
   /** One line describing what has been decided here, or null when nothing has. */
   summary: (s: SessionState) => string | null
-  /** Whether this step's decision is settled. */
+  /** Whether this step's decision is settled right now. */
   done: (s: SessionState) => boolean
+  /**
+   * Whether a usable decision exists on this step, even if a live check has
+   * not run yet. This is what unlocks the next step: a refresh clears
+   * readiness, but it must not send the user back through work they saved.
+   */
+  recorded: (s: SessionState) => boolean
 }
 
 const steps: Step[] = [
@@ -46,6 +56,7 @@ const steps: Step[] = [
       return document.name
     },
     done: (s) => !!s.templateId,
+    recorded: (s) => !!s.templateId,
   },
   {
     to: '/strategy',
@@ -64,6 +75,7 @@ const steps: Step[] = [
       return `${displaySymbol(symbol)} · ${displayTimeframe(document.timeframes.entry)} · ${sides || 'no entries'}`
     },
     done: (s) => !!s.validatedHash,
+    recorded: (s) => !!s.validatedHash,
   },
   {
     to: '/reality',
@@ -82,24 +94,23 @@ const steps: Step[] = [
       return `${formatUsdCents(initialEquity)} account · ${sizing} · ${slip}`
     },
     done: (s) => s.realityConfirmed,
+    recorded: (s) => s.realityConfirmed,
   },
   {
-    to: '/data',
-    label: 'Prepare the history',
+    to: '/run',
+    label: 'Test the rules',
     summary: (s) => {
       if (!s.symbol || !s.timeframe) return null
       if (!s.fromMs || !s.toMs)
         return `${displaySymbol(s.symbol)} ${s.timeframe}, no window yet`
       const years = Number(s.toMs - s.fromMs) / (365.25 * 24 * 60 * 60 * 1000)
-      return `${years.toFixed(1)} years for ${displaySymbol(s.symbol)} ${s.timeframe}`
+      const runs = s.lastRunId ? ' · tested' : ''
+      return `${years.toFixed(1)} years for ${displaySymbol(s.symbol)} ${displayTimeframe(s.timeframe)}${runs}`
     },
-    done: (s) => hasReadyData(s),
-  },
-  {
-    to: '/run',
-    label: 'Run the test',
-    summary: (s) => (s.lastRunId ? `run ${s.lastRunId.slice(0, 10)}…` : null),
-    done: (s) => !!s.lastRunId,
+    // Prepared data is the step's settled state; a completed run also
+    // settles it, even after a reload clears the live readiness check.
+    done: (s) => hasReadyData(s) || !!s.lastRunId,
+    recorded: (s) => !!s.symbol && !!s.timeframe && !!s.fromMs && !!s.toMs,
   },
   {
     to: '/history',
@@ -109,6 +120,7 @@ const steps: Step[] = [
         ? `${s.trials} ${s.trials === 1 ? 'run' : 'runs'} this session`
         : null,
     done: (s) => !!s.lastRunId,
+    recorded: (s) => !!s.lastRunId,
   },
 ]
 
@@ -126,10 +138,29 @@ function destination(step: Step, session: SessionState) {
 
 export function AppNav() {
   const session = useSession()
+  // The verdict step points at the latest run once one exists, so a result
+  // page must still light up step six. Route matching alone cannot see that:
+  // /runs/$runId is not /history.
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  })
+  const readingVerdict = pathname.startsWith('/runs/')
+  // Unlocking is cumulative: a step is reachable only when the one before it
+  // is both reachable and has a decision on record. Without the first half a
+  // recorded window could unlock "Run the test" while the step in between was
+  // still locked.
+  const reachable = steps.reduce<boolean[]>((open, _step, index) => {
+    const previous = steps[index - 1]
+    open.push(
+      index === 0 ||
+        (open[index - 1] && !!previous && previous.recorded(session)),
+    )
+    return open
+  }, [])
 
   return (
     <aside className="runlog-spine">
-      <Link to="/" className="runlog-wordmark" aria-label="Assay — run log">
+      <Link to="/" className="runlog-wordmark" aria-label="Assay run log">
         {/* The mark is the A. The word continues out of it rather than
             restating it, so the lockup reads as one word, not a badge
             standing next to its own initial. */}
@@ -146,12 +177,16 @@ export function AppNav() {
         {steps.map((step, index) => {
           const done = step.done(session)
           const summary = step.summary(session)
-          const unlocked = index === 0 || steps[index - 1].done(session)
+          // Recorded, not necessarily settled: readiness is re-derived from
+          // the server on load, so a refresh must not lock the steps after a
+          // completed run.
+          const unlocked = reachable[index]
           // A step that has a decision on record but is not currently settled
           // reads as "recorded, needs re-checking" rather than reverting to
-          // blank. Validation is deliberately dropped on reload and on every
-          // edit, and a tick that silently disappears looks like lost work.
+          // blank. An edit drops validation and readiness is rechecked on
+          // load; a tick that silently disappears looks like lost work.
           const started = unlocked && !done && summary !== null
+          const atVerdict = step.to === '/history' && readingVerdict
           return (
             <Link
               key={step.to}
@@ -167,6 +202,7 @@ export function AppNav() {
               )}
               activeOptions={{ exact: step.to === '/' }}
               activeProps={{ 'data-status': 'active' }}
+              data-status={atVerdict ? 'active' : undefined}
             >
               <span
                 className={cn(
@@ -207,6 +243,14 @@ export function AppNav() {
           <span>Setup test</span>
         </Link>
         <Link
+          to="/history"
+          className="runlog-tool"
+          activeProps={{ 'data-status': 'active' }}
+        >
+          <History aria-hidden="true" />
+          <span>Run history</span>
+        </Link>
+        <Link
           to="/events"
           className="runlog-tool"
           activeProps={{ 'data-status': 'active' }}
@@ -241,6 +285,11 @@ export function AppNav() {
         </Button>
       </section>
 
+      <div className="runlog-tools runlog-tools-appearance">
+        <p className="runlog-label">Appearance</p>
+        <ThemeToggle />
+      </div>
+
       <div className="runlog-note">
         <p>
           A backtest describes what a rule did on one historical sample. It does
@@ -248,5 +297,61 @@ export function AppNav() {
         </p>
       </div>
     </aside>
+  )
+}
+
+/**
+ * Manual light/dark override. The system preference is the default; once a
+ * person chooses, the choice wins and is remembered. The pre-paint script in
+ * the root document applies it before the first frame.
+ */
+function ThemeToggle() {
+  const [theme, setTheme] = useState<'light' | 'dark' | null>(null)
+
+  useEffect(() => {
+    let stored: string | null = null
+    try {
+      stored = window.localStorage.getItem('assay.theme')
+    } catch {
+      // Storage may be unavailable; fall back to the system preference.
+    }
+    if (stored === 'light' || stored === 'dark') {
+      setTheme(stored)
+      return
+    }
+    setTheme(
+      window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light',
+    )
+  }, [])
+
+  const toggle = () => {
+    const effective =
+      theme ??
+      (window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light')
+    const next = effective === 'dark' ? 'light' : 'dark'
+    setTheme(next)
+    document.documentElement.setAttribute('data-theme', next)
+    try {
+      window.localStorage.setItem('assay.theme', next)
+    } catch {
+      // Persistence is a convenience, never a requirement.
+    }
+  }
+
+  const showingDark = theme !== 'light'
+  return (
+    <button
+      type="button"
+      className="runlog-tool"
+      onClick={toggle}
+      aria-pressed={theme === 'dark'}
+    >
+      {showingDark ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
+      <span>{showingDark ? 'Light appearance' : 'Dark appearance'}</span>
+    </button>
   )
 }

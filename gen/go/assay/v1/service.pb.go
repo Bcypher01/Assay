@@ -3439,8 +3439,12 @@ type RunDetails struct {
 	Sensitivity      *SensitivityGrid       `protobuf:"bytes,19,opt,name=sensitivity,proto3" json:"sensitivity,omitempty"`
 	NextActions      []*NextAction          `protobuf:"bytes,20,rep,name=next_actions,json=nextActions,proto3" json:"next_actions,omitempty"`
 	Unfilled         uint32                 `protobuf:"varint,21,opt,name=unfilled,proto3" json:"unfilled,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// full_period describes every trade in the requested window. out_of_sample
+	// describes only pooled walk-forward test windows and is the sample the
+	// verdict judges. in_sample describes the first train window.
+	FullPeriod    *ResultMetrics `protobuf:"bytes,22,opt,name=full_period,json=fullPeriod,proto3" json:"full_period,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RunDetails) Reset() {
@@ -3618,6 +3622,13 @@ func (x *RunDetails) GetUnfilled() uint32 {
 		return x.Unfilled
 	}
 	return 0
+}
+
+func (x *RunDetails) GetFullPeriod() *ResultMetrics {
+	if x != nil {
+		return x.FullPeriod
+	}
+	return nil
 }
 
 type PeriodMetrics struct {
@@ -4053,12 +4064,18 @@ func (x *GetRunTradesResponse) GetNextOffset() uint32 {
 }
 
 type WalkForwardWindow struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TrainFrom     uint32                 `protobuf:"varint,1,opt,name=train_from,json=trainFrom,proto3" json:"train_from,omitempty"`
-	TrainTo       uint32                 `protobuf:"varint,2,opt,name=train_to,json=trainTo,proto3" json:"train_to,omitempty"`
-	TestFrom      uint32                 `protobuf:"varint,3,opt,name=test_from,json=testFrom,proto3" json:"test_from,omitempty"`
-	TestTo        uint32                 `protobuf:"varint,4,opt,name=test_to,json=testTo,proto3" json:"test_to,omitempty"`
-	OutOfSample   *ResultMetrics         `protobuf:"bytes,5,opt,name=out_of_sample,json=outOfSample,proto3" json:"out_of_sample,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	TrainFrom   uint32                 `protobuf:"varint,1,opt,name=train_from,json=trainFrom,proto3" json:"train_from,omitempty"`
+	TrainTo     uint32                 `protobuf:"varint,2,opt,name=train_to,json=trainTo,proto3" json:"train_to,omitempty"`
+	TestFrom    uint32                 `protobuf:"varint,3,opt,name=test_from,json=testFrom,proto3" json:"test_from,omitempty"`
+	TestTo      uint32                 `protobuf:"varint,4,opt,name=test_to,json=testTo,proto3" json:"test_to,omitempty"`
+	OutOfSample *ResultMetrics         `protobuf:"bytes,5,opt,name=out_of_sample,json=outOfSample,proto3" json:"out_of_sample,omitempty"`
+	// Inclusive timestamps of the first and last bars in each range, so the UI
+	// can show dates instead of bar indices.
+	TrainFromMs   int64 `protobuf:"zigzag64,6,opt,name=train_from_ms,json=trainFromMs,proto3" json:"train_from_ms,omitempty"`
+	TrainToMs     int64 `protobuf:"zigzag64,7,opt,name=train_to_ms,json=trainToMs,proto3" json:"train_to_ms,omitempty"`
+	TestFromMs    int64 `protobuf:"zigzag64,8,opt,name=test_from_ms,json=testFromMs,proto3" json:"test_from_ms,omitempty"`
+	TestToMs      int64 `protobuf:"zigzag64,9,opt,name=test_to_ms,json=testToMs,proto3" json:"test_to_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4126,6 +4143,34 @@ func (x *WalkForwardWindow) GetOutOfSample() *ResultMetrics {
 		return x.OutOfSample
 	}
 	return nil
+}
+
+func (x *WalkForwardWindow) GetTrainFromMs() int64 {
+	if x != nil {
+		return x.TrainFromMs
+	}
+	return 0
+}
+
+func (x *WalkForwardWindow) GetTrainToMs() int64 {
+	if x != nil {
+		return x.TrainToMs
+	}
+	return 0
+}
+
+func (x *WalkForwardWindow) GetTestFromMs() int64 {
+	if x != nil {
+		return x.TestFromMs
+	}
+	return 0
+}
+
+func (x *WalkForwardWindow) GetTestToMs() int64 {
+	if x != nil {
+		return x.TestToMs
+	}
+	return 0
 }
 
 type CostStressPoint struct {
@@ -5038,7 +5083,7 @@ const file_assay_v1_service_proto_rawDesc = "" +
 	"\x06trades\x18\x06 \x01(\rR\x06trades\x12\x12\n" +
 	"\x04wins\x18\a \x01(\rR\x04wins\x12\x16\n" +
 	"\x06losses\x18\b \x01(\rR\x06losses\x122\n" +
-	"\x15longest_losing_streak\x18\t \x01(\rR\x13longestLosingStreak\"\xb5\a\n" +
+	"\x15longest_losing_streak\x18\t \x01(\rR\x13longestLosingStreak\"\xef\a\n" +
 	"\n" +
 	"RunDetails\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12#\n" +
@@ -5067,7 +5112,9 @@ const file_assay_v1_service_proto_rawDesc = "" +
 	"monteCarlo\x12;\n" +
 	"\vsensitivity\x18\x13 \x01(\v2\x19.assay.v1.SensitivityGridR\vsensitivity\x127\n" +
 	"\fnext_actions\x18\x14 \x03(\v2\x14.assay.v1.NextActionR\vnextActions\x12\x1a\n" +
-	"\bunfilled\x18\x15 \x01(\rR\bunfilled\"\x9d\x01\n" +
+	"\bunfilled\x18\x15 \x01(\rR\bunfilled\x128\n" +
+	"\vfull_period\x18\x16 \x01(\v2\x17.assay.v1.ResultMetricsR\n" +
+	"fullPeriod\"\x9d\x01\n" +
 	"\rPeriodMetrics\x12\x16\n" +
 	"\x06period\x18\x01 \x01(\tR\x06period\x120\n" +
 	"\anet_pnl\x18\x02 \x01(\v2\x17.assay.v1.BoundedMetricR\x06netPnl\x12\x16\n" +
@@ -5104,14 +5151,20 @@ const file_assay_v1_service_proto_rawDesc = "" +
 	"\x06trades\x18\x01 \x03(\v2\x15.assay.v1.TradeRecordR\x06trades\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\rR\x05total\x12\x1f\n" +
 	"\vnext_offset\x18\x03 \x01(\rR\n" +
-	"nextOffset\"\xc0\x01\n" +
+	"nextOffset\"\xc4\x02\n" +
 	"\x11WalkForwardWindow\x12\x1d\n" +
 	"\n" +
 	"train_from\x18\x01 \x01(\rR\ttrainFrom\x12\x19\n" +
 	"\btrain_to\x18\x02 \x01(\rR\atrainTo\x12\x1b\n" +
 	"\ttest_from\x18\x03 \x01(\rR\btestFrom\x12\x17\n" +
 	"\atest_to\x18\x04 \x01(\rR\x06testTo\x12;\n" +
-	"\rout_of_sample\x18\x05 \x01(\v2\x17.assay.v1.ResultMetricsR\voutOfSample\"d\n" +
+	"\rout_of_sample\x18\x05 \x01(\v2\x17.assay.v1.ResultMetricsR\voutOfSample\x12\"\n" +
+	"\rtrain_from_ms\x18\x06 \x01(\x12R\vtrainFromMs\x12\x1e\n" +
+	"\vtrain_to_ms\x18\a \x01(\x12R\ttrainToMs\x12 \n" +
+	"\ftest_from_ms\x18\b \x01(\x12R\n" +
+	"testFromMs\x12\x1c\n" +
+	"\n" +
+	"test_to_ms\x18\t \x01(\x12R\btestToMs\"d\n" +
 	"\x0fCostStressPoint\x12\x1e\n" +
 	"\n" +
 	"multiplier\x18\x01 \x01(\rR\n" +
@@ -5326,56 +5379,57 @@ var file_assay_v1_service_proto_depIdxs = []int32{
 	54, // 38: assay.v1.RunDetails.monte_carlo:type_name -> assay.v1.MonteCarloSummary
 	56, // 39: assay.v1.RunDetails.sensitivity:type_name -> assay.v1.SensitivityGrid
 	57, // 40: assay.v1.RunDetails.next_actions:type_name -> assay.v1.NextAction
-	42, // 41: assay.v1.PeriodMetrics.net_pnl:type_name -> assay.v1.BoundedMetric
-	44, // 42: assay.v1.GetRunDetailsResponse.details:type_name -> assay.v1.RunDetails
-	42, // 43: assay.v1.TradeRecord.net_pnl:type_name -> assay.v1.BoundedMetric
-	42, // 44: assay.v1.TradeRecord.costs:type_name -> assay.v1.BoundedMetric
-	49, // 45: assay.v1.GetRunTradesResponse.trades:type_name -> assay.v1.TradeRecord
-	43, // 46: assay.v1.WalkForwardWindow.out_of_sample:type_name -> assay.v1.ResultMetrics
-	43, // 47: assay.v1.CostStressPoint.metrics:type_name -> assay.v1.ResultMetrics
-	53, // 48: assay.v1.MonteCarloSummary.final_equity:type_name -> assay.v1.Percentile
-	53, // 49: assay.v1.MonteCarloSummary.max_drawdown:type_name -> assay.v1.Percentile
-	43, // 50: assay.v1.SensitivityCell.metrics:type_name -> assay.v1.ResultMetrics
-	55, // 51: assay.v1.SensitivityGrid.cells:type_name -> assay.v1.SensitivityCell
-	59, // 52: assay.v1.CompareRunsResponse.changes:type_name -> assay.v1.ParamChange
-	60, // 53: assay.v1.CompareRunsResponse.metric_deltas:type_name -> assay.v1.MetricDelta
-	2,  // 54: assay.v1.DataService.ListInstruments:input_type -> assay.v1.Empty
-	5,  // 55: assay.v1.DataService.DataStatus:input_type -> assay.v1.EnsureDataRequest
-	5,  // 56: assay.v1.DataService.EnsureData:input_type -> assay.v1.EnsureDataRequest
-	11, // 57: assay.v1.EventStudyService.QueryEvents:input_type -> assay.v1.QueryEventsRequest
-	14, // 58: assay.v1.EventStudyService.RunEventStudy:input_type -> assay.v1.EventStudyRequest
-	2,  // 59: assay.v1.PrimitiveService.ListPrimitives:input_type -> assay.v1.Empty
-	23, // 60: assay.v1.PrimitiveService.Evaluate:input_type -> assay.v1.EvaluatePrimitiveRequest
-	25, // 61: assay.v1.StudyService.Validate:input_type -> assay.v1.ValidateRequest
-	30, // 62: assay.v1.StudyService.Describe:input_type -> assay.v1.DescribeStrategyRequest
-	32, // 63: assay.v1.StudyService.Run:input_type -> assay.v1.RunRequest
-	2,  // 64: assay.v1.TemplateService.ListTemplates:input_type -> assay.v1.Empty
-	2,  // 65: assay.v1.RunService.ListRuns:input_type -> assay.v1.Empty
-	41, // 66: assay.v1.RunService.GetRun:input_type -> assay.v1.GetRunRequest
-	41, // 67: assay.v1.RunService.GetDetails:input_type -> assay.v1.GetRunRequest
-	48, // 68: assay.v1.RunService.GetTrades:input_type -> assay.v1.GetRunTradesRequest
-	58, // 69: assay.v1.RunService.Compare:input_type -> assay.v1.CompareRunsRequest
-	4,  // 70: assay.v1.DataService.ListInstruments:output_type -> assay.v1.ListInstrumentsResponse
-	8,  // 71: assay.v1.DataService.DataStatus:output_type -> assay.v1.DataStatusResponse
-	6,  // 72: assay.v1.DataService.EnsureData:output_type -> assay.v1.Progress
-	12, // 73: assay.v1.EventStudyService.QueryEvents:output_type -> assay.v1.QueryEventsResponse
-	20, // 74: assay.v1.EventStudyService.RunEventStudy:output_type -> assay.v1.EventStudyResponse
-	22, // 75: assay.v1.PrimitiveService.ListPrimitives:output_type -> assay.v1.ListPrimitivesResponse
-	24, // 76: assay.v1.PrimitiveService.Evaluate:output_type -> assay.v1.EvaluatePrimitiveResponse
-	27, // 77: assay.v1.StudyService.Validate:output_type -> assay.v1.ValidateResponse
-	31, // 78: assay.v1.StudyService.Describe:output_type -> assay.v1.DescribeStrategyResponse
-	37, // 79: assay.v1.StudyService.Run:output_type -> assay.v1.RunUpdate
-	39, // 80: assay.v1.TemplateService.ListTemplates:output_type -> assay.v1.ListTemplatesResponse
-	40, // 81: assay.v1.RunService.ListRuns:output_type -> assay.v1.ListRunsResponse
-	36, // 82: assay.v1.RunService.GetRun:output_type -> assay.v1.RunSummary
-	47, // 83: assay.v1.RunService.GetDetails:output_type -> assay.v1.GetRunDetailsResponse
-	50, // 84: assay.v1.RunService.GetTrades:output_type -> assay.v1.GetRunTradesResponse
-	61, // 85: assay.v1.RunService.Compare:output_type -> assay.v1.CompareRunsResponse
-	70, // [70:86] is the sub-list for method output_type
-	54, // [54:70] is the sub-list for method input_type
-	54, // [54:54] is the sub-list for extension type_name
-	54, // [54:54] is the sub-list for extension extendee
-	0,  // [0:54] is the sub-list for field type_name
+	43, // 41: assay.v1.RunDetails.full_period:type_name -> assay.v1.ResultMetrics
+	42, // 42: assay.v1.PeriodMetrics.net_pnl:type_name -> assay.v1.BoundedMetric
+	44, // 43: assay.v1.GetRunDetailsResponse.details:type_name -> assay.v1.RunDetails
+	42, // 44: assay.v1.TradeRecord.net_pnl:type_name -> assay.v1.BoundedMetric
+	42, // 45: assay.v1.TradeRecord.costs:type_name -> assay.v1.BoundedMetric
+	49, // 46: assay.v1.GetRunTradesResponse.trades:type_name -> assay.v1.TradeRecord
+	43, // 47: assay.v1.WalkForwardWindow.out_of_sample:type_name -> assay.v1.ResultMetrics
+	43, // 48: assay.v1.CostStressPoint.metrics:type_name -> assay.v1.ResultMetrics
+	53, // 49: assay.v1.MonteCarloSummary.final_equity:type_name -> assay.v1.Percentile
+	53, // 50: assay.v1.MonteCarloSummary.max_drawdown:type_name -> assay.v1.Percentile
+	43, // 51: assay.v1.SensitivityCell.metrics:type_name -> assay.v1.ResultMetrics
+	55, // 52: assay.v1.SensitivityGrid.cells:type_name -> assay.v1.SensitivityCell
+	59, // 53: assay.v1.CompareRunsResponse.changes:type_name -> assay.v1.ParamChange
+	60, // 54: assay.v1.CompareRunsResponse.metric_deltas:type_name -> assay.v1.MetricDelta
+	2,  // 55: assay.v1.DataService.ListInstruments:input_type -> assay.v1.Empty
+	5,  // 56: assay.v1.DataService.DataStatus:input_type -> assay.v1.EnsureDataRequest
+	5,  // 57: assay.v1.DataService.EnsureData:input_type -> assay.v1.EnsureDataRequest
+	11, // 58: assay.v1.EventStudyService.QueryEvents:input_type -> assay.v1.QueryEventsRequest
+	14, // 59: assay.v1.EventStudyService.RunEventStudy:input_type -> assay.v1.EventStudyRequest
+	2,  // 60: assay.v1.PrimitiveService.ListPrimitives:input_type -> assay.v1.Empty
+	23, // 61: assay.v1.PrimitiveService.Evaluate:input_type -> assay.v1.EvaluatePrimitiveRequest
+	25, // 62: assay.v1.StudyService.Validate:input_type -> assay.v1.ValidateRequest
+	30, // 63: assay.v1.StudyService.Describe:input_type -> assay.v1.DescribeStrategyRequest
+	32, // 64: assay.v1.StudyService.Run:input_type -> assay.v1.RunRequest
+	2,  // 65: assay.v1.TemplateService.ListTemplates:input_type -> assay.v1.Empty
+	2,  // 66: assay.v1.RunService.ListRuns:input_type -> assay.v1.Empty
+	41, // 67: assay.v1.RunService.GetRun:input_type -> assay.v1.GetRunRequest
+	41, // 68: assay.v1.RunService.GetDetails:input_type -> assay.v1.GetRunRequest
+	48, // 69: assay.v1.RunService.GetTrades:input_type -> assay.v1.GetRunTradesRequest
+	58, // 70: assay.v1.RunService.Compare:input_type -> assay.v1.CompareRunsRequest
+	4,  // 71: assay.v1.DataService.ListInstruments:output_type -> assay.v1.ListInstrumentsResponse
+	8,  // 72: assay.v1.DataService.DataStatus:output_type -> assay.v1.DataStatusResponse
+	6,  // 73: assay.v1.DataService.EnsureData:output_type -> assay.v1.Progress
+	12, // 74: assay.v1.EventStudyService.QueryEvents:output_type -> assay.v1.QueryEventsResponse
+	20, // 75: assay.v1.EventStudyService.RunEventStudy:output_type -> assay.v1.EventStudyResponse
+	22, // 76: assay.v1.PrimitiveService.ListPrimitives:output_type -> assay.v1.ListPrimitivesResponse
+	24, // 77: assay.v1.PrimitiveService.Evaluate:output_type -> assay.v1.EvaluatePrimitiveResponse
+	27, // 78: assay.v1.StudyService.Validate:output_type -> assay.v1.ValidateResponse
+	31, // 79: assay.v1.StudyService.Describe:output_type -> assay.v1.DescribeStrategyResponse
+	37, // 80: assay.v1.StudyService.Run:output_type -> assay.v1.RunUpdate
+	39, // 81: assay.v1.TemplateService.ListTemplates:output_type -> assay.v1.ListTemplatesResponse
+	40, // 82: assay.v1.RunService.ListRuns:output_type -> assay.v1.ListRunsResponse
+	36, // 83: assay.v1.RunService.GetRun:output_type -> assay.v1.RunSummary
+	47, // 84: assay.v1.RunService.GetDetails:output_type -> assay.v1.GetRunDetailsResponse
+	50, // 85: assay.v1.RunService.GetTrades:output_type -> assay.v1.GetRunTradesResponse
+	61, // 86: assay.v1.RunService.Compare:output_type -> assay.v1.CompareRunsResponse
+	71, // [71:87] is the sub-list for method output_type
+	55, // [55:71] is the sub-list for method input_type
+	55, // [55:55] is the sub-list for extension type_name
+	55, // [55:55] is the sub-list for extension extendee
+	0,  // [0:55] is the sub-list for field type_name
 }
 
 func init() { file_assay_v1_service_proto_init() }

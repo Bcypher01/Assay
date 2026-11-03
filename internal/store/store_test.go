@@ -327,6 +327,48 @@ func TestSchemaVersionRejected(t *testing.T) {
 	}
 }
 
+func TestManifestsListWithoutReadingPayload(t *testing.T) {
+	ctx := context.Background()
+	st := NewLocalStore(t.TempDir())
+	s := buildMonth(t, "EURUSD", core.TFM1, monthStart("2026-08"), 100)
+	if err := st.Write(ctx, s, Manifest{Symbol: "EURUSD", TF: core.TFM1, Month: "2026-08", Source: "x", BuildVersion: "y"}); err != nil {
+		t.Fatal(err)
+	}
+	// A manifest-only listing must not need the Parquet payload: delete it and
+	// the listing still succeeds, while Load — which verifies the bytes — fails.
+	if err := os.Remove(st.parquetPath("EURUSD", core.TFM1, "2026-08")); err != nil {
+		t.Fatal(err)
+	}
+	ms, err := st.Manifests(ctx, "EURUSD", core.TFM1)
+	if err != nil {
+		t.Fatalf("manifests: %v", err)
+	}
+	if len(ms) != 1 || ms[0].Month != "2026-08" || ms[0].Rows != int64(s.Len()) {
+		t.Fatalf("manifests = %+v", ms)
+	}
+	if _, _, err := st.Load(ctx, "EURUSD", core.TFM1, core.MinTime, core.MaxTime); err == nil {
+		t.Fatal("Load should fail when the payload is gone")
+	}
+}
+
+func TestManifestsRejectsSchemaVersion(t *testing.T) {
+	ctx := context.Background()
+	st := NewLocalStore(t.TempDir())
+	s := buildMonth(t, "EURUSD", core.TFM1, monthStart("2026-08"), 10)
+	if err := st.Write(ctx, s, Manifest{Symbol: "EURUSD", TF: core.TFM1, Month: "2026-08", Source: "x", BuildVersion: "y"}); err != nil {
+		t.Fatal(err)
+	}
+	bad := Manifest{Symbol: "EURUSD", TF: core.TFM1, Month: "2026-08", Rows: int64(s.Len()),
+		First: s.Time[0], Last: s.Time[s.Len()-1], ContentHash: "deadbeef", SchemaVersion: 999}
+	b, _ := bad.encode()
+	if err := os.WriteFile(st.manifestPath("EURUSD", core.TFM1, "2026-08"), b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Manifests(ctx, "EURUSD", core.TFM1); !errors.Is(err, ErrSchemaVersion) {
+		t.Fatalf("expected ErrSchemaVersion, got %v", err)
+	}
+}
+
 func TestManifestJSONRoundTrip(t *testing.T) {
 	m := Manifest{
 		Symbol: "EURUSD", TF: core.TFM15, Month: "2026-08",

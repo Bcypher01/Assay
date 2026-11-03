@@ -34,7 +34,7 @@ func Describe(s *Strategy) Description {
 		}
 		s = migrated
 	}
-	market := strings.Join(s.Universe.Symbols, ", ")
+	market := strings.Join(displaySymbols(s.Universe.Symbols), ", ")
 	tf := timeframeName(s.Timeframes["entry"])
 	parts := []string{}
 	if market != "" && tf != "" {
@@ -62,6 +62,11 @@ func Describe(s *Strategy) Description {
 	}
 	if s.Risk.PerTrade > 0 {
 		parts = append(parts, fmt.Sprintf("Risk %g%% per trade", s.Risk.PerTrade.Float64()*100)+riskSuffix(s.Risk))
+	} else if clause := distanceClause(s.Risk); clause != "" {
+		// Sizing can come from the study assumptions instead of the document.
+		// The stop and target are still part of what gets tested, so the
+		// reading must name them either way.
+		parts = append(parts, "Place "+clause+".")
 	}
 	return Description{Summary: strings.Join(parts, " "), Rules: rules}
 }
@@ -96,6 +101,15 @@ func entryTimingName(t EntryTiming) string {
 }
 
 func riskSuffix(r Risk) string {
+	if clause := distanceClause(r); clause != "" {
+		return ", with " + clause + "."
+	}
+	return "."
+}
+
+// distanceClause names the stop and target without deciding how the sentence
+// around them begins.
+func distanceClause(r Risk) string {
 	parts := []string{}
 	if r.Stop.Value > 0 {
 		parts = append(parts, "a "+humanDistance(r.Stop)+" stop")
@@ -103,10 +117,24 @@ func riskSuffix(r Risk) string {
 	if r.Target.Value > 0 {
 		parts = append(parts, "a "+humanDistance(r.Target)+" target")
 	}
-	if len(parts) == 0 {
-		return "."
+	return strings.Join(parts, " and ")
+}
+
+// displaySymbols writes instruments the way the interface does: without the
+// venue prefix, and as a pair for six-letter FX codes. The stored symbol keeps
+// its venue; only the reading is softened.
+func displaySymbols(symbols []string) []string {
+	out := make([]string, len(symbols))
+	for i, symbol := range symbols {
+		if cut := strings.LastIndex(symbol, ":"); cut >= 0 {
+			symbol = symbol[cut+1:]
+		}
+		if len(symbol) == 6 && symbol == strings.ToUpper(symbol) {
+			symbol = symbol[:3] + "/" + symbol[3:]
+		}
+		out[i] = symbol
 	}
-	return ", with " + strings.Join(parts, " and ") + "."
+	return out
 }
 
 func humanDistance(d core.Distance) string {

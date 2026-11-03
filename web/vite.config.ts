@@ -24,7 +24,20 @@ const config = defineConfig({
       },
     },
   },
-  plugins: [devtools(), tailwindcss(), tanstackStart(), viteReact()],
+  plugins: [
+    // Source injection rewrites data-tsd-source attributes at runtime with
+    // __tsd/open-source URLs, so the client markup no longer matches the SSR
+    // HTML. That is a hydration mismatch on every dev page load, and console
+    // piping then amplifies each one into a recursive flood. The devtools
+    // panel itself still works with both off.
+    devtools({
+      injectSource: { enabled: false },
+      consolePiping: { enabled: false },
+    }),
+    tailwindcss(),
+    tanstackStart(),
+    viteReact(),
+  ],
 })
 
 export default config

@@ -122,35 +122,42 @@ func Run(ctx context.Context, s *core.Series, fine *core.Series, sig Signals, cf
 			}
 			order := orderAt(sig, idx)
 			order.Level = order.trigger(sig.Side[idx], cfg.Spec.PipTicks, atr)
-			fill, ok := entryFill(s, bar, sig.Side[idx], order, cfg.Spec.Gap)
+			reference, ok := entryFill(s, bar, sig.Side[idx], order, cfg.Spec.Gap)
 			if !ok {
 				out.Unfilled++
 				continue
 			}
-			fill = applyEntryCosts(fill, sig.Side[idx], cfg)
+			// Spread and slippage worsen the price actually paid, but they must
+			// not drag the bracket along with them. When stop and target are
+			// resolved from the costed fill, every distance-based exit shifts by
+			// exactly the same amount as the entry and the P&L is unchanged: a
+			// 2x and 3x cost stress then report identical results. Resolve the
+			// bracket from the planned entry and size from the risk actually
+			// planned, so a worse fill costs money the way it does in a market.
+			fill := applyEntryCosts(reference, sig.Side[idx], cfg)
 			stop, target := sig.StopLevel[idx], sig.TargetPlan[idx]
 			if len(sig.StopSpec) != 0 {
 				stop, target.Level = levelsFromDistances(
-					fill,
+					reference,
 					sig.Side[idx],
-					sig.StopSpec[idx].Ticks(cfg.Spec.PipTicks, fill, atr),
-					sig.TargetSpec[idx].Ticks(cfg.Spec.PipTicks, fill, atr),
+					sig.StopSpec[idx].Ticks(cfg.Spec.PipTicks, reference, atr),
+					sig.TargetSpec[idx].Ticks(cfg.Spec.PipTicks, reference, atr),
 				)
 			} else if len(sig.StopDistance) != 0 {
 				stop, target.Level = levelsFromDistances(
-					fill,
+					reference,
 					sig.Side[idx],
 					sig.StopDistance[idx],
 					sig.TargetDistance[idx],
 				)
 			}
-			// A trail carrying a unit is resolved from the actual fill, for the
+			// A trail carrying a unit is resolved from the planned entry, for the
 			// same reason the stop and target distances are: pips, percent and
 			// price mean nothing until the entry price is known.
 			if target.TrailSpec.Value > 0 {
-				target.TrailDistance = target.TrailSpec.Ticks(cfg.Spec.PipTicks, fill, atr)
+				target.TrailDistance = target.TrailSpec.Ticks(cfg.Spec.PipTicks, reference, atr)
 			}
-			req, lots := sizeFor(equityP, fill, stop, cfg)
+			req, lots := sizeFor(equityP, reference, stop, cfg)
 			if lots <= 0 {
 				continue
 			}

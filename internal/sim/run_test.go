@@ -250,3 +250,39 @@ func TestRunReportsUSDAccountCents(t *testing.T) {
 		t.Fatalf("ending balance = %d cents, want 10100", got)
 	}
 }
+
+func TestExecutionCostsReduceDistanceAnchoredPnL(t *testing.T) {
+	// Entry fills at 100 on the first bar; the second bar reaches a target ten
+	// points away and never touches the stop five points below the planned
+	// entry. Costs must make that winner smaller, then smaller again at 3x.
+	s := fixtureSeries(core.TFM1, [][4]core.Price{{100, 100, 100, 100}, {100, 106, 99, 104}})
+	b := core.NewBitset(2)
+	b.Set(0)
+	sig := Signals{
+		Enter: b, Side: []core.Side{core.SideLong}, StopLevel: []core.Price{0}, TargetPlan: []TargetPlan{{}},
+		StopDistance: []core.Price{5}, TargetDistance: []core.Price{10},
+	}
+	net := func(spread int64, slip core.Price) core.Price {
+		cfg := fixtureConfig()
+		cfg.Spec.Costs.SpreadTicks = spread
+		cfg.Slippage = SlippageModel{Enabled: true, Mode: instrument.SlippageFixed, Ticks: slip}
+		var out RunResult
+		if err := Run(context.Background(), s, nil, sig, cfg, &out); err != nil {
+			t.Fatal(err)
+		}
+		if len(out.Trades) != 1 {
+			t.Fatalf("%d trades at spread=%d slip=%d", len(out.Trades), spread, slip)
+		}
+		return out.Trades[0].Pessimistic.Net
+	}
+	free := net(0, 0)
+	one := net(2, 1)
+	two := net(4, 2)
+	three := net(6, 3)
+	if !(free > one && one > two && two > three) {
+		t.Fatalf("costs did not reduce P&L monotonically: 1x=%d 2x=%d 3x=%d", one, two, three)
+	}
+	if two == three {
+		t.Fatal("2x and 3x costs produced identical results; cost stress is not measuring costs")
+	}
+}

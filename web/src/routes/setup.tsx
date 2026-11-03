@@ -593,12 +593,13 @@ function SetupTestScreen() {
   ])
 
   // Auto-load the chart for the (symbol, timeframe, years) actually selected.
-  // Switching candles or market used to drop to a blank canvas that demanded
-  // another explicit "Prepare chart" click; the change itself now loads the
-  // bars and, through the chart's drawing storage key, that rung's drawings.
   // The key guard means unrelated re-renders and scale-down rung changes never
   // trigger a reload — and the availability check lets the timeframe-correction
   // effect (above) settle before the corrected choice is fetched.
+  // We do NOT include `prepare` in deps to avoid the circular dependency that
+  // caused the "reload button does nothing" issue. The sequence tracking inside
+  // prepare() handles concurrent load protection, and the preparedKeyRef check
+  // ensures we only load once per (symbol, timeframe, years) triple.
   useEffect(() => {
     if (!symbol || !timeframe) return
     if (timeframes.length > 0 && !timeframes.includes(timeframe)) return
@@ -606,7 +607,7 @@ function SetupTestScreen() {
     if (preparedKeyRef.current === key) return
     preparedKeyRef.current = key
     void prepare()
-  }, [symbol, timeframe, years, timeframes, prepare])
+  }, [symbol, timeframe, years, timeframes])
 
   /** Scale the chart down to an entry rung, preparing its bars on demand. */
   const scaleTo = useCallback(

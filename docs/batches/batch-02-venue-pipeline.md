@@ -99,6 +99,15 @@ _Required entries before this batch closes:_
 - Dukascopy public data requires no credentials, but republishing derived bars is
   not enabled in this pipeline. FX stays on the client-side fallback path until
   redistribution rights are explicitly cleared.
+- **Hybrid publication (this revision).** The R2 run no longer aborts when the
+  requested symbol set mixes licensed and unlicensed venues. It partitions the
+  set: Binance crypto publishes; Dukascopy FX is withheld unless
+  `ASSAY_DUKASCOPY_REDISTRIBUTION_AUTHORIZED=true`, logged explicitly, and
+  counted in the run summary (`withheld=`). Withheld instruments are not lost —
+  clients fall back to direct venue fetch — so the hosted library is "licensed
+  venues published, the rest direct" rather than all-or-nothing. The local
+  filesystem publisher is a development path and is never gated.
+
 - Dukascopy's public BI5 candle artifacts use 24-byte big-endian records in the
   order `seconds/open/close/low/high/volume`. Completed daily history is served
   in annual D1 artifacts; fine and current-period bars are reconstructed from

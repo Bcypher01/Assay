@@ -63,7 +63,11 @@ export interface StudyAssumptionsState {
 }
 
 export const DEFAULT_ASSUMPTIONS: StudyAssumptionsState = {
-  initialEquity: 10_000n,
+  // A realistic starting balance. The bundled templates risk 0.5-1% against
+  // 50-100 pip FX stops; on a $100 account that request rounds down to no
+  // position at the instrument's minimum lot, so every trade is skipped and
+  // the first run ends in "No trades" no matter how good the rule is.
+  initialEquity: 1_000_000n,
   riskPerTrade: 0.01,
   fixedLots: 0,
   spreadTicks: 0n,
@@ -104,7 +108,13 @@ export interface DataStatusState {
  */
 export const DEFAULT_STRATEGY = JSON.stringify(emptyStrategy(), null, 2)
 
-let state: SessionState = {
+/**
+ * The state before anything is restored. Hydration compares the server's HTML
+ * against this exact snapshot: a saved session is read in an effect, after the
+ * first paint, so passing the live state here would replace the server's
+ * "nothing chosen yet" markup mid-hydration and React would throw it away.
+ */
+const INITIAL_STATE: SessionState = {
   symbol: '',
   timeframe: '',
   fromMs: null,
@@ -120,6 +130,8 @@ let state: SessionState = {
   trials: 0,
   onboardingSeen: false,
 }
+
+let state: SessionState = INITIAL_STATE
 
 const STORAGE_KEY = 'assay.session.v1'
 let restored = false
@@ -391,5 +403,9 @@ export function useSession(): SessionState {
   useEffect(() => {
     restore()
   }, [])
-  return useSyncExternalStore(session.subscribe, session.get, session.get)
+  return useSyncExternalStore(
+    session.subscribe,
+    session.get,
+    () => INITIAL_STATE,
+  )
 }

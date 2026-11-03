@@ -19,14 +19,24 @@ type Metrics struct {
 	Trades, Wins, Losses, LongestLosingStreak                           int
 }
 type StudyResult struct {
-	OutOfSample, InSample Metrics
-	Distribution          MCDistribution
-	Sensitivity           Grid
-	Trials                int
-	Deflated              Metrics
-	CostCurve             []Metrics
-	NearMisses            []NearMiss
-	Unresolved            int
+	// FullPeriod describes every trade in the requested window. It answers
+	// "what would this have made", but it is not evidence about unseen data.
+	FullPeriod Metrics
+	// OutOfSample pools trades that entered inside walk-forward test windows.
+	// Test windows never overlap, so each trade is counted at most once. This
+	// is the only sample a verdict may judge.
+	OutOfSample Metrics
+	// InSample describes the first walk-forward train window. It is context for
+	// how the rules behave on the stretch they were developed against, and must
+	// never be presented as out-of-sample evidence.
+	InSample     Metrics
+	Distribution MCDistribution
+	Sensitivity  Grid
+	Trials       int
+	Deflated     Metrics
+	CostCurve    []Metrics
+	NearMisses   []NearMiss
+	Unresolved   int
 	// Unfilled counts entries whose resting order was never reached. It is
 	// reported beside the trade count so a limit study's lower activity reads
 	// as the strategy's own behaviour rather than as missing setups.
@@ -57,8 +67,12 @@ type NearMiss struct {
 // test portion; train bounds are metadata only and prevent a UI from passing
 // in-sample performance off as unseen evidence.
 type WalkForwardResult struct {
-	Window  WFWindow
-	Metrics Metrics
+	Window WFWindow
+	// Time bounds are the first and last bar actually covered by each range.
+	// They are stored so a saved result can show dates without reloading bars.
+	TrainFromMs, TrainToMs int64
+	TestFromMs, TestToMs   int64
+	Metrics                Metrics
 }
 type CostStressPoint struct {
 	Multiplier int

@@ -89,4 +89,31 @@ this batch exposes the callback, not the transport.
 
 ## Decision log
 
-_Record the object-storage client chosen, and the fixture strategy for CI._
+**Object-storage client: a minimal signed-request R2 client in `internal/pipeline`,
+and a credential-free HTTP reader in `internal/library`.** Research clients never
+hold publish credentials.
+
+**Delivery hardening (this revision).** The cold path was reworked for hosted use,
+where a long-lived server pays each cost repeatedly:
+
+- `LocalStore.Manifests` reads and parses manifest files only. `Status` and
+  `missingMonths` now use it, so a readiness preflight no longer decodes and
+  hash-verifies every Parquet file in the window. Content hashes are still
+  verified on `Load`, on exactly the months a study consumes; a structural
+  manifest error still surfaces as `CACHE_CORRUPT` before a run.
+- `HTTPStore` retries transient failures (network errors, 408, 429, 5xx) with
+  exponential backoff capped at `maxRetryBackoff`, honouring `Retry-After`. A 404,
+  any other 4xx, and a 2xx are never retried: they are definitive answers.
+- `Ensure` prepares missing months with a bounded worker pool (`Loader.Workers`,
+  default `GOMAXPROCS`). Each month is an independent file, so concurrency changes
+  no bytes and no `SnapshotHash`; the progress sink is still invoked from one
+  goroutine at a time, under a mutex, so a stream or test recorder is safe.
+- Interrupted month downloads resume. `LocalStore` keeps a `.parquet.partial`
+  sibling, committed only after `VerifyPublished` passes; `ObjectStore`
+  implementations that satisfy `RangeReader` (`HTTPStore`, `LocalPipeline`) are
+  asked for only the remainder via `Range: bytes=<offset>-`. An origin that
+  ignores the range, a 416, or a non-range store falls back to a clean full
+  download rather than concatenating mismatched bytes.
+
+The fixture strategy for CI remains the in-process `pipeline.LocalPublisher`
+backed by a temp directory.

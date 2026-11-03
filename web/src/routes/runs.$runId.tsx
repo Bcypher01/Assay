@@ -35,9 +35,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { formatUsdCents, prettyJson } from '@/lib/codec'
+import { formatUsdCents } from '@/lib/codec'
+import { displaySymbol } from '@/lib/strategy'
 import { rpcErrorMessage, runApi } from '@/lib/rpc'
-import { session } from '@/lib/store'
 
 export const Route = createFileRoute('/runs/$runId')({ component: ResultPage })
 type Details = NonNullable<
@@ -66,13 +66,24 @@ const moneyResult = (v: Bounded) => {
     return `${formatUsdCents(v.pessimistic, { sign: true })} – ${formatUsdCents(v.optimistic, { sign: true })}`
   return formatUsdCents(v.pessimistic, { sign: true })
 }
-const date = (v: bigint) => (v ? new Date(Number(v)).toLocaleDateString() : '—')
-const utcDate = new Intl.DateTimeFormat(undefined, {
+const utcDate = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'UTC',
-  day: '2-digit',
+  day: 'numeric',
   month: 'short',
   year: 'numeric',
 })
+const date = (v: bigint | number) => (v ? utcDate.format(Number(v)) : '—')
+const windowDate = (v: bigint | number | undefined) =>
+  v ? utcDate.format(Number(v)) : ''
+const windowRange = (
+  from: bigint | number | undefined,
+  to: bigint | number | undefined,
+  fromBar: number,
+  toBar: number,
+) =>
+  from && to
+    ? `${windowDate(from)} – ${windowDate(to)}`
+    : `bars ${fromBar} – ${toBar}`
 /**
  * The server names a period by its epoch-ms bounds. Two thirteen-digit numbers
  * are an identifier, not a date range a person can read, so render them as one
@@ -160,31 +171,15 @@ function ResultPage() {
       </Alert>
     )
   if (!details) return <ResultSkeleton />
+  // Old runs stored the whole-window result in outOfSample. Treat it as the
+  // full period rather than relabelling it as unseen evidence it never was.
+  const full = details.fullPeriod ?? details.outOfSample
   const out = details.outOfSample
   const verdict = evidenceVerdict(details)
-  const wins = out?.wins ?? 0
-  const losses = out?.losses ?? 0
+  const wins = full?.wins ?? 0
+  const losses = full?.losses ?? 0
   const decidedTrades = wins + losses
   const winRate = decidedTrades > 0 ? (wins / decidedTrades) * 100 : null
-  const startExperiment = (kind: string) => {
-    try {
-      const study = JSON.parse(session.get().strategyText) as Record<
-        string,
-        unknown
-      >
-      session.set({
-        strategyText: prettyJson({
-          ...study,
-          name: `${String(study.name || 'Study')} — ${kind || 'experiment'}`,
-        }),
-        validatedHash: null,
-      })
-    } catch {
-      setError(
-        'Your current strategy cannot be copied because it is not valid JSON.',
-      )
-    }
-  }
   const compare = async () => {
     if (!compareId) return
     setComparing(true)
@@ -211,8 +206,8 @@ function ResultPage() {
           {details.name || 'Strategy result'}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {details.instruments.join(', ')} · This is what the rules did on past
-          prices. It is not a prediction and not advice.
+          {details.instruments.map(displaySymbol).join(', ')} · This is what the
+          rules did on past prices. It is not a prediction and not advice.
         </p>
       </header>
 
@@ -220,18 +215,19 @@ function ResultPage() {
         <Alert variant="warning">
           <AlertTriangle />
           <AlertTitle>
-            {details.tradeListPresent
-              ? 'Ambiguous trades are excluded from these results'
-              : 'Some exits could have gone either way'}
+            {details.unresolved === 1
+              ? 'One trade could have gone either way'
+              : `${details.unresolved} trades could have gone either way`}
           </AlertTitle>
           <AlertDescription>
             On {details.unresolved} occasion
             {details.unresolved === 1 ? '' : 's'} the stop and the target were
             both reachable inside the same bar, and the data cannot say which
-            came first.{' '}
+            came first. Rather than guess, every number on this page shows both
+            outcomes: the stop-first worst case and the target-first best case.
             {details.tradeListPresent
-              ? 'Those trades are listed under “Every detail,” but do not contribute to the headline profit, balance, win rate, or drawdown.'
-              : 'Their original range is retained because the individual trades are no longer stored for this older run.'}
+              ? ' The affected trades are listed under “Every detail” with that range beside them.'
+              : ' The range is retained even though the individual trades are no longer stored for this older run.'}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -270,12 +266,16 @@ function ResultPage() {
         ) : null}
       </section>
 
+      <p className="ledger-scope">
+        Full period — every trade in the tested window. The verdict above judges
+        the smaller unseen sample, which is the honest test.
+      </p>
       <section className="ledger">
         <Metric
           label="Ending balance"
           hint="what the account was worth at the end"
-          value={moneyBounded(out?.finalEquity)}
-          tone={equityTone(out?.finalEquity?.pessimistic, details)}
+          value={moneyBounded(full?.finalEquity)}
+          tone={equityTone(full?.finalEquity?.pessimistic, details)}
         />
         <Metric
           label="Win rate"
@@ -284,34 +284,34 @@ function ResultPage() {
         />
         <Metric
           label="Wins / losses"
-          hint="break-even trades are excluded"
+          hint="break-even trades count as neither"
           value={`${wins.toLocaleString()} / ${losses.toLocaleString()}`}
         />
         <Metric
           label="Trades"
-          hint="positions taken in the unseen period"
-          value={(out?.trades ?? 0).toLocaleString()}
+          hint="positions taken across the full period"
+          value={(full?.trades ?? 0).toLocaleString()}
         />
         <Metric
           label="Worst fall"
           hint="largest drop from a high point before recovering"
-          value={moneyBounded(out?.maxDrawdown)}
-          tone={toneFor(out?.maxDrawdown?.pessimistic)}
+          value={moneyBounded(full?.maxDrawdown)}
+          tone={toneFor(full?.maxDrawdown?.pessimistic)}
         />
         <Metric
           label="Profit factor"
           hint="money won for every 1 lost — under 1 loses money"
-          value={bounded(out?.profitFactor)}
+          value={bounded(full?.profitFactor)}
         />
         <Metric
           label="Average per trade"
           hint="what a single trade was worth on average"
-          value={moneyBounded(out?.expectancy)}
-          tone={toneFor(out?.expectancy?.pessimistic)}
+          value={moneyBounded(full?.expectancy)}
+          tone={toneFor(full?.expectancy?.pessimistic)}
         />
       </section>
 
-      <NextActions actions={details.nextActions} onStart={startExperiment} />
+      <NextActions actions={details.nextActions} />
 
       <Tabs defaultValue="summary">
         <TabsList>
@@ -330,8 +330,10 @@ function ResultPage() {
               <CardContent className="min-w-0 space-y-2 text-sm">
                 <p>
                   {out?.trades ?? 0} trade
-                  {(out?.trades ?? 0) === 1 ? '' : 's'} on the unseen stretch of
-                  history. This strategy has been run {details.trials} time
+                  {(out?.trades ?? 0) === 1 ? '' : 's'} entered inside the
+                  walk-forward test windows — the only sample the verdict uses.
+                  The full period took {full?.trades ?? 0}. This strategy has
+                  been run {details.trials} time
                   {details.trials === 1 ? '' : 's'} — every attempt is counted,
                   so a rule that took twenty tries cannot look like it took one.
                 </p>
@@ -445,22 +447,28 @@ function Assumptions({ details }: { details: Details }) {
         />
         <Pair
           label="Spread override"
-          value={a?.spreadTicks.toString() ?? '—'}
+          value={a ? `${a.spreadTicks} ticks` : '—'}
         />
         <Pair
           label="Slippage override"
-          value={a?.slippageTicks.toString() ?? '—'}
+          value={a ? `${a.slippageTicks} ticks` : '—'}
         />
         <Pair label="Commission" value={`${a?.commissionBps ?? 0} bps`} />
         <Pair
           label="Flat commission"
           value={a ? formatUsdCents(a.commissionFlat) : '—'}
         />
-        <Pair label="Fills happen" value={a?.fillPolicy || 'Next bar open'} />
+        <Pair label="Fills happen" value={fillPolicy(a?.fillPolicy)} />
       </CardContent>
     </Card>
   )
 }
+function fillPolicy(value: string | undefined) {
+  if (!value) return 'Next bar open'
+  if (value === 'next_open') return 'Next bar open'
+  return value
+}
+
 function SampleTable({ details }: { details: Details }) {
   const rows: Array<
     [string, Bounded | number | undefined, Bounded | number | undefined]
@@ -495,15 +503,15 @@ function SampleTable({ details }: { details: Details }) {
   }
   return (
     <Evidence
-      title="Fitted period vs unseen period"
-      description="The left column is the stretch the rules were built against, so it flatters them by construction. The right column is the stretch they had never seen, and is the one that counts. Where a value is a range, the worse case comes first."
+      title="Development window vs unseen windows"
+      description="The left column is the first walk-forward development window, so it flatters the rules by construction. The right column pools every trade that entered after that window, in the test stretches the rules had not seen. It is the only evidence the verdict uses, and the worse case always comes first in a range."
     >
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Metric</TableHead>
-            <TableHead>Fitted period</TableHead>
-            <TableHead>Unseen period</TableHead>
+            <TableHead>Development window</TableHead>
+            <TableHead>Unseen windows (pooled)</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -539,10 +547,15 @@ function WalkForward({ rows }: { rows: Details['walkForward'] }) {
             {rows.map((r, i) => (
               <TableRow key={`${r.trainFrom}-${i}`}>
                 <TableCell>
-                  {r.trainFrom} – {r.trainTo}
+                  {windowRange(
+                    r.trainFromMs,
+                    r.trainToMs,
+                    r.trainFrom,
+                    r.trainTo,
+                  )}
                 </TableCell>
                 <TableCell>
-                  {r.testFrom} – {r.testTo}
+                  {windowRange(r.testFromMs, r.testToMs, r.testFrom, r.testTo)}
                 </TableCell>
                 <TableCell>{moneyBounded(r.outOfSample?.expectancy)}</TableCell>
                 <TableCell>
@@ -559,32 +572,49 @@ function WalkForward({ rows }: { rows: Details['walkForward'] }) {
   )
 }
 function CostStress({ rows }: { rows: Details['costStress'] }) {
+  // A saved run made before costs were charged against the planned bracket can
+  // legitimately show the same figures at 2x and 3x. Say so instead of letting
+  // two identical rows look like a broken calculation.
+  const saturates =
+    rows.length >= 3 &&
+    rows[rows.length - 1].metrics?.finalEquity?.pessimistic ===
+      rows[rows.length - 2].metrics?.finalEquity?.pessimistic
   return (
     <Evidence
       title="If trading cost more than you assumed"
-      description="The same trades re-priced with your spread, slippage and commission doubled and tripled. A rule that only works at 1× is a rule that depends on getting perfect fills forever."
+      description="Every trade is re-priced with the spread, slippage and commission you chose, then with those costs doubled and tripled. A rule that only works at 1× depends on getting perfect fills forever."
     >
       {rows.length ? (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Costs</TableHead>
-              <TableHead>Ending balance</TableHead>
-              <TableHead>Worst fall</TableHead>
-              <TableHead>Average per trade</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((r) => (
-              <TableRow key={r.multiplier}>
-                <TableCell>{r.multiplier}×</TableCell>
-                <TableCell>{moneyBounded(r.metrics?.finalEquity)}</TableCell>
-                <TableCell>{moneyBounded(r.metrics?.maxDrawdown)}</TableCell>
-                <TableCell>{moneyBounded(r.metrics?.expectancy)}</TableCell>
+        <>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Costs</TableHead>
+                <TableHead>Ending balance</TableHead>
+                <TableHead>Worst fall</TableHead>
+                <TableHead>Average per trade</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {rows.map((r) => (
+                <TableRow key={r.multiplier}>
+                  <TableCell>{r.multiplier}× your costs</TableCell>
+                  <TableCell>{moneyBounded(r.metrics?.finalEquity)}</TableCell>
+                  <TableCell>{moneyBounded(r.metrics?.maxDrawdown)}</TableCell>
+                  <TableCell>{moneyBounded(r.metrics?.expectancy)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          {saturates ? (
+            <p className="mt-3 text-xs text-muted-foreground">
+              The last two rows are identical. This saved run was calculated
+              before costs were charged against the planned entry, so higher
+              costs could not move it. Re-run the test to see the corrected
+              figures.
+            </p>
+          ) : null}
+        </>
       ) : (
         empty
       )}
@@ -734,33 +764,63 @@ function ScenarioReading({
     </p>
   )
 }
-function NextActions({
-  actions,
-  onStart,
-}: {
-  actions: Details['nextActions']
-  onStart: (kind: string) => void
-}) {
+const ACTION_COPY: Record<
+  string,
+  { label: string; to: '/strategy' | '/reality' | '/run'; cta: string }
+> = {
+  simplify_rules: {
+    label: 'Simplify the rules',
+    to: '/strategy',
+    cta: 'Open the rules',
+  },
+  extend_history: {
+    label: 'Use a longer period',
+    to: '/run',
+    cta: 'Choose a longer period',
+  },
+  retest_higher_costs: {
+    label: 'Retest at higher costs',
+    to: '/reality',
+    cta: 'Set conservative costs',
+  },
+  discard_or_rewrite: {
+    label: 'Rewrite the hypothesis',
+    to: '/strategy',
+    cta: 'Open the rules',
+  },
+  paper_trade: {
+    label: 'Keep this version unchanged',
+    to: '/run',
+    cta: 'Run it again',
+  },
+}
+
+function NextActions({ actions }: { actions: Details['nextActions'] }) {
   return actions.length ? (
     <Evidence
       title="What to try next"
-      description="Each of these starts a fresh version of the strategy. It is counted as another attempt, because trying twenty variations and keeping the best one is how a rule comes to look better than it is."
+      description="Changing a rule starts a fresh version of the strategy, and every run is counted as another attempt. Trying twenty variations and keeping the best one is how a rule comes to look better than it is."
     >
       <div className="grid gap-3 md:grid-cols-2">
-        {actions.map((a, i) => (
-          <div key={`${a.kind}-${i}`} className="rounded-md border p-4">
-            <div className="flex items-center gap-2">
-              <FlaskConical className="size-4 text-primary" />
-              <p className="font-medium">{a.kind || 'Experiment'}</p>
+        {actions.map((a, i) => {
+          const copy = ACTION_COPY[a.kind] ?? {
+            label: 'Adjust the study',
+            to: '/strategy' as const,
+            cta: 'Open the rules',
+          }
+          return (
+            <div key={`${a.kind}-${i}`} className="rounded-md border p-4">
+              <div className="flex items-center gap-2">
+                <FlaskConical className="size-4 text-primary" />
+                <p className="font-medium">{copy.label}</p>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">{a.reason}</p>
+              <Button asChild className="mt-4" size="sm" variant="outline">
+                <Link to={copy.to}>{copy.cta}</Link>
+              </Button>
             </div>
-            <p className="mt-2 text-sm text-muted-foreground">{a.reason}</p>
-            <Button asChild className="mt-4" size="sm" variant="outline">
-              <Link to="/strategy" onClick={() => onStart(a.kind)}>
-                Set up experiment
-              </Link>
-            </Button>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </Evidence>
   ) : null
@@ -895,97 +955,184 @@ function RunComparison({
 }
 type Reason = { check: string; detail: string }
 
-function evidenceVerdict(details: Details) {
-  const trades = details.outOfSample?.trades ?? 0
-  const outcome = details.outOfSample?.expectancy?.pessimistic ?? 0
+const MIN_UNSEEN_SAMPLE = 30
+const STRONG_UNSEEN_SAMPLE = 100
 
-  // A strategy that never traded cannot fail any check — it produced no sample
-  // to weigh. Every robustness panel (unseen, triple-cost, nearby-settings)
-  // would read "worse than 1" purely because zero is not positive, which would
-  // accuse a strategy of losing money it never had a chance to. Report it as
-  // "no trades" with a single, honest reason instead of five invented ones.
+function evidenceVerdict(details: Details) {
+  // The verdict judges only the pooled walk-forward test windows. The full
+  // period is what the rules made, but it is the sample they were chosen on, so
+  // it can never be the reason to trust them.
+  const full = details.fullPeriod ?? details.outOfSample
+  const unseen = details.outOfSample
+  const fullTrades = full?.trades ?? 0
+  const trades = unseen?.trades ?? 0
+  const worst = unseen?.expectancy?.pessimistic ?? 0
+  const best = unseen?.expectancy?.optimistic ?? 0
+  const outcomeRange = `${formatUsdCents(worst, { sign: true })} to ${formatUsdCents(best, { sign: true })} per trade`
+
+  if (fullTrades === 0) {
+    // Distinguish "never signalled" from "signalled but could not be sized".
+    // Both end at zero trades, but only one is a fixable account setting.
+    const unfilled = details.unfilled ?? 0
+    const reasons: Reason[] = [
+      {
+        check: 'Sample size',
+        detail:
+          '0 trades across the full period — a rule must actually trade before a backtest can say anything about it',
+      },
+    ]
+    if (unfilled > 0) {
+      reasons.push({
+        check: 'Unfilled orders',
+        detail: `${unfilled} entry signal${unfilled === 1 ? '' : 's'} placed a resting order the next bar never reached`,
+      })
+    } else {
+      reasons.push({
+        check: 'Position size',
+        detail:
+          'If signals did fire, check the account size and risk — on a small balance a wide stop can round the position down to nothing',
+      })
+    }
+    return {
+      label: 'Not testable',
+      title: 'The rules opened no positions on the tested history',
+      body: 'Zero fills means there is nothing to judge a rule on — no profit, no loss, and no evidence either way. The strategy either produced no entry signals on this sample or never filled one. The “Every detail” tab shows the conditions that almost fired. If you expected trades, check the account size and risk on the trading-reality step first.',
+      tone: 'warning' as const,
+      reasons,
+    }
+  }
+
   if (trades === 0) {
     return {
-      label: 'No trades',
-      title: 'The rules opened no positions on the tested history',
-      body: 'Zero fills means there is nothing to judge a rule on — no profit, no loss, and no evidence either way. The strategy either produced no entry signals on this sample or never filled one. The “Every detail” tab shows the conditions that almost fired.',
+      label: 'Too little evidence',
+      title: 'The unseen windows produced no trades',
+      body: `The rules took ${fullTrades} trade${fullTrades === 1 ? '' : 's'} over the full period, but none entered inside a walk-forward test window. There is no held-out sample to judge, and the full-period result cannot stand in for one. A longer period gives the test windows room to trade.`,
       tone: 'warning' as const,
       reasons: [
         {
-          check: 'Sample size',
-          detail:
-            '0 trades — a rule must actually trade before a backtest can say anything about it',
+          check: 'Unseen sample',
+          detail: `0 of ${fullTrades} trades entered a test window`,
         },
       ],
     }
   }
 
-  const unseenFails = details.walkForward.some(
+  const failingWindows = details.walkForward.filter(
     (window) => (window.outOfSample?.expectancy?.pessimistic ?? 0) <= 0,
   )
   const threeCost = details.costStress.find((point) => point.multiplier === 3)
   const costFails =
     !threeCost || (threeCost.metrics?.expectancy?.pessimistic ?? 0) <= 0
-  const sensitivityFails =
-    !details.sensitivity ||
-    details.sensitivity.cells.length === 0 ||
-    details.sensitivity.cells.some(
+  const failingCells =
+    details.sensitivity?.cells.filter(
       (cell) => (cell.metrics?.expectancy?.pessimistic ?? 0) <= 0,
-    )
-  const outcomeFails = outcome <= 0
-  const basePositive = !outcomeFails && trades >= 100
-  if (basePositive && !unseenFails && !costFails && !sensitivityFails)
+    ) ?? []
+  const sensitivityFails =
+    !details.sensitivity?.cells.length || failingCells.length > 0
+  const missingChecks = [
+    !details.walkForward.length ? 'walk-forward windows' : null,
+    !details.costStress.length ? 'cost stress' : null,
+    !details.sensitivity?.cells.length ? 'nearby settings' : null,
+  ].filter((name): name is string => name !== null)
+
+  if (trades < MIN_UNSEEN_SAMPLE) {
     return {
-      label: 'Held up',
-      title: 'Every check we ran still came out positive',
-      body: 'It stayed profitable on history it had never seen, at triple the trading costs, and at the settings either side of yours. That is the strongest thing this tool can say, and it still only means the rule has not been disproven — not that it will work.',
-      tone: 'default' as const,
-      reasons: [] as Reason[],
-    }
-  if (
-    !details.walkForward.length ||
-    !details.costStress.length ||
-    !details.sensitivity?.cells.length
-  )
-    return {
-      label: 'Not enough to judge',
-      title: 'Some of the checks are missing for this run',
-      body: 'Answering “does this hold up?” needs the unseen-period, triple-cost and nearby-settings results, and at least one of them was not kept. The tab below shows which.',
+      label: 'Too little evidence',
+      title: `Only ${trades} unseen trade${trades === 1 ? '' : 's'} to judge`,
+      body: `The rule was tested on ${trades} trade${trades === 1 ? '' : 's'} it had not seen. That is too few to separate skill from luck, so this verdict is about the evidence rather than the strategy. The full period took ${fullTrades}. A longer history, or a rule that trades more often, would produce a sample worth judging.`,
       tone: 'warning' as const,
-      reasons: [] as Reason[],
+      reasons: [
+        {
+          check: 'Unseen sample',
+          detail: `${trades} trade${trades === 1 ? '' : 's'} — at least ${MIN_UNSEEN_SAMPLE} are needed before a result can be called promising`,
+        },
+        { check: 'Unseen outcome', detail: outcomeRange },
+      ],
     }
-  // Naming the specific check that failed is the difference between a verdict
-  // a user can act on and one they can only feel bad about.
-  const reasons = [
-    trades < 100
-      ? { check: 'Sample size', detail: `Only ${trades} trades to judge it on` }
-      : null,
-    outcomeFails
-      ? { check: 'Tested period', detail: 'It lost money on the tested period' }
-      : null,
-    unseenFails
-      ? {
-          check: 'Unseen history',
-          detail: 'It lost money on history it had not seen',
-        }
-      : null,
-    costFails
-      ? {
-          check: 'Cost stress',
-          detail: 'It stopped working at triple the trading costs',
-        }
-      : null,
-    sensitivityFails
-      ? {
-          check: 'Nearby settings',
-          detail: 'A nearby setting turns it into a loser',
-        }
-      : null,
-  ].filter((reason): reason is Reason => reason !== null)
+  }
+
+  if (worst <= 0) {
+    return {
+      label: 'Unprofitable',
+      title: 'The unseen sample lost money in the worst case',
+      body: `Across ${trades} unseen trades the pessimistic outcome was ${formatUsdCents(worst, { sign: true })} per trade, against ${formatUsdCents(best, { sign: true })} in the best case. The full period made ${moneyBounded(full?.expectancy)} per trade, but that is the sample the rules were built on. A rule that needs the good case to break even has no margin for real fills.`,
+      tone: 'warning' as const,
+      reasons: [
+        { check: 'Unseen outcome', detail: outcomeRange },
+        {
+          check: 'Full period',
+          detail: `${moneyBounded(full?.expectancy)} per trade over ${fullTrades} trade${fullTrades === 1 ? '' : 's'} — context, not evidence`,
+        },
+      ],
+    }
+  }
+
+  const reasons: Reason[] = []
+  if (failingWindows.length) {
+    const first = failingWindows[0]
+    const range = windowRange(
+      first.testFromMs,
+      first.testToMs,
+      first.testFrom,
+      first.testTo,
+    )
+    reasons.push({
+      check: 'Unseen windows',
+      detail: `${failingWindows.length} of ${details.walkForward.length} test windows lost money in the worst case. The first, ${range}, ranged ${moneyBounded(first.outOfSample?.expectancy)} per trade`,
+    })
+  }
+  if (costFails) {
+    reasons.push({
+      check: 'Cost stress',
+      detail: threeCost
+        ? `At three times your costs the worst case was ${moneyBounded(threeCost.metrics?.expectancy)} per trade`
+        : 'The triple-cost check was not kept for this run',
+    })
+  }
+  if (sensitivityFails) {
+    reasons.push({
+      check: 'Nearby settings',
+      detail: failingCells.length
+        ? `${failingCells.length} of ${details.sensitivity?.cells.length ?? 0} nearby cost and risk settings lose money in the worst case`
+        : 'The nearby-settings check was not kept for this run',
+    })
+  }
+  if (missingChecks.length) {
+    reasons.push({
+      check: 'Checks not kept',
+      detail: `Missing: ${missingChecks.join(', ')}`,
+    })
+  }
+
+  if (reasons.length === 0) {
+    if (trades < STRONG_UNSEEN_SAMPLE) {
+      return {
+        label: 'Promising',
+        title: 'Positive on the unseen sample, with a caveat on size',
+        body: `The unseen sample stayed positive in the worst case at ${formatUsdCents(worst, { sign: true })} per trade over ${trades} trades. It also survived triple costs and the settings either side of yours. That is encouraging, not proof: ${STRONG_UNSEEN_SAMPLE}+ unseen trades are needed before this can be called strong evidence.`,
+        tone: 'default' as const,
+        reasons: [
+          { check: 'Unseen outcome', detail: outcomeRange },
+          {
+            check: 'Unseen sample',
+            detail: `${trades} trades — promising, below the ${STRONG_UNSEEN_SAMPLE} needed for strong evidence`,
+          },
+        ],
+      }
+    }
+    return {
+      label: 'Strong evidence',
+      title: 'Every check we ran still came out positive',
+      body: `It stayed profitable across ${trades} unseen trades, at triple the trading costs, and at the settings either side of yours. That is the strongest thing this tool can say, and it still only means the rule has not been disproven — not that it will work.`,
+      tone: 'default' as const,
+      reasons: [{ check: 'Unseen outcome', detail: outcomeRange }],
+    }
+  }
+
   return {
-    label: 'Not there yet',
+    label: 'Fragile',
     title: `${reasons.length} ${reasons.length === 1 ? 'check' : 'checks'} flagged a problem`,
-    body: 'The summary alone is not enough to rely on this result. “Does it hold up?” explains each check and shows the evidence.',
+    body: `The unseen sample was positive at ${formatUsdCents(worst, { sign: true })} per trade in the worst case, but it did not survive every check. “Does it hold up?” shows each one with the numbers behind it.`,
     tone: 'warning' as const,
     reasons,
   }
@@ -1015,7 +1162,7 @@ function TradeInspector({
       title="Every trade"
       description={
         available
-          ? 'Each trade the rules took. Ambiguous exits are marked as excluded, so they cannot distort the reported result. Prices are shown in the source’s price points.'
+          ? 'Each trade the rules took. When a bar touched both the stop and the target, both outcomes are shown as a worst-to-best range instead of a guess. Prices are shown in the source’s price points.'
           : 'Your local history limit dropped the individual trades for this run, so they cannot be listed.'
       }
     >
@@ -1043,9 +1190,8 @@ function TradeInspector({
                   <TableRow key={`${t.entryTimeMs}-${i}`}>
                     <TableCell>{date(t.entryTimeMs)}</TableCell>
                     <TableCell>
-                      {t.ambiguous ? 'Unclear' : date(t.exitTimeMsPessimistic)}
-                      {!t.ambiguous &&
-                      t.exitTimeMsPessimistic !== t.exitTimeMsOptimistic
+                      {date(t.exitTimeMsPessimistic)}
+                      {t.exitTimeMsPessimistic !== t.exitTimeMsOptimistic
                         ? ` – ${date(t.exitTimeMsOptimistic)}`
                         : ''}
                     </TableCell>
@@ -1053,22 +1199,17 @@ function TradeInspector({
                       {t.side}
                       {t.ambiguous ? (
                         <Badge className="ml-2" variant="warning">
-                          ambiguous
+                          worst / best
                         </Badge>
                       ) : null}
                     </TableCell>
                     <TableCell>
-                      {t.ambiguous
-                        ? '—'
-                        : `${t.entryPrice.toLocaleString()} / ${t.exitPricePessimistic.toLocaleString()}`}
-                      {!t.ambiguous &&
-                      t.exitPricePessimistic !== t.exitPriceOptimistic
+                      {`${t.entryPrice.toLocaleString()} / ${t.exitPricePessimistic.toLocaleString()}`}
+                      {t.exitPricePessimistic !== t.exitPriceOptimistic
                         ? ` – ${t.exitPriceOptimistic.toLocaleString()}`
                         : ''}
                     </TableCell>
-                    <TableCell>
-                      {t.ambiguous ? 'Excluded' : moneyResult(t.netPnl)}
-                    </TableCell>
+                    <TableCell>{moneyResult(t.netPnl)}</TableCell>
                     <TableCell>{moneyBounded(t.costs)}</TableCell>
                   </TableRow>
                 ))}
@@ -1172,7 +1313,7 @@ function PeriodTable({
   return (
     <Evidence
       title={title}
-      description="Net result after costs, excluding ambiguous exits. One dominant period is worth noticing — it means the whole result rests on a single stretch of history."
+      description="Net result after costs. Where an exit was ambiguous, the range shows the stop-first and target-first outcomes. One dominant period is worth noticing — it means the whole result rests on a single stretch of history."
     >
       <Table>
         <TableHeader>

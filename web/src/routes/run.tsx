@@ -11,6 +11,7 @@ import {
 import { PageHeader } from '@/components/page-header'
 import { ConstraintsBanner } from '@/components/constraints-banner'
 import { EquitySparkline } from '@/components/equity-sparkline'
+import { TestWindow } from '@/components/test-window'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -24,7 +25,7 @@ import { Progress } from '@/components/ui/progress'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { dataApi, studyApi, rpcErrorMessage } from '@/lib/rpc'
 import { dataKey, hasReadyData, session, useSession } from '@/lib/store'
-import { toJsonBytes, formatBytes, formatMs, formatUsdCents } from '@/lib/codec'
+import { toJsonBytes, formatBytes, formatUsdCents } from '@/lib/codec'
 import { parseStrategy, toEngineStrategy } from '@/lib/strategy'
 import { isTimeframeSupportedForInstrument } from '@/lib/constraints'
 import { DataReadiness } from '@/gen/assay/v1/service_pb'
@@ -244,16 +245,19 @@ function RunScreen() {
       return
     }
     let doc: Record<string, unknown>
+    const parsed = parseStrategy(s.strategyText)
+    if (!parsed) {
+      // Parse failures and semantic failures are different problems with
+      // different fixes. Folding the second into "isn't valid JSON" tells the
+      // user their syntax is broken when it is not.
+      setError('Strategy document isn’t valid JSON.')
+      setPhase('error')
+      return
+    }
     try {
-      const parsed = parseStrategy(s.strategyText)
-      if (!parsed) throw new Error('Strategy document isn’t valid JSON.')
       doc = toEngineStrategy(parsed)
     } catch (err) {
-      setError(
-        `Strategy document isn’t valid JSON: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      )
+      setError(err instanceof Error ? err.message : String(err))
       setPhase('error')
       return
     }
@@ -304,7 +308,7 @@ function RunScreen() {
           }
           case 'summary': {
             const sum = update.payload.value
-            const parsed: Summary = {
+            const nextSummary: Summary = {
               trades: sum.trades,
               unresolved: sum.unresolved,
               error: sum.error,
@@ -318,7 +322,7 @@ function RunScreen() {
               profitFactor: sum.profitFactor,
               errorCode: sum.errorCode,
             }
-            setSummary(parsed)
+            setSummary(nextSummary)
             // Recording the run is what increments the disclosed trial count.
             if (sum.runId) session.recordRun(sum.runId)
             if (sum.error || sum.errorCode) {
@@ -371,13 +375,15 @@ function RunScreen() {
   return (
     <div className="page-form">
       <PageHeader
-        step={5}
-        title="Run"
-        description="Run the validated strategy using the prepared local dataset."
+        step={4}
+        title="Test"
+        description="Choose the period, prepare the local history, and run the validated rules. Nothing leaves this machine."
       />
 
+      <TestWindow />
+
       <div className="grid gap-6 lg:grid-cols-[minmax(0,320px)_1fr]">
-        <Card>
+        <Card id="ready-check">
           <CardHeader className="pb-3">
             <CardTitle>Ready check</CardTitle>
             <CardDescription>
@@ -385,22 +391,6 @@ function RunScreen() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-md border border-border bg-muted/30 p-3">
-              <div className="flex flex-wrap gap-2">
-                {s.symbol ? (
-                  <Badge variant="secondary">{s.symbol}</Badge>
-                ) : null}
-                {s.timeframe ? (
-                  <Badge variant="outline">{s.timeframe}</Badge>
-                ) : null}
-              </div>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {s.fromMs !== null && s.toMs !== null
-                  ? `${formatMs(s.fromMs)} to ${formatMs(s.toMs)}`
-                  : 'Choose a date window on Data.'}
-              </p>
-            </div>
-
             <PreflightChecklist
               market={!!s.symbol && !!s.timeframe && timeframeIsSupported}
               data={dataReady}
@@ -418,23 +408,33 @@ function RunScreen() {
               onValidateStrategy={() => void validateStrategy()}
             />
 
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <Button
                 variant="outline"
                 asChild
-                disabled={phase === 'streaming'}
+                className="w-full"
+                aria-disabled={phase === 'streaming'}
               >
-                <Link to="/data">Back to history</Link>
+                {phase === 'streaming' ? (
+                  <span>Back to trading reality</span>
+                ) : (
+                  <Link to="/reality">Back to trading reality</Link>
+                )}
               </Button>
               <Button
                 onClick={() => void run()}
                 disabled={!canRun || phase === 'streaming'}
+                className="w-full"
               >
                 <Play className="size-4" />
                 {phase === 'streaming' ? 'Running…' : 'Run backtest'}
               </Button>
               {phase === 'streaming' ? (
-                <Button variant="outline" onClick={cancel}>
+                <Button
+                  variant="outline"
+                  onClick={cancel}
+                  className="col-span-2 w-full"
+                >
                   Cancel
                 </Button>
               ) : null}
@@ -444,11 +444,14 @@ function RunScreen() {
                 {!s.realityConfirmed
                   ? 'Review the trading reality assumptions before running.'
                   : !dataReady
-                    ? 'Prepare this exact dataset on Data before running.'
+                    ? s.dataStatus?.readiness === 'missing' ||
+                      s.dataStatus?.readiness === 'partial'
+                      ? 'Prepare this exact dataset before running.'
+                      : 'Check the local data for this window before running.'
                     : !strategyReady
                       ? 'Validate the strategy for the current market and timeframe before running.'
                       : !timeframeIsSupported
-                        ? 'The selected timeframe is not available for this data source. Choose D1 or W1 on Data.'
+                        ? 'The selected timeframe is not available for this data source. Choose D1 or W1 in the rules step.'
                         : s.fromMs !== null &&
                             s.toMs !== null &&
                             s.fromMs >= s.toMs
@@ -611,9 +614,9 @@ function SummaryCard({ summary }: { summary: Summary }) {
               <p>{summary.error}</p>
               {summary.errorCode === 'DATA_MISSING' ||
               summary.errorCode === 'DATA_PARTIAL' ? (
-                <Link to="/data" className="font-medium underline">
-                  Prepare data
-                </Link>
+                <a href="#ready-check" className="font-medium underline">
+                  Check the data
+                </a>
               ) : null}
               {summary.error.startsWith('Strategy needs attention:') ? (
                 <Link to="/strategy" className="font-medium underline">
@@ -750,18 +753,18 @@ function PreflightChecklist({
   onPrepareData: () => void
   onValidateStrategy: () => void
 }) {
-  const dataAction =
-    dataStatus === 'missing' || dataStatus === 'partial'
-      ? {
-          label: fixing === 'data' ? 'Preparing…' : 'Prepare data',
-          icon: Download,
-          onClick: onPrepareData,
-        }
-      : {
-          label: fixing === 'data' ? 'Checking…' : 'Check data',
-          icon: RefreshCw,
-          onClick: onCheckData,
-        }
+  const dataMissing = dataStatus === 'missing' || dataStatus === 'partial'
+  const dataAction = dataMissing
+    ? {
+        label: fixing === 'data' ? 'Preparing…' : 'Prepare data',
+        icon: Download,
+        onClick: onPrepareData,
+      }
+    : {
+        label: fixing === 'data' ? 'Checking…' : 'Check data',
+        icon: RefreshCw,
+        onClick: onCheckData,
+      }
   const items: Array<{
     label: string
     ok: boolean
@@ -780,13 +783,25 @@ function PreflightChecklist({
       label: 'Choose market and dates',
       ok: market && window,
       action: (
-        <Button asChild size="sm" variant="outline">
-          <Link to="/data">Edit setup</Link>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            document
+              .getElementById('test-window')
+              ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }
+        >
+          Edit window
         </Button>
       ),
     },
     {
-      label: data ? 'Data ready' : 'Prepare local data',
+      label: data
+        ? 'Data ready'
+        : dataMissing
+          ? 'Prepare local data'
+          : 'Check the local data',
       ok: data,
       action: (
         <Button

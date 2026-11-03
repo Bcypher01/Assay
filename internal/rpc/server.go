@@ -281,8 +281,21 @@ func onboardingHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	plan := onboarding.Default()
+	for _, definition := range ir.PopularTemplates() {
+		if definition.ID != plan.TemplateID {
+			continue
+		}
+		encoded, err := json.Marshal(definition.New())
+		if err != nil {
+			http.Error(w, "encode onboarding strategy", http.StatusInternalServerError)
+			return
+		}
+		plan.Strategy = encoded
+		break
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_ = json.NewEncoder(w).Encode(onboarding.Default())
+	_ = json.NewEncoder(w).Encode(plan)
 }
 
 func instrumentsFromRegistry(registry *instrument.Registry) []*assayv1.Instrument {
@@ -546,7 +559,7 @@ func (s *Server) GetRun(ctx context.Context, req *connect.Request[assayv1.GetRun
 		var run *runstore.Run
 		run, err = s.RunStore.Get(ctx, runstore.RunID(req.Msg.Hash))
 		if run != nil {
-			out = &assayv1.RunSummary{Trades: uint32(run.RunSummary.Trades)}
+			out = runSummaryMessage(run)
 		}
 	}
 	if err != nil {
@@ -556,6 +569,25 @@ func (s *Server) GetRun(ctx context.Context, req *connect.Request[assayv1.GetRun
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("run %q not found", req.Msg.Hash))
 	}
 	return connect.NewResponse(out), nil
+}
+
+// runSummaryMessage reconstructs the same terminal summary a client received
+// when the run finished. GetRun is used by history screens after a restart, so
+// returning only the trade count would make wins, losses, P&L and expectancy
+// silently read as zero.
+func runSummaryMessage(run *runstore.Run) *assayv1.RunSummary {
+	m := run.Result.OutOfSample
+	return &assayv1.RunSummary{
+		Trades:       uint32(run.RunSummary.Trades),
+		Unresolved:   uint32(run.Result.Unresolved),
+		Unfilled:     uint32(run.Result.Unfilled),
+		RunId:        string(run.ID),
+		Wins:         uint32(m.Wins),
+		Losses:       uint32(m.Losses),
+		NetPnl:       int64(m.FinalEquity.Pessimistic) - run.Study.Assumptions.InitialEquity,
+		Expectancy:   m.Expectancy.Pessimistic,
+		ProfitFactor: m.ProfitFactor.Pessimistic,
+	}
 }
 
 // GetDetails exposes the persisted evidence for a completed run while keeping
@@ -572,12 +604,19 @@ func (s *Server) GetDetails(ctx context.Context, req *connect.Request[assayv1.Ge
 	if err != nil {
 		return nil, asConnectError(err)
 	}
-	d := &assayv1.RunDetails{RunId: string(run.ID), StrategyHash: run.StrategyHash, Snapshot: run.Snapshot, Name: run.Name, Period: run.Scope.Period, Instruments: append([]string(nil), run.Scope.Instruments...), OutOfSample: resultMetrics(run.Result.OutOfSample), InSample: resultMetrics(run.Result.InSample), Trials: uint32(trials), TradeListPresent: run.TradeListPresent, Assumptions: assumptionsMessage(run.Study.Assumptions), Unresolved: uint32(run.Result.Unresolved), Unfilled: uint32(run.Result.Unfilled), Yearly: periodMetrics(run.Trades, "2006"), Monthly: periodMetrics(run.Trades, "2006-01")}
+	fullPeriod := run.Result.FullPeriod
+	if fullPeriod == (analytics.Metrics{}) {
+		// Runs saved before FullPeriod existed stored the whole-window result in
+		// OutOfSample. Reading it here keeps old results readable without
+		// pretending their out-of-sample column was ever a held-out sample.
+		fullPeriod = run.Result.OutOfSample
+	}
+	d := &assayv1.RunDetails{RunId: string(run.ID), StrategyHash: run.StrategyHash, Snapshot: run.Snapshot, Name: run.Name, Period: run.Scope.Period, Instruments: append([]string(nil), run.Scope.Instruments...), FullPeriod: resultMetrics(fullPeriod), OutOfSample: resultMetrics(run.Result.OutOfSample), InSample: resultMetrics(run.Result.InSample), Trials: uint32(trials), TradeListPresent: run.TradeListPresent, Assumptions: assumptionsMessage(run.Study.Assumptions), Unresolved: uint32(run.Result.Unresolved), Unfilled: uint32(run.Result.Unfilled), Yearly: periodMetrics(run.Trades, "2006"), Monthly: periodMetrics(run.Trades, "2006-01")}
 	for _, miss := range run.Result.NearMisses {
 		d.NearMisses = append(d.NearMisses, &assayv1.NearMissSummary{Condition: miss.Condition, Count: uint32(miss.Count)})
 	}
 	for _, window := range run.Result.WalkForward {
-		d.WalkForward = append(d.WalkForward, &assayv1.WalkForwardWindow{TrainFrom: uint32(window.Window.TrainFrom), TrainTo: uint32(window.Window.TrainTo), TestFrom: uint32(window.Window.TestFrom), TestTo: uint32(window.Window.TestTo), OutOfSample: resultMetrics(window.Metrics)})
+		d.WalkForward = append(d.WalkForward, &assayv1.WalkForwardWindow{TrainFrom: uint32(window.Window.TrainFrom), TrainTo: uint32(window.Window.TrainTo), TestFrom: uint32(window.Window.TestFrom), TestTo: uint32(window.Window.TestTo), OutOfSample: resultMetrics(window.Metrics), TrainFromMs: window.TrainFromMs, TrainToMs: window.TrainToMs, TestFromMs: window.TestFromMs, TestToMs: window.TestToMs})
 	}
 	for _, point := range run.Result.CostStress {
 		d.CostStress = append(d.CostStress, &assayv1.CostStressPoint{Multiplier: uint32(point.Multiplier), Metrics: resultMetrics(point.Metrics)})

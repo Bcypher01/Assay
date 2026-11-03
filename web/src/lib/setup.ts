@@ -205,6 +205,11 @@ export function friendlySetupError(
   const raw = error.message.toLowerCase()
   const status = error instanceof SetupError ? error.status : undefined
 
+  if (raw.includes('timed out') || raw.includes('took too long')) {
+    return operation === 'prepare'
+      ? 'Preparing this range is taking too long, so it was stopped. The market may not have this history published; try a shorter range or a different market.'
+      : 'That request took too long and was stopped. Try again in a moment.'
+  }
   if (
     status === 0 ||
     raw.includes('failed to fetch') ||
@@ -271,19 +276,36 @@ export function friendlySetupError(
  * the server resolves to the same path without a proxy. Both work; neither
  * needs a special case here.
  */
-async function post<T>(path: string, body: unknown): Promise<T> {
+async function post<T>(
+  path: string,
+  body: unknown,
+  timeoutMs?: number,
+): Promise<T> {
+  // A prepare request can legitimately take a while on a cold cache, but it
+  // must not hang forever: without a bound the chart sits on "Preparing…" with
+  // every tool disabled and no way to recover.
+  const controller = timeoutMs ? new AbortController() : undefined
+  const timer = timeoutMs
+    ? window.setTimeout(() => controller?.abort(), timeoutMs)
+    : undefined
   let response: Response
   try {
     response = await fetch(`${assayHttpBaseUrl}${path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
+      signal: controller?.signal,
     })
   } catch (cause) {
+    if (controller?.signal.aborted) {
+      throw new SetupError('Preparing the chart timed out.', 0)
+    }
     throw new SetupError(
       `Could not reach the local Assay server. ${String(cause)}`,
       0,
     )
+  } finally {
+    if (timer !== undefined) window.clearTimeout(timer)
   }
   const payload: unknown = await response.json().catch(() => null)
   if (!response.ok) {
@@ -310,7 +332,13 @@ export interface ChartRequest {
 }
 
 export function fetchSetupChart(request: ChartRequest): Promise<SetupChart> {
-  return post<SetupChart>('/api/setup/chart', request)
+  // Reads from the local cache should be quick and are not timed; preparing a
+  // cold range is bounded so it can fail visibly instead of hanging.
+  return post<SetupChart>(
+    '/api/setup/chart',
+    request,
+    request.prepare ? 120_000 : undefined,
+  )
 }
 
 export function previewSetup(

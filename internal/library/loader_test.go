@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"reflect"
 	"testing"
 	"time"
 
@@ -468,6 +469,79 @@ func TestHashMismatchRetriesOnceThenFailsTyped(t *testing.T) {
 	}
 }
 
+func TestEnsureParallelMatchesSerial(t *testing.T) {
+	ctx := context.Background()
+	published := t.TempDir()
+	for _, m := range []string{"2024-01", "2024-02", "2024-03"} {
+		publishFixture(t, ctx, published, "BINANCE:BTCUSDT", core.TFM15, m)
+	}
+
+	load := func(workers int) ([]store.Manifest, string) {
+		cache := store.NewLocalStore(t.TempDir())
+		loader := New(cache, pipeline.NewLocalPublisher(published), nil)
+		loader.Workers = workers
+		req := Request{
+			Symbols: []string{"BINANCE:BTCUSDT"},
+			TFs:     []core.TF{core.TFM15},
+			From:    core.MustParseTime("2024-01-01T00:00:00Z"),
+			To:      core.MustParseTime("2024-04-01T00:00:00Z"),
+		}
+		if err := loader.Ensure(ctx, req, nil); err != nil {
+			t.Fatalf("ensure workers=%d: %v", workers, err)
+		}
+		_, manifests, err := cache.Load(ctx, "BINANCE:BTCUSDT", core.TFM15, core.MinTime, core.MaxTime)
+		if err != nil {
+			t.Fatalf("load: %v", err)
+		}
+		return manifests, store.SnapshotHash(manifests)
+	}
+
+	serialManifests, serialSnapshot := load(1)
+	parallelManifests, parallelSnapshot := load(4)
+	if len(serialManifests) != 3 {
+		t.Fatalf("serial prepared %d months, want 3", len(serialManifests))
+	}
+	if !reflect.DeepEqual(serialManifests, parallelManifests) {
+		t.Fatalf("parallel manifests differ:\n serial=%+v\n parallel=%+v", serialManifests, parallelManifests)
+	}
+	if serialSnapshot != parallelSnapshot {
+		t.Fatalf("snapshot hash differs: serial=%s parallel=%s", serialSnapshot, parallelSnapshot)
+	}
+}
+
+func TestEnsureParallelProgressIsMonotonic(t *testing.T) {
+	ctx := context.Background()
+	published := t.TempDir()
+	for _, m := range []string{"2024-01", "2024-02", "2024-03"} {
+		publishFixture(t, ctx, published, "BINANCE:BTCUSDT", core.TFM15, m)
+	}
+	cache := store.NewLocalStore(t.TempDir())
+	loader := New(cache, pipeline.NewLocalPublisher(published), nil)
+	loader.Workers = 4
+	req := Request{
+		Symbols: []string{"BINANCE:BTCUSDT"},
+		TFs:     []core.TF{core.TFM15},
+		From:    core.MustParseTime("2024-01-01T00:00:00Z"),
+		To:      core.MustParseTime("2024-04-01T00:00:00Z"),
+	}
+	var updates []Progress
+	if err := loader.Ensure(ctx, req, func(p Progress) { updates = append(updates, p) }); err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if len(updates) == 0 {
+		t.Fatal("expected progress callbacks")
+	}
+	for i := 1; i < len(updates); i++ {
+		if updates[i].Percent < updates[i-1].Percent {
+			t.Fatalf("progress went backwards: %+v then %+v", updates[i-1], updates[i])
+		}
+	}
+	last := updates[len(updates)-1]
+	if last.Percent != 100 || last.Stage != "preparing data" {
+		t.Fatalf("final progress = %+v, want 100%% preparing data", last)
+	}
+}
+
 type countingObjects struct {
 	ObjectStore
 	heads int
@@ -605,4 +679,64 @@ func assertSeriesEqual(t *testing.T, want, got *core.Series) {
 				want.Time[i], want.Open[i], want.High[i], want.Low[i], want.Close[i], want.Volume[i])
 		}
 	}
+}
+
+type recordingRangeObjects struct {
+	ObjectStore
+	ranges     int
+	lastOffset int64
+}
+
+func (o *recordingRangeObjects) GetRange(ctx context.Context, key string, offset int64) (io.ReadCloser, bool, bool, error) {
+	rr, ok := o.ObjectStore.(RangeReader)
+	if !ok {
+		return nil, false, false, errors.New("wrapped store does not support ranges")
+	}
+	o.ranges++
+	o.lastOffset = offset
+	return rr.GetRange(ctx, key, offset)
+}
+
+func TestEnsureResumesInterruptedDownload(t *testing.T) {
+	ctx := context.Background()
+	published := t.TempDir()
+	want := publishFixture(t, ctx, published, "BINANCE:BTCUSDT", core.TFM15, "2024-01")
+	pub := pipeline.NewLocalPublisher(published)
+	rc, ok, err := pub.Get(ctx, pipeline.ObjectKey("BINANCE:BTCUSDT", core.TFM15, "2024-01"))
+	if err != nil || !ok {
+		t.Fatalf("read published: ok=%v err=%v", ok, err)
+	}
+	data, err := io.ReadAll(rc)
+	rc.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	half := len(data) / 2
+	cache := store.NewLocalStore(t.TempDir())
+	if _, err := cache.AppendPartial(ctx, "BINANCE:BTCUSDT", core.TFM15, "2024-01", bytes.NewReader(data[:half])); err != nil {
+		t.Fatalf("seed partial: %v", err)
+	}
+
+	objects := &recordingRangeObjects{ObjectStore: pub}
+	loader := New(cache, objects, nil)
+	req := Request{
+		Symbols: []string{"BINANCE:BTCUSDT"},
+		TFs:     []core.TF{core.TFM15},
+		From:    core.MustParseTime("2024-01-01T00:00:00Z"),
+		To:      core.MustParseTime("2024-02-01T00:00:00Z"),
+	}
+	if err := loader.Ensure(ctx, req, nil); err != nil {
+		t.Fatalf("ensure resume: %v", err)
+	}
+	if objects.ranges != 1 || objects.lastOffset != int64(half) {
+		t.Fatalf("ranges=%d offset=%d, want 1 range from %d", objects.ranges, objects.lastOffset, half)
+	}
+	if got := cache.PartialSize("BINANCE:BTCUSDT", core.TFM15, "2024-01"); got != 0 {
+		t.Fatalf("partial not cleared after commit: %d bytes", got)
+	}
+	got, _, err := loader.Load(ctx, "BINANCE:BTCUSDT", core.TFM15, core.MinTime, core.MaxTime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSeriesEqual(t, want, got)
 }

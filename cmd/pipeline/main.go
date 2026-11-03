@@ -38,13 +38,18 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	symbols, err := pipelineSymbols(reg, *symbolsFlag)
+	requested, err := pipelineSymbols(reg, *symbolsFlag)
 	if err != nil {
 		log.Fatal(err)
 	}
-	if *publisherKind == "r2" && hasVenue(reg, symbols, "dukascopy") &&
-		env("ASSAY_DUKASCOPY_REDISTRIBUTION_AUTHORIZED", "false") != "true" {
-		log.Fatal("publishing Dukascopy candles to R2 requires confirmed redistribution rights and ASSAY_DUKASCOPY_REDISTRIBUTION_AUTHORIZED=true")
+	symbols, withheld := publishableSymbols(reg, requested, *publisherKind,
+		env("ASSAY_DUKASCOPY_REDISTRIBUTION_AUTHORIZED", "false") == "true")
+	if len(withheld) > 0 {
+		log.Printf("withholding %d instrument(s) from the published library: %s — no confirmed redistribution rights, so clients fetch these directly from the venue",
+			len(withheld), strings.Join(withheld, ", "))
+	}
+	if len(symbols) == 0 {
+		log.Fatal("no instruments are licensed for publication; grant redistribution rights or choose a publishable venue")
 	}
 	tfs, err := parseTFs(*tfsFlag)
 	if err != nil {
@@ -98,7 +103,7 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-	fmt.Printf("published=%d skipped=%d\n", report.Published, report.Skipped)
+	fmt.Printf("published=%d skipped=%d withheld=%d\n", report.Published, report.Skipped, len(withheld))
 }
 
 func publisher(kind, localDir string) (pipeline.Publisher, error) {
@@ -139,14 +144,27 @@ func pipelineSymbols(reg *instrument.Registry, explicit string) ([]string, error
 	return out, nil
 }
 
-func hasVenue(reg *instrument.Registry, symbols []string, venueName string) bool {
+// publishableSymbols splits the requested instruments into those the operator
+// is licensed to publish to shared object storage and those withheld for
+// licensing reasons. The local filesystem publisher is a development tool, not
+// a distribution channel, so it publishes everything. Dukascopy FX is withheld
+// from R2 until redistribution rights are confirmed; a withheld instrument stays
+// available to clients through the direct-venue fallback, so smaller libraries
+// and unlicensed venues degrade to a slower path rather than an empty one.
+func publishableSymbols(reg *instrument.Registry, symbols []string, publisherKind string, dukascopyAuthorized bool) (publishable, withheld []string) {
 	for _, symbol := range symbols {
-		spec, err := reg.Get(symbol)
-		if err == nil && spec.Venue == venueName {
-			return true
+		if publisherKind == "r2" && !dukascopyAuthorized && isVenue(reg, symbol, "dukascopy") {
+			withheld = append(withheld, symbol)
+			continue
 		}
+		publishable = append(publishable, symbol)
 	}
-	return false
+	return publishable, withheld
+}
+
+func isVenue(reg *instrument.Registry, symbol, venueName string) bool {
+	spec, err := reg.Get(symbol)
+	return err == nil && spec.Venue == venueName
 }
 
 func parseTFs(s string) ([]core.TF, error) {

@@ -2,7 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArrowRight } from 'lucide-react'
 import { PageHeader } from '@/components/page-header'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -229,13 +229,15 @@ function DefineRules() {
         description="Each row is one decision. The reading underneath is generated from the same document the engine runs, so what it says and what gets tested cannot drift apart."
       />
 
-      {requestError ? (
+      {/* A missing entry condition already has its own empty state below. A
+          second red banner with the same message reads like two different
+          faults, and calling it a server failure would be wrong. */}
+      {requestError &&
+      !(conditionCount === 0 && /entry condition/i.test(requestError)) ? (
         <Alert variant="destructive">
           <AlertTriangle className="size-4" />
-          <AlertDescription>
-            Could not reach the local server to check these rules:{' '}
-            {requestError}
-          </AlertDescription>
+          <AlertTitle>These rules could not be checked</AlertTitle>
+          <AlertDescription>{requestError}</AlertDescription>
         </Alert>
       ) : null}
 
@@ -249,6 +251,7 @@ function DefineRules() {
           <section className="border-t border-border">
             <Row label="Market" error={errorFor('universe.symbols')}>
               <select
+                aria-label="Market"
                 className="h-9 border border-input bg-card pl-3 pr-9 text-sm"
                 value={symbol}
                 onChange={(e) => {
@@ -300,27 +303,34 @@ function DefineRules() {
                     select a market first
                   </span>
                 ) : (
-                  (LADDER_SLOTS as readonly LadderSlot[]).map((slot) => (
-                    <div
-                      key={slot}
-                      className="flex flex-wrap items-center gap-2"
-                    >
-                      <span className="w-14 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-                        {LADDER_LABELS[slot]}
-                      </span>
-                      <div className="flex flex-wrap gap-1">
-                        {timeframes.map((tf) => (
-                          <Choice
-                            key={tf}
-                            active={document.timeframes[slot] === tf}
-                            onClick={() => session.setSlotTimeframe(slot, tf)}
-                          >
-                            {displayTimeframe(tf)}
-                          </Choice>
-                        ))}
-                      </div>
-                    </div>
-                  ))
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {(LADDER_SLOTS as readonly LadderSlot[]).map((slot) => (
+                      <label key={slot} className="grid gap-1">
+                        <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                          {LADDER_LABELS[slot]}
+                        </span>
+                        <select
+                          aria-label={`${LADDER_LABELS[slot]} timeframe`}
+                          className="h-9 w-full border border-input bg-card pl-3 pr-9 text-sm"
+                          value={document.timeframes[slot] || ''}
+                          onChange={(e) =>
+                            session.setSlotTimeframe(slot, e.target.value)
+                          }
+                        >
+                          {document.timeframes[slot] ? null : (
+                            <option value="" disabled>
+                              Choose a timeframe…
+                            </option>
+                          )}
+                          {timeframes.map((tf) => (
+                            <option key={tf} value={tf}>
+                              {displayTimeframe(tf)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ))}
+                  </div>
                 )}
                 <span className="text-sm text-muted-foreground">
                   Context sits at the top and the trigger at the bottom; each
@@ -436,26 +446,31 @@ function DefineRules() {
           })}
 
           {conditionCount === 0 ? (
-            <Alert variant="destructive">
-              <AlertTriangle className="size-4" />
-              <AlertDescription>
-                <p>
-                  This document has no entry condition, so nothing would ever
-                  trigger.
-                </p>
-                <Button
-                  className="mt-3"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => update(withStarterEntry(document))}
-                >
-                  Add a 20/50 crossover entry
-                </Button>
-                <p className="mt-2 text-sm">
-                  Or start from a template if you want a different kind of rule.
-                </p>
-              </AlertDescription>
-            </Alert>
+            <section className="border border-dashed border-border bg-card/60 p-5">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="max-w-prose space-y-1">
+                  <h2 className="text-base font-semibold">
+                    No entry condition yet
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Without one the rules never trigger, so a backtest cannot
+                    say anything about them. Start with the 20/50 crossover, or
+                    pick a template and make it yours.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => update(withStarterEntry(document))}
+                  >
+                    Add a 20/50 crossover entry
+                  </Button>
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to="/">Browse templates</Link>
+                  </Button>
+                </div>
+              </div>
+            </section>
           ) : null}
 
           <LevelRuleForm
@@ -484,6 +499,7 @@ function DefineRules() {
             <div className="mt-2">
               <Row label="Stop" error={errorFor('risk.stop')}>
                 <DistanceInput
+                  label="Stop"
                   distance={document.risk.stop}
                   onChange={(stop) =>
                     update({ ...document, risk: { ...document.risk, stop } })
@@ -492,6 +508,7 @@ function DefineRules() {
               </Row>
               <Row label="Target" error={errorFor('risk.target')}>
                 <DistanceInput
+                  label="Target"
                   distance={document.risk.target}
                   onChange={(target) =>
                     update({ ...document, risk: { ...document.risk, target } })
@@ -649,12 +666,23 @@ function DefineRules() {
               ? `validated · ${s.validatedHash.slice(0, 10)}…`
               : 'waiting for the server to accept these rules'}
           </span>
-          <Button asChild disabled={!s.validatedHash}>
-            <Link to="/reality">
+          {s.validatedHash ? (
+            <Button asChild>
+              <Link to="/reality">
+                Continue to trading reality
+                <ArrowRight className="size-4" />
+              </Link>
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              disabled
+              title="Validate the rules before moving on"
+            >
               Continue to trading reality
               <ArrowRight className="size-4" />
-            </Link>
-          </Button>
+            </Button>
+          )}
         </div>
       </div>
     </div>
@@ -890,7 +918,8 @@ function ConditionRow({
               }}
             />
             <span className="font-mono text-[11px] text-muted-foreground">
-              {tf}-bars{heldFor ? ` · ${displayDuration(heldFor)}` : ''}
+              {tf}-bars
+              {heldFor ? ` · ${displayDuration(heldFor)}` : ' · optional'}
             </span>
           </label>
         </div>
@@ -937,6 +966,7 @@ function OrderInput({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <select
+        aria-label="Entry order"
         className="h-9 border border-input bg-card pl-3 pr-9 text-sm"
         value={type}
         onChange={(e) =>
@@ -1061,6 +1091,7 @@ function PartialInput({
         step="5"
         min="0"
         max="99"
+        aria-label="Partial close percentage"
         className="h-9 w-28 font-mono text-sm"
         value={percent || ''}
         placeholder="0"
@@ -1088,6 +1119,7 @@ function TrailInput({
         type="number"
         step="0.1"
         min="0"
+        aria-label="Trailing stop distance"
         className="h-9 w-28 font-mono text-sm"
         value={current.value || ''}
         placeholder="0"
@@ -1096,6 +1128,7 @@ function TrailInput({
         }
       />
       <select
+        aria-label="Trailing stop unit"
         className="h-9 border border-input bg-card pl-3 pr-9 text-sm"
         value={current.unit}
         onChange={(e) =>
@@ -1116,9 +1149,11 @@ function TrailInput({
 }
 
 function DistanceInput({
+  label,
   distance,
   onChange,
 }: {
+  label: string
   distance: StrategyDoc['risk']['stop']
   onChange: (next: StrategyDoc['risk']['stop']) => void
 }) {
@@ -1128,6 +1163,7 @@ function DistanceInput({
         type="number"
         step="0.1"
         min="0"
+        aria-label={`${label} distance`}
         className="h-9 w-28 font-mono text-sm"
         value={distance.value}
         onChange={(e) =>
@@ -1135,6 +1171,7 @@ function DistanceInput({
         }
       />
       <select
+        aria-label={`${label} unit`}
         className="h-9 border border-input bg-card pl-3 pr-9 text-sm"
         value={distance.unit}
         onChange={(e) =>

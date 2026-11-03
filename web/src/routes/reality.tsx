@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { ArrowRight, Info } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { PageHeader } from '@/components/page-header'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -96,6 +97,7 @@ function TradingReality() {
             <Input
               type="number"
               min="1"
+              aria-label="Starting balance (USD)"
               className="h-9 w-40 font-mono text-sm"
               value={centsToUsdInput(assumptions.initialEquity)}
               onChange={(e) => {
@@ -107,18 +109,21 @@ function TradingReality() {
               {formatUsdCents(assumptions.initialEquity)}
             </span>
           </Row>
-          <Row label="Risk per trade" hint="as a fraction: 0.01 is 1%">
-            <Input
-              type="number"
-              min="0"
-              max="1"
-              step="0.0025"
-              className="h-9 w-40 font-mono text-sm"
+          <Row label="Risk per trade" hint="percent of the account">
+            <RiskInput
               value={assumptions.riskPerTrade}
-              onChange={(e) => update({ riskPerTrade: Number(e.target.value) })}
+              onChange={(riskPerTrade) => update({ riskPerTrade })}
             />
             <span className="row-assist">
-              {(assumptions.riskPerTrade * 100).toFixed(2)}% of equity
+              {formatUsdCents(
+                BigInt(
+                  Math.round(
+                    Number(assumptions.initialEquity) *
+                      assumptions.riskPerTrade,
+                  ),
+                ),
+              )}{' '}
+              at risk on the first trade
             </span>
           </Row>
           <Row
@@ -134,6 +139,7 @@ function TradingReality() {
               min="0"
               step="0.01"
               disabled={assumptions.riskPerTrade > 0}
+              aria-label="Fixed lots"
               className="h-9 w-40 font-mono text-sm"
               value={assumptions.fixedLots}
               onChange={(e) => update({ fixedLots: Number(e.target.value) })}
@@ -155,6 +161,7 @@ function TradingReality() {
             <Input
               type="number"
               min="0"
+              aria-label="Spread override (ticks)"
               className="h-9 w-40 font-mono text-sm"
               value={assumptions.spreadTicks.toString()}
               onChange={(e) =>
@@ -166,6 +173,7 @@ function TradingReality() {
             <Input
               type="number"
               min="0"
+              aria-label="Commission (basis points)"
               className="h-9 w-40 font-mono text-sm"
               value={assumptions.commissionBps}
               onChange={(e) =>
@@ -178,6 +186,7 @@ function TradingReality() {
               type="number"
               min="0"
               step="0.01"
+              aria-label="Flat commission (USD per round turn)"
               className="h-9 w-40 font-mono text-sm"
               value={centsToUsdInput(assumptions.commissionFlat)}
               onChange={(e) => {
@@ -193,6 +202,7 @@ function TradingReality() {
             <Input
               type="number"
               min="0"
+              aria-label="Slippage override (ticks)"
               className="h-9 w-40 font-mono text-sm"
               value={assumptions.slippageTicks.toString()}
               onChange={(e) =>
@@ -227,10 +237,10 @@ function TradingReality() {
           </span>
           <Button asChild>
             <Link
-              to="/data"
+              to="/run"
               onClick={() => session.set({ realityConfirmed: true })}
             >
-              Continue to prepare data
+              Continue to the test
               <ArrowRight className="size-4" />
             </Link>
           </Button>
@@ -238,6 +248,49 @@ function TradingReality() {
       </div>
     </div>
   )
+}
+
+/**
+ * Risk is authored in percent because that is how traders talk about it, but
+ * stored as the fraction the engine reads. The draft text is kept separately
+ * so typing "0.5" survives the half-typed "0." that a controlled number input
+ * would otherwise swallow.
+ */
+function RiskInput({
+  value,
+  onChange,
+}: {
+  value: number
+  onChange: (value: number) => void
+}) {
+  const [text, setText] = useState(() => percentText(value))
+  // Only a change from outside this field (a preset or a new session) needs to
+  // overwrite the draft; keystrokes already agree with the stored value.
+  useEffect(() => {
+    if (Math.abs(Number(text) / 100 - value) > 1e-9) setText(percentText(value))
+  }, [value])
+  return (
+    <Input
+      type="number"
+      min="0"
+      max="100"
+      step="0.25"
+      aria-label="Risk per trade (percent of the account)"
+      className="h-9 w-40 font-mono text-sm"
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value)
+        const percent = Number(e.target.value)
+        if (e.target.value.trim() === '' || !Number.isFinite(percent)) return
+        onChange(Math.min(1, Math.max(0, percent / 100)))
+      }}
+      onBlur={() => setText(percentText(value))}
+    />
+  )
+}
+
+function percentText(fraction: number) {
+  return String(Number((fraction * 100).toFixed(2)))
 }
 
 function Row({

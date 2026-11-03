@@ -1,0 +1,40 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "*": "ask",
+    "bash": "ask",
+    "read": { "*": "ask" },
+    "edit": "deny"
+  },
+  "provider": {
+    "deepseek": {
+      "api": "openai",
+      "name": "DeepSeek",
+      "env": ["DEEPSEEK_API_KEY"],
+      "options": {
+        "baseURL": "https://api.deepseek.com/v1"
+      },
+      "models": {
+        "deepseek-chat": {
+          "id": "deepseek-chat",
+          "name": "DeepSeek Chat",
+          "attachment": false,
+          "reasoning": false,
+          "tool_call": true,
+          "cost": { "input": 0.14, "output": 0.28 },
+          "limit": { "context": 32768, "output": 8192 }
+        },
+        "deepseek-reasoner": {
+          "id": "deepseek-reasoner",
+          "name": "DeepSeek Reasoner",
+          "attachment": false,
+          "reasoning": true,
+          "tool_call": true,
+          "cost": { "input": 0.55, "output": 2.19 },
+          "limit": { "context": 32768, "output": 8192 }
+        }
+      }
+    }
+  },
+  "model": "deepseek/deepseek-chat"
+}

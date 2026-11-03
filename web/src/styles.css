@@ -1,5 +1,29 @@
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap');
 @import 'tailwindcss';
+
+/* Self-hosted so a local installation works offline and never calls a
+   third-party font service. Licences live beside the files in public/fonts. */
+@font-face {
+  font-family: 'Instrument Sans';
+  font-style: normal;
+  font-weight: 400 700;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url('/fonts/instrument-sans-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Spline Sans Mono';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('/fonts/spline-sans-mono-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Syne';
+  font-style: normal;
+  font-weight: 600 800;
+  font-display: swap;
+  src: url('/fonts/syne-latin.woff2') format('woff2');
+}
 
 @theme inline {
   --color-background: hsl(var(--background));
@@ -354,10 +378,11 @@ pre,
   background: hsl(var(--card));
 }
 .assay-stage {
-  width: min(100%, 1120px);
+  width: 100%;
   min-width: 0;
-  margin-inline: auto;
+  margin-inline: 0;
   padding: 44px 44px 120px;
+  text-align: left;
 }
 .runlog-spine {
   position: sticky;
@@ -764,6 +789,16 @@ pre,
   .runlog-tools > .runlog-label {
     display: none;
   }
+  /* The other tool groups read clearly from their buttons alone. A lone
+     "Light appearance" button does not, so keep its heading and let it span
+     the row instead of sitting in half the grid. */
+  .runlog-tools-appearance > .runlog-label {
+    display: block;
+    grid-column: 1 / -1;
+  }
+  .runlog-tools-appearance > .runlog-tool {
+    grid-column: 1 / -1;
+  }
   .runlog-tool {
     min-height: 40px;
     justify-content: center;
@@ -890,7 +925,10 @@ select {
   appearance: none;
   -webkit-appearance: none;
   padding-right: 34px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  /* A background image is its own document, so currentColor inside it
+     resolves to black. Use a mid slate that stays legible on both the light
+     and dark field instead of following the text colour. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238a9496' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 12px center;
   background-size: 16px 16px;
@@ -2211,7 +2249,9 @@ select::-ms-expand {
 .page-form select,
 .page-form textarea {
   border-color: hsl(var(--input));
-  background: hsl(var(--background));
+  /* background-color, not the shorthand: the shorthand clears the select's
+     chevron, which lives in background-image. */
+  background-color: hsl(var(--background));
 }
 .page-form select {
   border-radius: var(--r-field);
@@ -2355,13 +2395,7 @@ select::-ms-expand {
   box-shadow: var(--shadow-2);
 }
 .verdict-hero[data-tone='warning'] {
-  background:
-    radial-gradient(
-      130% 170% at 90% -30%,
-      hsl(var(--warning) / 0.14),
-      transparent 50%
-    ),
-    hsl(var(--card));
+  background: hsl(var(--card));
 }
 .verdict-word {
   font-family: 'Syne', sans-serif;
@@ -2415,6 +2449,13 @@ select::-ms-expand {
   font-size: 13.5px;
   line-height: 1.5;
   color: hsl(var(--foreground) / 0.8);
+}
+
+.ledger-scope {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-3);
 }
 
 .ledger {
@@ -2489,7 +2530,7 @@ select::-ms-expand {
 .setup-workspace select,
 .setup-workspace textarea {
   border-color: hsl(var(--input));
-  background: hsl(var(--background));
+  background-color: hsl(var(--background));
 }
 .setup-workspace select {
   border-radius: var(--r-field);
@@ -2607,4 +2648,101 @@ select::-ms-expand {
   outline: none;
   border-color: hsl(var(--ring) / 0.55);
   box-shadow: 0 0 0 2px hsl(var(--ring) / 0.16);
+}
+
+/* =====================================================================
+   MANUAL APPEARANCE — the system preference above stays the default.
+   A person who overrides it gets the same two token sets keyed off
+   :root[data-theme]; the higher specificity beats the media queries in
+   both directions, so the toggle is authoritative once it is set.
+   ===================================================================== */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --background: 198 14% 89%;
+  --foreground: 199 33% 9%;
+  --card: 200 13% 94%;
+  --card-foreground: 199 33% 9%;
+  --popover: 200 13% 96%;
+  --popover-foreground: 199 33% 9%;
+  --primary: 197 72% 29%;
+  --primary-foreground: 200 13% 96%;
+  --secondary: 195 10% 84%;
+  --secondary-foreground: 199 33% 9%;
+  --muted: 195 10% 86%;
+  --muted-foreground: 198 12% 35%;
+  --accent: 195 12% 96%;
+  --accent-foreground: 199 33% 9%;
+  --destructive: 8 62% 38%;
+  --destructive-foreground: 200 13% 96%;
+  --success: 148 42% 29%;
+  --success-foreground: 200 13% 96%;
+  --warning: 43 79% 30%;
+  --warning-foreground: 200 13% 96%;
+  --border: 197 13% 73%;
+  --input: 197 13% 73%;
+  --ring: 197 72% 29%;
+  --radius: 0;
+  --chart-up: 148 42% 32%;
+  --chart-down: 8 62% 42%;
+  --chart-entry: 197 72% 34%;
+  --chart-stop: 8 62% 42%;
+  --chart-target: 148 42% 32%;
+  --chart-zone: 39 68% 36%;
+  --seal-deep: color-mix(in oklab, hsl(var(--primary)) 78%, black);
+  --seal-wash: hsl(var(--primary) / 0.12);
+  --ink-3: hsl(198 12% 55%);
+  --hairline: hsl(var(--foreground) / 0.08);
+  --shadow-1:
+    0 1px 2px hsl(var(--foreground) / 0.07),
+    0 2px 6px -1px hsl(var(--foreground) / 0.06);
+  --shadow-2:
+    0 1px 2px hsl(var(--foreground) / 0.06),
+    0 14px 34px -18px hsl(var(--foreground) / 0.24);
+  --shadow-3:
+    0 2px 4px hsl(var(--foreground) / 0.05),
+    0 28px 56px -24px hsl(var(--foreground) / 0.32);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --background: 195 30% 6%;
+  --foreground: 190 17% 91%;
+  --card: 194 24% 8%;
+  --card-foreground: 190 17% 91%;
+  --popover: 194 20% 12%;
+  --popover-foreground: 190 17% 91%;
+  --primary: 197 65% 61%;
+  --primary-foreground: 195 30% 6%;
+  --secondary: 195 20% 12%;
+  --secondary-foreground: 190 17% 91%;
+  --muted: 195 20% 12%;
+  --muted-foreground: 194 13% 65%;
+  --accent: 195 18% 14%;
+  --accent-foreground: 190 17% 91%;
+  --destructive: 9 66% 63%;
+  --destructive-foreground: 200 13% 96%;
+  --success: 145 32% 52%;
+  --success-foreground: 210 40% 98%;
+  --warning: 42 57% 50%;
+  --warning-foreground: 222 47% 11%;
+  --border: 195 17% 20%;
+  --input: 195 17% 20%;
+  --ring: 197 65% 61%;
+  --radius: 0;
+  --chart-up: 145 40% 52%;
+  --chart-down: 9 66% 63%;
+  --chart-entry: 197 65% 61%;
+  --chart-stop: 9 66% 63%;
+  --chart-target: 145 40% 52%;
+  --chart-zone: 42 62% 55%;
+  --seal-deep: color-mix(in oklab, hsl(var(--primary)) 72%, black);
+  --seal-wash: hsl(var(--primary) / 0.15);
+  --ink-3: hsl(194 10% 52%);
+  --hairline: hsl(1 0% 100% / 0.08);
+  --shadow-1:
+    0 1px 2px hsl(0 0% 0% / 0.28), 0 3px 10px -2px hsl(0 0% 0% / 0.35);
+  --shadow-2:
+    0 1px 2px hsl(0 0% 0% / 0.3), 0 16px 40px -18px hsl(0 0% 0% / 0.55);
+  --shadow-3:
+    0 2px 4px hsl(0 0% 0% / 0.3), 0 32px 64px -26px hsl(0 0% 0% / 0.65);
 }

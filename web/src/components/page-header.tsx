@@ -5,7 +5,7 @@ export function PageHeader({
   description,
   actions,
   step,
-  totalSteps = 6,
+  totalSteps = 5,
 }: {
   title: string
   description?: ReactNode

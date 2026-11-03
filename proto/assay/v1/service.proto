@@ -370,6 +370,10 @@ message RunDetails {
   SensitivityGrid sensitivity = 19;
   repeated NextAction next_actions = 20;
   uint32 unfilled = 21;
+  // full_period describes every trade in the requested window. out_of_sample
+  // describes only pooled walk-forward test windows and is the sample the
+  // verdict judges. in_sample describes the first train window.
+  ResultMetrics full_period = 22;
 }
 message PeriodMetrics {
   string period = 1;
@@ -416,6 +420,12 @@ message WalkForwardWindow {
   uint32 test_from = 3;
   uint32 test_to = 4;
   ResultMetrics out_of_sample = 5;
+  // Inclusive timestamps of the first and last bars in each range, so the UI
+  // can show dates instead of bar indices.
+  sint64 train_from_ms = 6;
+  sint64 train_to_ms = 7;
+  sint64 test_from_ms = 8;
+  sint64 test_to_ms = 9;
 }
 message CostStressPoint {
   uint32 multiplier = 1;

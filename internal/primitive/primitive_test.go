@@ -162,28 +162,35 @@ func TestZoneRecycleDeterminism(t *testing.T) {
 	}
 }
 
-// TestZonePoolRecycles asserts that a released KindZone array is handed back by
-// a subsequent AllocZones instead of being reallocated, and that an undersized
-// pooled array is discarded rather than truncated, so callers always receive
-// full-length output.
-func TestZonePoolRecycles(t *testing.T) {
+// TestZonePoolAllocationsAreSafe covers the only guarantees the pool can make:
+// a returned slice is long enough for the request, and no array is ever handed
+// to two live callers at once. It deliberately does not assert that a released
+// array comes back from AllocZones: sync.Pool may drop any item at a GC, and
+// under -race the timing makes that visible, so an identity check is a flaky
+// test of the runtime rather than of this package. Recycling correctness is
+// covered by TestZoneRecycleDeterminism.
+func TestZonePoolAllocationsAreSafe(t *testing.T) {
 	a := AllocZones(100)
-	if cap(a) < 100 {
-		t.Fatalf("cap=%d, want >=100", cap(a))
+	if cap(a) < 100 || len(a) != 100 {
+		t.Fatalf("len=%d cap=%d, want 100", len(a), cap(a))
 	}
-	releaseZones(a)
 	b := AllocZones(100)
-	if &b[0] != &a[0] {
-		t.Fatal("released array was not recycled")
+	if cap(b) < 100 || len(b) != 100 {
+		t.Fatalf("len=%d cap=%d, want 100", len(b), cap(b))
 	}
+	if &a[0] == &b[0] {
+		t.Fatal("two live allocations share a backing array")
+	}
+
+	// A larger request must never be truncated onto a smaller pooled array,
+	// whether or not the pool still holds the released one.
 	releaseZones(a)
+	releaseZones(b)
 	c := AllocZones(400)
-	if cap(c) < 400 {
-		t.Fatalf("cap=%d, want >=400", cap(c))
+	if cap(c) < 400 || len(c) != 400 {
+		t.Fatalf("len=%d cap=%d, want 400", len(c), cap(c))
 	}
-	if &c[0] == &a[0] {
-		t.Fatal("undersized pooled array was reused instead of a fresh one")
-	}
+
 	if AllocZones(0) != nil {
 		t.Fatal("AllocZones(0) must be nil")
 	}

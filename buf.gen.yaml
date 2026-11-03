@@ -1,8 +1,9 @@
 version: v1
 plugins:
-  # Local plugins are pinned by `go.mod` and installed by `make tools`. Remote
-  # plugins silently move to new major versions (connect-go v2 needs a different
-  # runtime module), which would break the build on an unrelated regeneration.
+  # Local plugins are pinned by the Makefile (and the same versions in CI) and
+  # installed by `make tools`. Remote plugins silently move to new major
+  # versions (connect-go v2 needs a different runtime module), which would break
+  # the build on an unrelated regeneration.
   - plugin: go
     out: gen/go
     opt: paths=source_relative

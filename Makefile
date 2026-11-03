@@ -1,4 +1,10 @@
 GOLANGCI_VERSION := v2.1.6
+BUF_VERSION := v1.50.0
+# The plugins write the committed stubs, so their versions are part of the
+# build contract. The generated headers record them; CI installs the same pair
+# before regenerating.
+PROTOC_GEN_GO_VERSION := v1.36.12
+PROTOC_GEN_CONNECT_GO_VERSION := v1.18.1
 TOOLS := $(shell go env GOPATH)/bin
 
 .PHONY: build test race bench cover lint fmt proto tools bootstrap clean \
@@ -37,7 +43,9 @@ proto:
 # Pinned developer tools. CI installs the same versions.
 tools:
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)
-	go install github.com/bufbuild/buf/cmd/buf@v1.50.0
+	go install github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION)
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOC_GEN_GO_VERSION)
+	go install connectrpc.com/connect/cmd/protoc-gen-connect-go@$(PROTOC_GEN_CONNECT_GO_VERSION)
 
 bootstrap: tools
 	go mod download

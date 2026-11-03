@@ -15,6 +15,8 @@ concurrency:
 env:
   GOLANGCI_VERSION: v2.1.6
   BUF_VERSION: v1.50.0
+  PROTOC_GEN_GO_VERSION: v1.36.12
+  PROTOC_GEN_CONNECT_GO_VERSION: v1.18.1
 
 jobs:
   go:
@@ -49,7 +51,9 @@ jobs:
       - name: Generated protobuf code is up to date
         run: |
           go install github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}
-          buf generate proto
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO_VERSION}
+          go install connectrpc.com/connect/cmd/protoc-gen-connect-go@${PROTOC_GEN_CONNECT_GO_VERSION}
+          PATH="$(go env GOPATH)/bin:$PATH" buf generate proto
           git diff --exit-code -- gen/go || \
             { echo "gen/go is stale; run make proto and commit the result"; exit 1; }
 

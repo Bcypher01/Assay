@@ -2,7 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArrowRight } from 'lucide-react'
 import { PageHeader } from '@/components/page-header'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -229,13 +229,15 @@ function DefineRules() {
         description="Each row is one decision. The reading underneath is generated from the same document the engine runs, so what it says and what gets tested cannot drift apart."
       />
 
-      {requestError ? (
+      {/* A missing entry condition already has its own empty state below. A
+          second red banner with the same message reads like two different
+          faults, and calling it a server failure would be wrong. */}
+      {requestError &&
+      !(conditionCount === 0 && /entry condition/i.test(requestError)) ? (
         <Alert variant="destructive">
           <AlertTriangle className="size-4" />
-          <AlertDescription>
-            Could not reach the local server to check these rules:{' '}
-            {requestError}
-          </AlertDescription>
+          <AlertTitle>These rules could not be checked</AlertTitle>
+          <AlertDescription>{requestError}</AlertDescription>
         </Alert>
       ) : null}
 
@@ -444,26 +446,31 @@ function DefineRules() {
           })}
 
           {conditionCount === 0 ? (
-            <Alert variant="destructive">
-              <AlertTriangle className="size-4" />
-              <AlertDescription>
-                <p>
-                  This document has no entry condition, so nothing would ever
-                  trigger.
-                </p>
-                <Button
-                  className="mt-3"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => update(withStarterEntry(document))}
-                >
-                  Add a 20/50 crossover entry
-                </Button>
-                <p className="mt-2 text-sm">
-                  Or start from a template if you want a different kind of rule.
-                </p>
-              </AlertDescription>
-            </Alert>
+            <section className="border border-dashed border-border bg-card/60 p-5">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="max-w-prose space-y-1">
+                  <h2 className="text-base font-semibold">
+                    No entry condition yet
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Without one the rules never trigger, so a backtest cannot
+                    say anything about them. Start with the 20/50 crossover, or
+                    pick a template and make it yours.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => update(withStarterEntry(document))}
+                  >
+                    Add a 20/50 crossover entry
+                  </Button>
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to="/">Browse templates</Link>
+                  </Button>
+                </div>
+              </div>
+            </section>
           ) : null}
 
           <LevelRuleForm

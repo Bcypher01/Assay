@@ -925,7 +925,10 @@ select {
   appearance: none;
   -webkit-appearance: none;
   padding-right: 34px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  /* A background image is its own document, so currentColor inside it
+     resolves to black. Use a mid slate that stays legible on both the light
+     and dark field instead of following the text colour. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238a9496' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 12px center;
   background-size: 16px 16px;
@@ -2246,7 +2249,9 @@ select::-ms-expand {
 .page-form select,
 .page-form textarea {
   border-color: hsl(var(--input));
-  background: hsl(var(--background));
+  /* background-color, not the shorthand: the shorthand clears the select's
+     chevron, which lives in background-image. */
+  background-color: hsl(var(--background));
 }
 .page-form select {
   border-radius: var(--r-field);
@@ -2525,7 +2530,7 @@ select::-ms-expand {
 .setup-workspace select,
 .setup-workspace textarea {
   border-color: hsl(var(--input));
-  background: hsl(var(--background));
+  background-color: hsl(var(--background));
 }
 .setup-workspace select {
   border-radius: var(--r-field);

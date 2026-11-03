@@ -801,19 +801,32 @@ func defaultWalkForward(n int) analytics.WFConfig {
 }
 func stableSeed(s string) uint64 { h := fnv.New64a(); _, _ = h.Write([]byte(s)); return h.Sum64() }
 func nextActions(m analytics.Metrics, stress []analytics.CostStressPoint, windows int) []analytics.NextAction {
+	if windows == 0 {
+		return []analytics.NextAction{{Kind: "extend_history", Reason: "The selected period is too short for a held-out window."}}
+	}
 	if m.Trades < 30 {
-		return []analytics.NextAction{{Kind: "simplify_rules", Reason: "The study has fewer than 30 trades."}}
+		// A small sample is fixed by more history, not by simplifying the rule.
+		// Simplifying usually trades less often, which makes the evidence
+		// thinner while making the result look cleaner.
+		return []analytics.NextAction{{
+			Kind:   "extend_history",
+			Reason: fmt.Sprintf("Only %d unseen trade%s; at least 30 are needed before a result can be called promising.", m.Trades, plural(m.Trades)),
+		}}
 	}
 	if len(stress) > 0 && stress[len(stress)-1].Metrics.Expectancy.Pessimistic <= 0 {
 		return []analytics.NextAction{{Kind: "retest_higher_costs", Reason: "The edge does not survive 3× execution costs."}}
-	}
-	if windows == 0 {
-		return []analytics.NextAction{{Kind: "extend_history", Reason: "The selected period is too short for a held-out window."}}
 	}
 	if m.Expectancy.Pessimistic <= 0 {
 		return []analytics.NextAction{{Kind: "discard_or_rewrite", Reason: "Unseen conservative expectancy is not positive."}}
 	}
 	return []analytics.NextAction{{Kind: "paper_trade", Reason: "Conservative results remain positive; validate this exact version live without changing it."}}
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 func effectiveAssumptions(cfg sim.Config) analytics.Assumptions {

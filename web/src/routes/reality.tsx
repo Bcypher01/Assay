@@ -237,10 +237,10 @@ function TradingReality() {
           </span>
           <Button asChild>
             <Link
-              to="/data"
+              to="/run"
               onClick={() => session.set({ realityConfirmed: true })}
             >
-              Continue to prepare data
+              Continue to the test
               <ArrowRight className="size-4" />
             </Link>
           </Button>

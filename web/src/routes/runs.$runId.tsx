@@ -766,7 +766,7 @@ function ScenarioReading({
 }
 const ACTION_COPY: Record<
   string,
-  { label: string; to: '/strategy' | '/reality' | '/data'; cta: string }
+  { label: string; to: '/strategy' | '/reality' | '/run'; cta: string }
 > = {
   simplify_rules: {
     label: 'Simplify the rules',
@@ -775,7 +775,7 @@ const ACTION_COPY: Record<
   },
   extend_history: {
     label: 'Use a longer period',
-    to: '/data',
+    to: '/run',
     cta: 'Choose a longer period',
   },
   retest_higher_costs: {
@@ -790,7 +790,7 @@ const ACTION_COPY: Record<
   },
   paper_trade: {
     label: 'Keep this version unchanged',
-    to: '/data',
+    to: '/run',
     cta: 'Run it again',
   },
 }

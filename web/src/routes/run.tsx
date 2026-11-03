@@ -11,6 +11,7 @@ import {
 import { PageHeader } from '@/components/page-header'
 import { ConstraintsBanner } from '@/components/constraints-banner'
 import { EquitySparkline } from '@/components/equity-sparkline'
+import { TestWindow } from '@/components/test-window'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -24,7 +25,7 @@ import { Progress } from '@/components/ui/progress'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { dataApi, studyApi, rpcErrorMessage } from '@/lib/rpc'
 import { dataKey, hasReadyData, session, useSession } from '@/lib/store'
-import { toJsonBytes, formatBytes, formatMs, formatUsdCents } from '@/lib/codec'
+import { toJsonBytes, formatBytes, formatUsdCents } from '@/lib/codec'
 import { parseStrategy, toEngineStrategy } from '@/lib/strategy'
 import { isTimeframeSupportedForInstrument } from '@/lib/constraints'
 import { DataReadiness } from '@/gen/assay/v1/service_pb'
@@ -374,13 +375,15 @@ function RunScreen() {
   return (
     <div className="page-form">
       <PageHeader
-        step={5}
-        title="Run"
-        description="Run the validated strategy using the prepared local dataset."
+        step={4}
+        title="Test"
+        description="Choose the period, prepare the local history, and run the validated rules. Nothing leaves this machine."
       />
 
+      <TestWindow />
+
       <div className="grid gap-6 lg:grid-cols-[minmax(0,320px)_1fr]">
-        <Card>
+        <Card id="ready-check">
           <CardHeader className="pb-3">
             <CardTitle>Ready check</CardTitle>
             <CardDescription>
@@ -388,22 +391,6 @@ function RunScreen() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-md border border-border bg-muted/30 p-3">
-              <div className="flex flex-wrap gap-2">
-                {s.symbol ? (
-                  <Badge variant="secondary">{s.symbol}</Badge>
-                ) : null}
-                {s.timeframe ? (
-                  <Badge variant="outline">{s.timeframe}</Badge>
-                ) : null}
-              </div>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {s.fromMs !== null && s.toMs !== null
-                  ? `${formatMs(s.fromMs)} to ${formatMs(s.toMs)}`
-                  : 'Choose a date window on Data.'}
-              </p>
-            </div>
-
             <PreflightChecklist
               market={!!s.symbol && !!s.timeframe && timeframeIsSupported}
               data={dataReady}
@@ -422,15 +409,18 @@ function RunScreen() {
             />
 
             <div className="grid grid-cols-2 gap-2">
-              {phase === 'streaming' ? (
-                <Button variant="outline" disabled className="w-full">
-                  Back to prepare data
-                </Button>
-              ) : (
-                <Button variant="outline" asChild className="w-full">
-                  <Link to="/data">Back to prepare data</Link>
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                asChild
+                className="w-full"
+                aria-disabled={phase === 'streaming'}
+              >
+                {phase === 'streaming' ? (
+                  <span>Back to trading reality</span>
+                ) : (
+                  <Link to="/reality">Back to trading reality</Link>
+                )}
+              </Button>
               <Button
                 onClick={() => void run()}
                 disabled={!canRun || phase === 'streaming'}
@@ -456,12 +446,12 @@ function RunScreen() {
                   : !dataReady
                     ? s.dataStatus?.readiness === 'missing' ||
                       s.dataStatus?.readiness === 'partial'
-                      ? 'Prepare this exact dataset on Data before running.'
+                      ? 'Prepare this exact dataset before running.'
                       : 'Check the local data for this window before running.'
                     : !strategyReady
                       ? 'Validate the strategy for the current market and timeframe before running.'
                       : !timeframeIsSupported
-                        ? 'The selected timeframe is not available for this data source. Choose D1 or W1 on Data.'
+                        ? 'The selected timeframe is not available for this data source. Choose D1 or W1 in the rules step.'
                         : s.fromMs !== null &&
                             s.toMs !== null &&
                             s.fromMs >= s.toMs
@@ -624,9 +614,9 @@ function SummaryCard({ summary }: { summary: Summary }) {
               <p>{summary.error}</p>
               {summary.errorCode === 'DATA_MISSING' ||
               summary.errorCode === 'DATA_PARTIAL' ? (
-                <Link to="/data" className="font-medium underline">
-                  Prepare data
-                </Link>
+                <a href="#ready-check" className="font-medium underline">
+                  Check the data
+                </a>
               ) : null}
               {summary.error.startsWith('Strategy needs attention:') ? (
                 <Link to="/strategy" className="font-medium underline">
@@ -793,8 +783,16 @@ function PreflightChecklist({
       label: 'Choose market and dates',
       ok: market && window,
       action: (
-        <Button asChild size="sm" variant="outline">
-          <Link to="/data">Edit setup</Link>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            document
+              .getElementById('test-window')
+              ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }
+        >
+          Edit window
         </Button>
       ),
     },

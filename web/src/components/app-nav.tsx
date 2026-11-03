@@ -28,7 +28,7 @@ import { formatUsdCents } from '@/lib/codec'
  * scrolled away from.
  */
 
-type StepPath = '/' | '/strategy' | '/reality' | '/data' | '/run' | '/history'
+type StepPath = '/' | '/strategy' | '/reality' | '/run' | '/history'
 
 interface Step {
   to: StepPath
@@ -97,24 +97,20 @@ const steps: Step[] = [
     recorded: (s) => s.realityConfirmed,
   },
   {
-    to: '/data',
-    label: 'Prepare the history',
+    to: '/run',
+    label: 'Test the rules',
     summary: (s) => {
       if (!s.symbol || !s.timeframe) return null
       if (!s.fromMs || !s.toMs)
         return `${displaySymbol(s.symbol)} ${s.timeframe}, no window yet`
       const years = Number(s.toMs - s.fromMs) / (365.25 * 24 * 60 * 60 * 1000)
-      return `${years.toFixed(1)} years for ${displaySymbol(s.symbol)} ${s.timeframe}`
+      const runs = s.lastRunId ? ' · tested' : ''
+      return `${years.toFixed(1)} years for ${displaySymbol(s.symbol)} ${displayTimeframe(s.timeframe)}${runs}`
     },
-    done: (s) => hasReadyData(s),
+    // Prepared data is the step's settled state; a completed run also
+    // settles it, even after a reload clears the live readiness check.
+    done: (s) => hasReadyData(s) || !!s.lastRunId,
     recorded: (s) => !!s.symbol && !!s.timeframe && !!s.fromMs && !!s.toMs,
-  },
-  {
-    to: '/run',
-    label: 'Run the test',
-    summary: (s) => (s.lastRunId ? `run ${s.lastRunId.slice(0, 10)}…` : null),
-    done: (s) => !!s.lastRunId,
-    recorded: (s) => !!s.lastRunId,
   },
   {
     to: '/history',

@@ -77,7 +77,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 
 function RootLayout() {
   // A route can opt out of the shell entirely (see StaticDataRouteOption in
-  // router.tsx). The run-log spine is the wayfinder for the six-step study
+  // router.tsx). The run-log spine is the wayfinder for the five-step study
   // flow; on a workspace screen like the setup chart it is a permanent 276px
   // tax on the surface the user is actually working on, and the step it would
   // highlight is not the one they are in.
@@ -135,9 +135,9 @@ function RootError({ error }: { error: unknown }) {
                     Refresh
                   </Button>
                   <Button variant="outline" asChild>
-                    <a href="/data">
+                    <a href="/run">
                       <Home className="size-4" />
-                      Go to data
+                      Go to the test
                     </a>
                   </Button>
                 </div>

@@ -454,7 +454,10 @@ function RunScreen() {
                 {!s.realityConfirmed
                   ? 'Review the trading reality assumptions before running.'
                   : !dataReady
-                    ? 'Prepare this exact dataset on Data before running.'
+                    ? s.dataStatus?.readiness === 'missing' ||
+                      s.dataStatus?.readiness === 'partial'
+                      ? 'Prepare this exact dataset on Data before running.'
+                      : 'Check the local data for this window before running.'
                     : !strategyReady
                       ? 'Validate the strategy for the current market and timeframe before running.'
                       : !timeframeIsSupported
@@ -760,18 +763,18 @@ function PreflightChecklist({
   onPrepareData: () => void
   onValidateStrategy: () => void
 }) {
-  const dataAction =
-    dataStatus === 'missing' || dataStatus === 'partial'
-      ? {
-          label: fixing === 'data' ? 'Preparing…' : 'Prepare data',
-          icon: Download,
-          onClick: onPrepareData,
-        }
-      : {
-          label: fixing === 'data' ? 'Checking…' : 'Check data',
-          icon: RefreshCw,
-          onClick: onCheckData,
-        }
+  const dataMissing = dataStatus === 'missing' || dataStatus === 'partial'
+  const dataAction = dataMissing
+    ? {
+        label: fixing === 'data' ? 'Preparing…' : 'Prepare data',
+        icon: Download,
+        onClick: onPrepareData,
+      }
+    : {
+        label: fixing === 'data' ? 'Checking…' : 'Check data',
+        icon: RefreshCw,
+        onClick: onCheckData,
+      }
   const items: Array<{
     label: string
     ok: boolean
@@ -796,7 +799,11 @@ function PreflightChecklist({
       ),
     },
     {
-      label: data ? 'Data ready' : 'Prepare local data',
+      label: data
+        ? 'Data ready'
+        : dataMissing
+          ? 'Prepare local data'
+          : 'Check the local data',
       ok: data,
       action: (
         <Button

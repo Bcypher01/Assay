@@ -16,6 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -89,6 +90,7 @@ interface CompareResult {
 function HistoryScreen() {
   const s = useSession()
   const [hashes, setHashes] = useState<string[]>([])
+  const [filter, setFilter] = useState('')
   const [loading, setLoading] = useState(false)
   const [listError, setListError] = useState<string | null>(null)
   const [meta, setMeta] = useState<Record<string, RunMeta>>({})
@@ -196,6 +198,26 @@ function HistoryScreen() {
     }
   }
 
+  // A run log grows. Filtering by what a person remembers — the rule, the
+  // market, the years, or the start of the hash — keeps an old run findable
+  // without forcing them to scan every row.
+  const visibleHashes = useMemo(() => {
+    const query = filter.trim().toLowerCase()
+    if (!query) return hashes
+    return hashes.filter((hash) => {
+      const m = meta[hash]
+      const haystack = [
+        m?.name ?? '',
+        ...(m?.instruments ?? []).map((i) => displaySymbol(i)),
+        m ? formatPeriod(m.period) : '',
+        hash,
+      ]
+        .join(' ')
+        .toLowerCase()
+      return haystack.includes(query)
+    })
+  }, [filter, hashes, meta])
+
   const options = useMemo(
     () =>
       hashes.map((h) => ({
@@ -238,10 +260,24 @@ function HistoryScreen() {
           <CardHeader className="pb-3">
             <CardTitle>Runs</CardTitle>
             <CardDescription>
-              {loading ? 'Loading…' : `${hashes.length} runs`}
+              {loading
+                ? 'Loading…'
+                : filter.trim()
+                  ? `${visibleHashes.length} of ${hashes.length} runs`
+                  : `${hashes.length} runs`}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-1.5 lg:max-h-[56vh] lg:overflow-y-auto">
+            {hashes.length > 0 ? (
+              <Input
+                type="search"
+                aria-label="Filter runs"
+                placeholder="Filter by rule, market, year or hash"
+                className="mb-2 h-9"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+              />
+            ) : null}
             {loading && hashes.length === 0
               ? Array.from({ length: 7 }).map((_, i) => (
                   <Skeleton key={i} className="h-[38px] w-full" />
@@ -252,7 +288,13 @@ function HistoryScreen() {
                 No runs yet. Complete a run to see it here.
               </p>
             ) : null}
-            {hashes.map((h) => {
+            {!loading && hashes.length > 0 && visibleHashes.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No runs match “{filter.trim()}”. Clear the filter to see all
+                runs.
+              </p>
+            ) : null}
+            {visibleHashes.map((h) => {
               const m = meta[h]
               return (
                 <button

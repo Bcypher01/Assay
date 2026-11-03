@@ -108,7 +108,13 @@ export interface DataStatusState {
  */
 export const DEFAULT_STRATEGY = JSON.stringify(emptyStrategy(), null, 2)
 
-let state: SessionState = {
+/**
+ * The state before anything is restored. Hydration compares the server's HTML
+ * against this exact snapshot: a saved session is read in an effect, after the
+ * first paint, so passing the live state here would replace the server's
+ * "nothing chosen yet" markup mid-hydration and React would throw it away.
+ */
+const INITIAL_STATE: SessionState = {
   symbol: '',
   timeframe: '',
   fromMs: null,
@@ -124,6 +130,8 @@ let state: SessionState = {
   trials: 0,
   onboardingSeen: false,
 }
+
+let state: SessionState = INITIAL_STATE
 
 const STORAGE_KEY = 'assay.session.v1'
 let restored = false
@@ -395,5 +403,9 @@ export function useSession(): SessionState {
   useEffect(() => {
     restore()
   }, [])
-  return useSyncExternalStore(session.subscribe, session.get, session.get)
+  return useSyncExternalStore(
+    session.subscribe,
+    session.get,
+    () => INITIAL_STATE,
+  )
 }

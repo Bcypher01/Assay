@@ -301,27 +301,34 @@ function DefineRules() {
                     select a market first
                   </span>
                 ) : (
-                  (LADDER_SLOTS as readonly LadderSlot[]).map((slot) => (
-                    <div
-                      key={slot}
-                      className="flex flex-wrap items-center gap-2"
-                    >
-                      <span className="w-14 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-                        {LADDER_LABELS[slot]}
-                      </span>
-                      <div className="flex flex-wrap gap-1">
-                        {timeframes.map((tf) => (
-                          <Choice
-                            key={tf}
-                            active={document.timeframes[slot] === tf}
-                            onClick={() => session.setSlotTimeframe(slot, tf)}
-                          >
-                            {displayTimeframe(tf)}
-                          </Choice>
-                        ))}
-                      </div>
-                    </div>
-                  ))
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {(LADDER_SLOTS as readonly LadderSlot[]).map((slot) => (
+                      <label key={slot} className="grid gap-1">
+                        <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                          {LADDER_LABELS[slot]}
+                        </span>
+                        <select
+                          aria-label={`${LADDER_LABELS[slot]} timeframe`}
+                          className="h-9 w-full border border-input bg-card pl-3 pr-9 text-sm"
+                          value={document.timeframes[slot] || ''}
+                          onChange={(e) =>
+                            session.setSlotTimeframe(slot, e.target.value)
+                          }
+                        >
+                          {document.timeframes[slot] ? null : (
+                            <option value="" disabled>
+                              Choose a timeframe…
+                            </option>
+                          )}
+                          {timeframes.map((tf) => (
+                            <option key={tf} value={tf}>
+                              {displayTimeframe(tf)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ))}
+                  </div>
                 )}
                 <span className="text-sm text-muted-foreground">
                   Context sits at the top and the trigger at the bottom; each

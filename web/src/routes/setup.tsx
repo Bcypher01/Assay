@@ -66,6 +66,7 @@ import {
   runSetup,
   validateDrawing,
 } from '@/lib/setup'
+import { formatMs } from '@/lib/codec'
 import { displaySymbol, displayTimeframe } from '@/lib/strategy'
 import { session, useSession } from '@/lib/store'
 
@@ -104,6 +105,14 @@ const RISK_CHOICES: Array<[string, string]> = [
  */
 const MAX_BARS = 20_000
 const COVERAGE_TOLERANCE_MS = 7 * 86_400_000
+/**
+ * How much of the requested span the local cache must already hold before its
+ * bars are shown as-is. A source that has not published the latest days (or is
+ * rate-limiting us) should not turn opening the chart into a two-minute wait:
+ * when almost the whole window is already prepared, the honest answer is to
+ * show it and say where it ends, not to fetch the tail and time out.
+ */
+const CACHE_ENOUGH_RATIO = 0.9
 interface InstrumentRow {
   symbol: string
   timeframes: Array<string>
@@ -228,12 +237,28 @@ function coversRequestedWindow(
   )
 }
 
+/** True when the cached bars are a fair rendering of the requested window. */
+function cacheCoversEnough(
+  chart: ChartData,
+  fromMs: number,
+  toMs: number,
+): boolean {
+  if (chart.bars.length === 0) return false
+  if (coversRequestedWindow(chart, fromMs, toMs)) return true
+  // The cache still has to reach the start of the window; a chart that begins
+  // years late is a genuine miss, not a short tail.
+  if (chart.fromMs > fromMs + COVERAGE_TOLERANCE_MS) return false
+  const span = Math.max(1, toMs - fromMs)
+  const missingTail = Math.max(0, toMs - chart.toMs)
+  return missingTail <= span * (1 - CACHE_ENOUGH_RATIO)
+}
+
 async function loadSetupChart(
   request: Omit<Parameters<typeof fetchSetupChart>[0], 'prepare'>,
 ): Promise<ChartData> {
   try {
     const cached = await fetchSetupChart({ ...request, prepare: false })
-    if (coversRequestedWindow(cached, request.fromMs, request.toMs)) {
+    if (cacheCoversEnough(cached, request.fromMs, request.toMs)) {
       return cached
     }
   } catch {
@@ -562,9 +587,13 @@ function SetupTestScreen() {
       const anchorBar = next.bars.at(anchor)
       setAnchorIndex(anchorBar ? anchor : null)
       setLines(carryLines ? priorLines : null)
+      // Say where a short tail ends: the window is the one the user asked for,
+      // but the bars are the ones that exist, and the label must not imply
+      // coverage the chart does not have.
+      const endsEarly = next.toMs < range.toMs - COVERAGE_TOLERANCE_MS
       setStatus({
         tone: 'good',
-        message: `${next.bars.length} candles · snapshot ${next.snapshot.slice(0, 10)}…`,
+        message: `${next.bars.length} candles${endsEarly ? ` · through ${formatMs(next.toMs)}` : ''} · snapshot ${next.snapshot.slice(0, 10)}…`,
       })
     } catch (error) {
       if (seq !== loadSeqRef.current) return

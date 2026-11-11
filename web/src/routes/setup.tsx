@@ -66,6 +66,7 @@ import {
   runSetup,
   validateDrawing,
 } from '@/lib/setup'
+import { formatMs } from '@/lib/codec'
 import { displaySymbol, displayTimeframe } from '@/lib/strategy'
 import { session, useSession } from '@/lib/store'
 
@@ -104,6 +105,14 @@ const RISK_CHOICES: Array<[string, string]> = [
  */
 const MAX_BARS = 20_000
 const COVERAGE_TOLERANCE_MS = 7 * 86_400_000
+/**
+ * How much of the requested span the local cache must already hold before its
+ * bars are shown as-is. A source that has not published the latest days (or is
+ * rate-limiting us) should not turn opening the chart into a two-minute wait:
+ * when almost the whole window is already prepared, the honest answer is to
+ * show it and say where it ends, not to fetch the tail and time out.
+ */
+const CACHE_ENOUGH_RATIO = 0.9
 interface InstrumentRow {
   symbol: string
   timeframes: Array<string>
@@ -228,12 +237,28 @@ function coversRequestedWindow(
   )
 }
 
+/** True when the cached bars are a fair rendering of the requested window. */
+function cacheCoversEnough(
+  chart: ChartData,
+  fromMs: number,
+  toMs: number,
+): boolean {
+  if (chart.bars.length === 0) return false
+  if (coversRequestedWindow(chart, fromMs, toMs)) return true
+  // The cache still has to reach the start of the window; a chart that begins
+  // years late is a genuine miss, not a short tail.
+  if (chart.fromMs > fromMs + COVERAGE_TOLERANCE_MS) return false
+  const span = Math.max(1, toMs - fromMs)
+  const missingTail = Math.max(0, toMs - chart.toMs)
+  return missingTail <= span * (1 - CACHE_ENOUGH_RATIO)
+}
+
 async function loadSetupChart(
   request: Omit<Parameters<typeof fetchSetupChart>[0], 'prepare'>,
 ): Promise<ChartData> {
   try {
     const cached = await fetchSetupChart({ ...request, prepare: false })
-    if (coversRequestedWindow(cached, request.fromMs, request.toMs)) {
+    if (cacheCoversEnough(cached, request.fromMs, request.toMs)) {
       return cached
     }
   } catch {
@@ -241,6 +266,20 @@ async function loadSetupChart(
     // the actionable error if the source cannot provide the data.
   }
   return fetchSetupChart({ ...request, prepare: true })
+}
+
+/** True when two setups are pixel-for-pixel the same, so React can keep the
+ *  previous object and skip a render. */
+function sameLines(a: SetupLines | null, b: SetupLines | null): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  return (
+    a.entry === b.entry &&
+    a.stop === b.stop &&
+    a.target === b.target &&
+    a.levelLow === b.levelLow &&
+    a.levelHigh === b.levelHigh
+  )
 }
 
 /** Sensible opening lines for a freshly picked candle. */
@@ -429,10 +468,20 @@ function SetupTestScreen() {
         (bar) => bar.timeMs >= visual.from.timeMs,
       )
       if (index < 0) return
-      invalidate()
       if (visual.type === 'zone') {
         const low = Math.min(visual.from.price, visual.to.price)
         const high = Math.max(visual.from.price, visual.to.price)
+        const startTime = Math.min(visual.from.timeMs, visual.to.timeMs)
+        // Selecting the shape that is already adopted must not throw away the
+        // results the user is reading. Only a real change invalidates them.
+        const unchanged =
+          kind === 'drawn_precedent' &&
+          zonePlaced &&
+          precedentFromTimeMs === startTime &&
+          lines?.levelLow === low &&
+          lines?.levelHigh === high
+        if (unchanged) return
+        invalidate()
         setKind('drawn_precedent')
         setSetupMode('drawing')
         setZonePlaced(true)
@@ -443,7 +492,8 @@ function SetupTestScreen() {
         setLines((current) => {
           const base =
             current ?? linesForBar(chart.bars[index], chart.pipTicks, 'long')
-          return { ...base, levelLow: low, levelHigh: high }
+          const next = { ...base, levelLow: low, levelHigh: high }
+          return sameLines(current, next) ? current : next
         })
         // The zone describes the pattern. It must never silently move the
         // entry candle after the trader has placed an explicit marker.
@@ -452,6 +502,14 @@ function SetupTestScreen() {
       }
       if (visual.type === 'long' || visual.type === 'short') {
         const nextSide = visual.type
+        const entry = visual.from.price
+        const unchanged =
+          side === nextSide &&
+          entryPlaced &&
+          anchorIndex === index &&
+          lines?.entry === entry
+        if (unchanged) return
+        invalidate()
         setSide(nextSide)
         setSetupMode('drawing')
         setEntryPlaced(true)
@@ -464,7 +522,7 @@ function SetupTestScreen() {
             current ?? linesForBar(chart.bars[index], chart.pipTicks, nextSide)
           const risk = Math.max(1, Math.abs(base.entry - base.stop))
           const reward = Math.max(1, Math.abs(base.target - base.entry))
-          return {
+          const next = {
             ...base,
             entry: visual.from.price,
             stop:
@@ -476,10 +534,21 @@ function SetupTestScreen() {
                 ? visual.from.price + reward
                 : visual.from.price - reward,
           }
+          return sameLines(current, next) ? current : next
         })
       }
     },
-    [chart, entryPlaced, invalidate],
+    [
+      chart,
+      entryPlaced,
+      invalidate,
+      kind,
+      zonePlaced,
+      precedentFromTimeMs,
+      lines,
+      side,
+      anchorIndex,
+    ],
   )
 
   const prepare = useCallback(async () => {
@@ -562,9 +631,13 @@ function SetupTestScreen() {
       const anchorBar = next.bars.at(anchor)
       setAnchorIndex(anchorBar ? anchor : null)
       setLines(carryLines ? priorLines : null)
+      // Say where a short tail ends: the window is the one the user asked for,
+      // but the bars are the ones that exist, and the label must not imply
+      // coverage the chart does not have.
+      const endsEarly = next.toMs < range.toMs - COVERAGE_TOLERANCE_MS
       setStatus({
         tone: 'good',
-        message: `${next.bars.length} candles · snapshot ${next.snapshot.slice(0, 10)}…`,
+        message: `${next.bars.length} candles${endsEarly ? ` · through ${formatMs(next.toMs)}` : ''} · snapshot ${next.snapshot.slice(0, 10)}…`,
       })
     } catch (error) {
       if (seq !== loadSeqRef.current) return
@@ -980,6 +1053,46 @@ function SetupTestScreen() {
     setRule((current) => ({ ...current, ...patch }))
   }
 
+  // These handlers are props of the chart component. Handing it a new lambda
+  // every render makes its effects re-run on every keystroke elsewhere on the
+  // screen, which is the churn that ends in a render loop when two components
+  // both notify each other. Stable identities keep the effects tied to the
+  // values they actually depend on.
+  const handleViewportChange = useCallback(
+    (viewport: { offset: number; count: number }) => {
+      if (scaledDown) setEntryViewport(viewport)
+      else setPatternViewport(viewport)
+    },
+    [scaledDown],
+  )
+
+  const handleChangeLines = useCallback(
+    (next: SetupLines) => {
+      invalidate()
+      setLines(next)
+    },
+    [invalidate],
+  )
+
+  const handleSelectAnchor = useCallback(
+    (index: number) => selectAnchor(index),
+    [selectAnchor],
+  )
+
+  const handleDeleteDrawing = useCallback(
+    (removed: ChartDrawing) => {
+      invalidate()
+      if (removed.type === 'zone') {
+        setZonePlaced(false)
+        setPrecedentFromTimeMs(null)
+      }
+      if (removed.type === 'long' || removed.type === 'short') {
+        setEntryPlaced(false)
+      }
+    },
+    [invalidate],
+  )
+
   return (
     <div className="setup-workspace">
       <section className="setup-canvas">
@@ -1200,24 +1313,11 @@ function SetupTestScreen() {
             anchorLocked={scaledDown}
             disableDrawingTools={scaledDown}
             initialViewport={scaledDown ? entryViewport : patternViewport}
-            onViewportChange={(vp) => {
-              if (scaledDown) setEntryViewport(vp)
-              else setPatternViewport(vp)
-            }}
-            onSelectAnchor={(index) => selectAnchor(index)}
-            onChangeLines={(next) => {
-              invalidate()
-              setLines(next)
-            }}
+            onViewportChange={handleViewportChange}
+            onSelectAnchor={handleSelectAnchor}
+            onChangeLines={handleChangeLines}
             onSelectDrawing={adoptVisualDrawing}
-            onDeleteDrawing={(removed) => {
-              invalidate()
-              if (removed.type === 'zone') setZonePlaced(false)
-              if (removed.type === 'zone') setPrecedentFromTimeMs(null)
-              if (removed.type === 'long' || removed.type === 'short') {
-                setEntryPlaced(false)
-              }
-            }}
+            onDeleteDrawing={handleDeleteDrawing}
           />
           <button
             type="button"

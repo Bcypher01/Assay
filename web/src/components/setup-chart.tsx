@@ -400,10 +400,16 @@ export function SetupChart({
     setSelected(null)
   }
 
-  // Notify parent of viewport changes for persistence
+  // Notify parent of viewport changes for persistence. The callback is read
+  // through a ref so a parent that passes an inline handler cannot make this
+  // effect run on every render: an effect that calls a setter on each parent
+  // render is exactly what triggers React's "Maximum update depth exceeded"
+  // guard when the two components ping-pong state.
+  const onViewportChangeRef = useRef(onViewportChange)
+  onViewportChangeRef.current = onViewportChange
   useEffect(() => {
-    onViewportChange?.(viewport)
-  }, [viewport, onViewportChange])
+    onViewportChangeRef.current?.(viewport)
+  }, [viewport])
 
   useEffect(() => {
     if (anchorIndex === null || barCount === 0) return

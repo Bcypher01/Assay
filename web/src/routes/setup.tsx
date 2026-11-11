@@ -268,6 +268,20 @@ async function loadSetupChart(
   return fetchSetupChart({ ...request, prepare: true })
 }
 
+/** True when two setups are pixel-for-pixel the same, so React can keep the
+ *  previous object and skip a render. */
+function sameLines(a: SetupLines | null, b: SetupLines | null): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  return (
+    a.entry === b.entry &&
+    a.stop === b.stop &&
+    a.target === b.target &&
+    a.levelLow === b.levelLow &&
+    a.levelHigh === b.levelHigh
+  )
+}
+
 /** Sensible opening lines for a freshly picked candle. */
 function linesForBar(
   bar: { open: number; high: number; low: number; close: number },
@@ -454,10 +468,20 @@ function SetupTestScreen() {
         (bar) => bar.timeMs >= visual.from.timeMs,
       )
       if (index < 0) return
-      invalidate()
       if (visual.type === 'zone') {
         const low = Math.min(visual.from.price, visual.to.price)
         const high = Math.max(visual.from.price, visual.to.price)
+        const startTime = Math.min(visual.from.timeMs, visual.to.timeMs)
+        // Selecting the shape that is already adopted must not throw away the
+        // results the user is reading. Only a real change invalidates them.
+        const unchanged =
+          kind === 'drawn_precedent' &&
+          zonePlaced &&
+          precedentFromTimeMs === startTime &&
+          lines?.levelLow === low &&
+          lines?.levelHigh === high
+        if (unchanged) return
+        invalidate()
         setKind('drawn_precedent')
         setSetupMode('drawing')
         setZonePlaced(true)
@@ -468,7 +492,8 @@ function SetupTestScreen() {
         setLines((current) => {
           const base =
             current ?? linesForBar(chart.bars[index], chart.pipTicks, 'long')
-          return { ...base, levelLow: low, levelHigh: high }
+          const next = { ...base, levelLow: low, levelHigh: high }
+          return sameLines(current, next) ? current : next
         })
         // The zone describes the pattern. It must never silently move the
         // entry candle after the trader has placed an explicit marker.
@@ -477,6 +502,14 @@ function SetupTestScreen() {
       }
       if (visual.type === 'long' || visual.type === 'short') {
         const nextSide = visual.type
+        const entry = visual.from.price
+        const unchanged =
+          side === nextSide &&
+          entryPlaced &&
+          anchorIndex === index &&
+          lines?.entry === entry
+        if (unchanged) return
+        invalidate()
         setSide(nextSide)
         setSetupMode('drawing')
         setEntryPlaced(true)
@@ -489,7 +522,7 @@ function SetupTestScreen() {
             current ?? linesForBar(chart.bars[index], chart.pipTicks, nextSide)
           const risk = Math.max(1, Math.abs(base.entry - base.stop))
           const reward = Math.max(1, Math.abs(base.target - base.entry))
-          return {
+          const next = {
             ...base,
             entry: visual.from.price,
             stop:
@@ -501,10 +534,21 @@ function SetupTestScreen() {
                 ? visual.from.price + reward
                 : visual.from.price - reward,
           }
+          return sameLines(current, next) ? current : next
         })
       }
     },
-    [chart, entryPlaced, invalidate],
+    [
+      chart,
+      entryPlaced,
+      invalidate,
+      kind,
+      zonePlaced,
+      precedentFromTimeMs,
+      lines,
+      side,
+      anchorIndex,
+    ],
   )
 
   const prepare = useCallback(async () => {

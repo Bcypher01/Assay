@@ -1053,6 +1053,46 @@ function SetupTestScreen() {
     setRule((current) => ({ ...current, ...patch }))
   }
 
+  // These handlers are props of the chart component. Handing it a new lambda
+  // every render makes its effects re-run on every keystroke elsewhere on the
+  // screen, which is the churn that ends in a render loop when two components
+  // both notify each other. Stable identities keep the effects tied to the
+  // values they actually depend on.
+  const handleViewportChange = useCallback(
+    (viewport: { offset: number; count: number }) => {
+      if (scaledDown) setEntryViewport(viewport)
+      else setPatternViewport(viewport)
+    },
+    [scaledDown],
+  )
+
+  const handleChangeLines = useCallback(
+    (next: SetupLines) => {
+      invalidate()
+      setLines(next)
+    },
+    [invalidate],
+  )
+
+  const handleSelectAnchor = useCallback(
+    (index: number) => selectAnchor(index),
+    [selectAnchor],
+  )
+
+  const handleDeleteDrawing = useCallback(
+    (removed: ChartDrawing) => {
+      invalidate()
+      if (removed.type === 'zone') {
+        setZonePlaced(false)
+        setPrecedentFromTimeMs(null)
+      }
+      if (removed.type === 'long' || removed.type === 'short') {
+        setEntryPlaced(false)
+      }
+    },
+    [invalidate],
+  )
+
   return (
     <div className="setup-workspace">
       <section className="setup-canvas">
@@ -1273,24 +1313,11 @@ function SetupTestScreen() {
             anchorLocked={scaledDown}
             disableDrawingTools={scaledDown}
             initialViewport={scaledDown ? entryViewport : patternViewport}
-            onViewportChange={(vp) => {
-              if (scaledDown) setEntryViewport(vp)
-              else setPatternViewport(vp)
-            }}
-            onSelectAnchor={(index) => selectAnchor(index)}
-            onChangeLines={(next) => {
-              invalidate()
-              setLines(next)
-            }}
+            onViewportChange={handleViewportChange}
+            onSelectAnchor={handleSelectAnchor}
+            onChangeLines={handleChangeLines}
             onSelectDrawing={adoptVisualDrawing}
-            onDeleteDrawing={(removed) => {
-              invalidate()
-              if (removed.type === 'zone') setZonePlaced(false)
-              if (removed.type === 'zone') setPrecedentFromTimeMs(null)
-              if (removed.type === 'long' || removed.type === 'short') {
-                setEntryPlaced(false)
-              }
-            }}
+            onDeleteDrawing={handleDeleteDrawing}
           />
           <button
             type="button"

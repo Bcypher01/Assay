@@ -80,7 +80,12 @@ export function formatUsdCents(
     return '—'
   const value = typeof cents === 'bigint' ? Number(cents) : cents
   const prefix = sign && value > 0 ? '+' : ''
-  return `${prefix}${new Intl.NumberFormat(undefined, {
+  // An explicit locale keeps the server-rendered HTML and the browser's
+  // hydration pass in agreement. `undefined` resolves to each runtime's own
+  // default (en-US on the SSR process, the visitor's locale in the browser),
+  // so a non-US visitor saw US$10,000.00 where the server had written
+  // $10,000.00 and React threw away the tree on hydration.
+  return `${prefix}${new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
   }).format(value / 100)}`
